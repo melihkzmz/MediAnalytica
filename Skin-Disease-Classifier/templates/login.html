@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>MediAnalytica - Giriş Yap / Kayıt Ol</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="../css/bootstrap.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body { 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      background-attachment: fixed;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      position: relative;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        radial-gradient(circle at 20% 50%, rgba(255,255,255,0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255,255,255,0.15) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(255,255,255,0.1) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+      animation: float 20s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-20px) rotate(5deg); }
+    }
+
+    .centered { 
+      max-width: 450px; 
+      width: 90%;
+      margin: 20px auto; 
+      padding: 40px; 
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 25px; 
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      position: relative;
+      z-index: 1;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    .centered img {
+      display: block;
+      margin: 0 auto 20px;
+      max-width: 120px;
+      height: auto;
+    }
+
+    h4 {
+      text-align: center;
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 30px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .btn-primary, .btn-outline-success { 
+      width: 100%; 
+      margin-bottom: 12px; 
+      padding: 12px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.3s;
+      border: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 35px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-outline-success {
+      border: 2px solid #28a745;
+      color: #28a745;
+      background: transparent;
+    }
+
+    .btn-outline-success:hover {
+      background: #28a745;
+      color: white;
+      transform: translateY(-2px);
+    }
+
+    .form-control { 
+      border-radius: 12px; 
+      font-size: 1rem;
+      padding: 12px 15px;
+      border: 2px solid #e0e0e0;
+      transition: all 0.3s;
+      background: white;
+    }
+
+    .form-control:focus {
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      outline: none;
+    }
+
+    #loginOrRegister { 
+      text-align: center; 
+      margin-top: 20px; 
+      cursor: pointer; 
+      color: #667eea;
+      font-weight: 600;
+      padding: 10px;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    #loginOrRegister:hover {
+      background: rgba(102, 126, 234, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .btn-outline-primary {
+      border: 2px solid #667eea;
+      color: #667eea;
+      background: transparent;
+      border-radius: 12px;
+      padding: 10px 20px;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .btn-outline-primary:hover {
+      background: #667eea;
+      color: white;
+      transform: translateY(-2px);
+    }
+
+    @media (max-width: 500px) { 
+      .centered { 
+        margin: 10px; 
+        padding: 25px; 
+      }
+      h4 {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="centered" id="mainForm">
+    <img src="../images/bitirmelogo.jpg" height="80" class="mb-3" alt="MediAnalytica Logo" onerror="this.style.display='none'">
+    <h3 style="text-align: center; font-size: 2rem; font-weight: 700; margin-bottom: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">MediAnalytica</h3>
+    <h4 id="formTitle">Giriş Yap</h4>
+    
+    <form id="authForm">
+      <div class="form-group">
+        <input type="email" class="form-control" id="email" placeholder="E-posta" required />
+      </div>
+      <div class="form-group">
+        <input type="password" class="form-control" id="password" placeholder="Şifre" required />
+      </div>
+      
+      <button type="submit" class="btn btn-primary" id="btn-login">Giriş Yap</button>
+      <button type="submit" class="btn btn-outline-success" id="btn-register" style="display:none;">Kayıt Ol</button>
+      
+      <div id="msg" class="mt-3 text-danger" style="min-height: 22px;"></div>
+    </form>
+    
+    <div id="loginOrRegister">Hesabınız yok mu? Kayıt Olun</div>
+    <div style="text-align: center; margin-top: 15px;">
+      <a href="doctor-register.html" class="btn btn-outline-primary btn-sm" style="width: auto; padding: 8px 20px;">
+        <i class="fas fa-user-md"></i> Doktor Olarak Kayıt Ol
+      </a>
+    </div>
+    <div id="forgotPassword" style="text-align: center; margin-top: 10px; cursor: pointer; color: #667eea; display: none;">
+      <a href="#" onclick="event.preventDefault(); showForgotPassword();" style="color: #667eea; text-decoration: none;">Şifremi Unuttum</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
+    
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBPcwGb9N_fHXA6TPaztHbn9Dg-8lvoq2I",
+      authDomain: "medianalytica-71c1d.firebaseapp.com",
+      projectId: "medianalytica-71c1d",
+      storageBucket: "medianalytica-71c1d.firebasestorage.app",
+      messagingSenderId: "965944324546",
+      appId: "1:965944324546:web:d0731f60ec2b28748fa65b",
+      measurementId: "G-61JFBSYM94"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    // const analytics = getAnalytics(app); // Gerekirse açarsın
+
+    let isLogin = true;
+
+    const formTitle        = document.getElementById('formTitle');
+    const loginBtn         = document.getElementById('btn-login');
+    const registerBtn      = document.getElementById('btn-register');
+    const loginOrRegister  = document.getElementById('loginOrRegister');
+    const msg              = document.getElementById('msg');
+    const authForm         = document.getElementById('authForm');
+    const emailInput       = document.getElementById('email');
+    const passwordInput    = document.getElementById('password');
+
+    // Modu değiştiren fonksiyon (Giriş <-> Kayıt)
+    function setFormMode(loginMode) {
+      isLogin = loginMode;
+      formTitle.innerText = loginMode ? 'Giriş Yap' : 'Kayıt Ol';
+      
+      // Butonların görünürlüğünü ayarla
+      if (loginMode) {
+        loginBtn.style.display = 'block';
+        registerBtn.style.display = 'none';
+        loginOrRegister.innerText = 'Hesabınız yok mu? Kayıt Olun';
+        document.getElementById('forgotPassword').style.display = 'block';
+      } else {
+        loginBtn.style.display = 'none';
+        registerBtn.style.display = 'block';
+        loginOrRegister.innerText = 'Hesabınız var mı? Giriş Yapın';
+        document.getElementById('forgotPassword').style.display = 'none';
+      }
+      
+      msg.innerText = ''; // Hata mesajını temizle
+    }
+
+    // Şifre sıfırlama fonksiyonu
+    function showForgotPassword() {
+      const email = emailInput.value;
+      if (!email) {
+        msg.innerText = 'Lütfen e-posta adresinizi girin.';
+        msg.style.color = '#dc3545';
+        return;
+      }
+
+      msg.innerText = 'Şifre sıfırlama e-postası gönderiliyor...';
+      msg.style.color = '#667eea';
+
+      sendPasswordResetEmail(auth, email)
+        .then(() => {
+          msg.innerText = 'Şifre sıfırlama e-postası gönderildi! Lütfen e-posta kutunuzu kontrol edin.';
+          msg.style.color = '#28a745';
+        })
+        .catch((error) => {
+          let errorMsg = 'Şifre sıfırlama e-postası gönderilemedi.';
+          if (error.code === 'auth/user-not-found') {
+            errorMsg = 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı.';
+          } else if (error.code === 'auth/invalid-email') {
+            errorMsg = 'Geçersiz e-posta adresi.';
+          }
+          msg.innerText = errorMsg;
+          msg.style.color = '#dc3545';
+        });
+    }
+
+    // Alttaki yazıya tıklayınca modu değiştir
+    loginOrRegister.addEventListener('click', () => {
+      setFormMode(!isLogin);
+    });
+
+    // Form Gönderildiğinde (Submit)
+    authForm.addEventListener('submit', async (e) => {
+      e.preventDefault(); // Sayfanın yenilenmesini engelle
+      msg.innerText = 'İşleniyor...';
+      
+      const email = emailInput.value;
+      const pass = passwordInput.value;
+
+      try {
+        let userCredential;
+        
+        if(isLogin) {
+          // Giriş Yapma İşlemi
+          userCredential = await signInWithEmailAndPassword(auth, email, pass);
+          
+        } else {
+          // Kayıt Olma İşlemi
+          userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+          
+          // Kayıt başarılı
+          msg.innerText = 'Kayıt başarılı! Giriş yapılıyor...';
+          msg.style.color = '#28a745';
+        }
+        
+        // Token al ve kaydet
+        const token = await userCredential.user.getIdToken();
+        localStorage.setItem("firebase_id_token", token);
+        
+        // Analyze sayfasına yönlendir
+        window.location.href = "../analyze.html";
+        
+      } catch (err) {
+        // Kullanıcı dostu hata mesajları
+        const errorMessages = {
+          'auth/invalid-credential': 'E-posta veya şifre hatalı. Lütfen kontrol edin.',
+          'auth/email-already-in-use': 'Bu e-posta adresi zaten kullanımda. Giriş yapmayı deneyin.',
+          'auth/weak-password': 'Şifre çok zayıf. En az 6 karakter olmalıdır.',
+          'auth/invalid-email': 'Geçersiz e-posta adresi formatı.',
+          'auth/user-disabled': 'Bu hesap devre dışı bırakılmış.',
+          'auth/too-many-requests': 'Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.',
+          'auth/network-request-failed': 'İnternet bağlantınızı kontrol edin.',
+          'auth/operation-not-allowed': 'Bu işlem şu anda kullanılamıyor.',
+          'default': 'Bir hata oluştu. Lütfen tekrar deneyin.'
+        };
+        
+        const errorMsg = errorMessages[err.code] || errorMessages['default'];
+        msg.innerText = errorMsg;
+        msg.style.color = '#dc3545';
+        console.error("Firebase Hatası:", err);
+      }
+    });
+
+    // Oturum zaten açıksa yönlendir
+    onAuthStateChanged(auth, async user => {
+      // Kullanıcı giriş yapmamışsa → Login sayfasında kal
+      if (!user) {
+        return;
+      }
+      
+      // Doktor kontrolü - Doktor ise doktor paneline yönlendir
+      try {
+        const token = await user.getIdToken();
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:5001'
+            : 'https://api.yourdomain.com';
+        
+        const doctorCheck = await fetch(`${API_BASE_URL}/api/doctors/profile`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (doctorCheck.ok) {
+          const doctorData = await doctorCheck.json();
+          if (doctorData.doctor) {
+            // Doktor kaydı var → Doktor paneline yönlendir (onay durumu doktor panelinde kontrol edilecek)
+            localStorage.setItem("firebase_id_token", token);
+            window.location.href = "doctor-dashboard.html";
+            return;
+          }
+        }
+      } catch (error) {
+        // Doktor kontrolü başarısız, normal kullanıcı olarak devam et
+        console.log('Doctor check failed, continuing as regular user');
+      }
+      
+      // Kullanıcı giriş yapmış → analyze.html'e git
+      const token = await user.getIdToken();
+      localStorage.setItem("firebase_id_token", token);
+      window.location.href = "../analyze.html";
+    });
+  </script>
+</body>
+</html>

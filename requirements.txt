@@ -1,0 +1,9 @@
+firebase-admin
+Flask
+flask-cors
+flask-limiter
+flask-caching
+flask-swagger-ui
+python-dateutil
+pytest
+pytest-cov

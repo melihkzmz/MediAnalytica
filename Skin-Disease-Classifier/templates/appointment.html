@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Görüntülü Görüşme - MediAnalytica</title>
+    <link rel="stylesheet" href="../css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #667eea;
+            --primary-dark: #764ba2;
+            --success: #28a745;
+            --danger: #dc3545;
+            --gray-100: #f8f9fa;
+            --gray-800: #343a40;
+            --spacing-4: 1rem;
+            --spacing-6: 1.5rem;
+            --radius-lg: 0.75rem;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+        }
+
+        .jitsi-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .jitsi-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 20px;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .jitsi-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .jitsi-info {
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+
+        .jitsi-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .back-button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.3s;
+        }
+
+        .back-button:hover {
+            background: var(--primary-dark);
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 2000;
+        }
+
+        .spinner {
+            border: 4px solid #333;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="jitsi-container">
+        <div class="jitsi-header">
+            <div>
+                <h3><i class="fas fa-video"></i> Görüntülü Görüşme</h3>
+                <div class="jitsi-info" id="appointmentInfo">Yükleniyor...</div>
+            </div>
+            <button class="back-button" onclick="window.location.href='../analyze.html'">
+                <i class="fas fa-arrow-left"></i> Geri Dön
+            </button>
+        </div>
+
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <p>Görüntülü görüşme başlatılıyor...</p>
+        </div>
+
+        <iframe 
+            id="jitsiFrame" 
+            class="jitsi-iframe" 
+            allow="camera; microphone; fullscreen; display-capture"
+            style="display: none;">
+        </iframe>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPcwGb9N_fHXA6TPaztHbn9Dg-8lvoq2I",
+            authDomain: "medianalytica-71c1d.firebaseapp.com",
+            projectId: "medianalytica-71c1d",
+            storageBucket: "medianalytica-71c1d.firebasestorage.app",
+            messagingSenderId: "965944324546",
+            appId: "1:965944324546:web:d0731f60ec2b28748fa65b",
+            measurementId: "G-61JFBSYM94"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:5001'
+            : 'https://api.yourdomain.com';
+
+        // URL'den appointment ID al
+        const urlParams = new URLSearchParams(window.location.search);
+        const appointmentId = urlParams.get('id');
+
+        if (!appointmentId) {
+            document.getElementById('loadingOverlay').innerHTML = 
+                '<p style="color: #dc3545;">Randevu ID bulunamadı. Lütfen geçerli bir randevu linki kullanın.</p>' +
+                '<button class="back-button" onclick="window.location.href=\'../analyze.html\'" style="margin-top: 20px;">Ana Sayfaya Dön</button>';
+        } else {
+            // Kullanıcı kontrolü ve Jitsi room'a katıl
+            onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = '../templates/login.html';
+                return;
+            }
+
+            try {
+                const token = await user.getIdToken();
+                
+                // Randevu bilgilerini al ve Jitsi URL'ini getir
+                const response = await fetch(`${API_BASE_URL}/api/appointments/${appointmentId}/join`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    document.getElementById('loadingOverlay').innerHTML = 
+                        `<p style="color: #dc3545;">${error.error || 'Randevu bilgileri alınamadı'}</p>` +
+                        '<button class="back-button" onclick="window.location.href=\'../analyze.html\'" style="margin-top: 20px;">Ana Sayfaya Dön</button>';
+                    return;
+                }
+
+                const data = await response.json();
+                
+                // Randevu bilgilerini göster
+                const appointment = data.appointment;
+                document.getElementById('appointmentInfo').textContent = 
+                    `${appointment.date} ${appointment.time} - ${appointment.reason}`;
+
+                // Jitsi Meet iframe'i yükle
+                const jitsiUrl = data.jitsiUrl;
+                const iframe = document.getElementById('jitsiFrame');
+                iframe.src = jitsiUrl;
+                iframe.style.display = 'block';
+                
+                // Jitsi URL'ini header'da göster ve paylaş butonu ekle
+                const headerInfo = document.getElementById('appointmentInfo');
+                if (headerInfo) {
+                    headerInfo.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span>${appointment.date} ${appointment.time} - ${appointment.reason}</span>
+                            <button class="back-button" onclick="shareJitsiLink('${jitsiUrl}')" style="background: #28a745; font-size: 0.85rem; padding: 5px 12px;">
+                                <i class="fas fa-share-alt"></i> Linki Paylaş
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                // Loading overlay'i kaldır
+                setTimeout(() => {
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                }, 2000);
+
+                // Jitsi yüklendiğinde
+                iframe.onload = () => {
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                };
+
+            } catch (error) {
+                console.error('Jitsi join error:', error);
+                document.getElementById('loadingOverlay').innerHTML = 
+                    '<p style="color: #dc3545;">Görüntülü görüşme başlatılamadı. Lütfen tekrar deneyin.</p>' +
+                    '<button class="back-button" onclick="window.location.href=\'../analyze.html\'" style="margin-top: 20px;">Ana Sayfaya Dön</button>';
+            }
+            });
+        }
+
+        // Jitsi linkini paylaş
+        window.shareJitsiLink = function(jitsiUrl) {
+            // URL'i kopyala
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(jitsiUrl).then(() => {
+                    alert('✅ Jitsi Meet linki kopyalandı!\n\nBu linki diğer cihazda (telefon, tablet) açarak görüntülü görüşmeye katılabilirsiniz.\n\nLink: ' + jitsiUrl);
+                });
+            } else {
+                // Fallback
+                const textarea = document.createElement('textarea');
+                textarea.value = jitsiUrl;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert('✅ Jitsi Meet linki kopyalandı!\n\nBu linki diğer cihazda (telefon, tablet) açarak görüntülü görüşmeye katılabilirsiniz.\n\nLink: ' + jitsiUrl);
+            }
+        };
+    </script>
+</body>
+</html>
+

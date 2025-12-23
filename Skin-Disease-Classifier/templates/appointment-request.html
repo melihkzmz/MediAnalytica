@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Randevu Talep Et - MediAnalytica</title>
+  <link rel="stylesheet" href="../css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>body{background:#fff;min-height:100vh;} .content{max-width:600px;margin:70px auto 0;background:#fff;border-radius:16px;box-shadow:0 4px 32px rgba(102,126,234,0.08);padding:40px 30px;} h1{color:#667eea;}</style>
+</head>
+<body>
+  <div class="content">
+    <div class="back"><a href="../analyze.html"><i class="fas fa-home"></i> Anasayfa</a></div>
+    <h1><i class="fas fa-calendar-plus"></i> Randevu Talep Et</h1>
+    <form id="appointmentForm">
+      <div class="form-group">
+        <label>Randevu Tarihi</label>
+        <input type="date" class="form-control" id="appointmentDate" required min="" />
+      </div>
+      <div class="form-group">
+        <label>Randevu Saati</label>
+        <select class="form-control" id="appointmentTime" required>
+          <option value="">Saat seçiniz</option>
+          <option value="09:00">09:00</option>
+          <option value="10:00">10:00</option>
+          <option value="11:00">11:00</option>
+          <option value="13:00">13:00</option>
+          <option value="14:00">14:00</option>
+          <option value="15:00">15:00</option>
+          <option value="16:00">16:00</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Randevu Nedeni</label>
+        <input type="text" class="form-control" id="appointmentReason" required maxlength="140" placeholder="Şikayet veya açıklama..." />
+      </div>
+      <div class="form-group">
+        <label>Doktor Türü</label>
+        <select class="form-control" id="doctorType" required>
+          <option value="">Uzmanlık seçiniz</option>
+          <option value="dermatolog">Dermatolog</option>
+          <option value="ortopedist">Ortopedist</option>
+          <option value="gogus-hast">Göğüs Hastalıkları Uzmanı</option>
+          <option value="goz-hast">Göz Hastalıkları Uzmanı</option>
+          <option value="genel-cerrahi">Genel Cerrahi</option>
+          <option value="ic-hastaliklari">İç Hastalıkları</option>
+          <option value="noroloji">Nöroloji</option>
+          <option value="kardiyoloji">Kardiyoloji</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-calendar-plus"></i> Randevu Oluştur</button>
+    </form>
+    <div id="appointment-result" style="margin-top:20px;"></div>
+    <script>
+      document.getElementById('appointmentDate').min = new Date().toISOString().split('T')[0];
+      document.getElementById('appointmentForm').onsubmit = async function(e){
+        e.preventDefault();
+        document.getElementById('appointment-result').textContent = 'Talebiniz iletiliyor...';
+        setTimeout(function(){ document.getElementById('appointment-result').innerHTML = '<span style="color:#28a745"><i class="fas fa-check-circle"></i> Randevu talebiniz başarıyla iletildi! Onay sonrası bilgilendirileceksiniz.</span>'; }, 600);
+        // API POST işlemi burada eklenebilir
+      }
+    </script>
+  </div>
+</body>
+</html>
+
