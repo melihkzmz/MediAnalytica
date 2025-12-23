@@ -423,3 +423,4 @@ Eğer Gemini'den görsel aldıysan ve watermark varsa:
 - **contact_messages** → Hiçbir koleksiyona referans vermez (bağımsız)
 
 
+

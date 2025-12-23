@@ -492,3 +492,4 @@ Eğer Gemini'den görsel aldıysan ve watermark varsa:
 - **Model Prediction Okları:** Mor (#9C27B0)
 
 
+

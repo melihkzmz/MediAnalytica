@@ -69,3 +69,4 @@ Format: Profesyonel tablo, renk kodlu (Yüksek: Kırmızı, Orta: Sarı, Düşü
 ```
 
 
+

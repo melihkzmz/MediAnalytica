@@ -288,3 +288,4 @@ Format: Profesyonel, akademik, PNG, yüksek çözünürlük.
 - **Model Prediction Okları:** Mor (#9C27B0)
 
 
+

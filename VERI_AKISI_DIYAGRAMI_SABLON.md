@@ -252,3 +252,4 @@ Format: Profesyonel, akademik, PNG, yüksek çözünürlük.
 5. **WebSocket/WebRTC:** Jitsi Meet görüntülü görüşme
 
 
+

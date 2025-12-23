@@ -213,3 +213,4 @@ Renk kodlaması: Yüksek (Kırmızı), Orta (Sarı), Düşük (Yeşil).
 - Renkler: Profesyonel (kırmızı: Yüksek, sarı: Orta, yeşil: Düşük)
 
 
+

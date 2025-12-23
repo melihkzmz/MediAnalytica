@@ -193,3 +193,4 @@ Hedef değerler vurgulu (kalın veya farklı renk).
 - Renkler: Profesyonel (hedef değerler vurgulu)
 
 
+
