@@ -2,14 +2,19 @@
   "version": 2,
   "buildCommand": null,
   "outputDirectory": "Skin-Disease-Classifier",
+  "cleanUrls": false,
   "rewrites": [
     {
       "source": "/",
-      "destination": "/Skin-Disease-Classifier/analyze.html"
+      "destination": "/analyze.html"
+    },
+    {
+      "source": "/index.html",
+      "destination": "/analyze.html"
     },
     {
       "source": "/(.*)",
-      "destination": "/Skin-Disease-Classifier/$1"
+      "destination": "/$1"
     }
   ],
   "headers": [
