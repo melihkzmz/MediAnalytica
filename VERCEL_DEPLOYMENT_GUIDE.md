@@ -107,12 +107,16 @@ If the above doesn't work, use this simpler approach:
    - Select your `MediAnalytica` repository
    - Click "Import"
 
-4. **Configure Project Settings**
-   - **Framework Preset**: Other (or leave blank)
+4. **Configure Project Settings** ⚠️ IMPORTANT
+   - **Framework Preset**: **Other** (or leave blank) 
+     - ❌ **DO NOT** select Flask - Flask is for backend only!
+     - ✅ Your frontend is static HTML/CSS/JS, so use "Other"
    - **Root Directory**: `Skin-Disease-Classifier` (if you want to deploy from that folder)
    - **Build Command**: Leave empty (no build needed)
    - **Output Directory**: Leave empty or set to `.`
    - **Install Command**: Leave empty
+   
+   **Note**: Flask is your **backend framework** (Python). You're deploying the **frontend** (HTML/CSS/JS) to Vercel, so use "Other" preset.
 
 5. **Environment Variables** (Optional - if using env vars)
    - Click "Environment Variables"
