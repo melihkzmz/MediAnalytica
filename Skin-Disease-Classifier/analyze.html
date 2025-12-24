@@ -338,6 +338,17 @@
             justify-content: center;
             margin: 0 auto 10px;
             font-size: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .profile-avatar img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
         }
 
         .profile-info {
@@ -816,6 +827,13 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
         }
 
+        /* Remove focus outline for checkboxes in all states */
+        input[type="checkbox"]:focus,
+        input[type="checkbox"]:focus-visible {
+            outline: none;
+            box-shadow: none;
+        }
+
         /* Dark Mode */
         :root {
             --bg-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -1091,14 +1109,14 @@
                 
                 <div class="profile-dropdown">
                     <button class="profile-btn" id="profileBtn">
-                        <i class="fas fa-user-circle"></i>
+                        <img id="profileBtnPhoto" src="" alt="Profile" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; display: none; border: 2px solid rgba(255,255,255,0.3);">
                         <span id="userName">Kullanıcı</span>
                         <i class="fas fa-chevron-down"></i>
                     </button>
                     <div class="profile-menu" id="profileMenu">
                         <div class="profile-header">
                             <div class="profile-avatar">
-                                <i class="fas fa-user"></i>
+                                <img id="profileMenuPhoto" src="" alt="Profile" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: none;">
                             </div>
                             <div id="profileEmail">Yükleniyor...</div>
                         </div>
@@ -2191,9 +2209,24 @@
         };
 
         // Profil menüsü toggle
-        document.getElementById('profileBtn').addEventListener('click', (e) => {
+        document.getElementById('profileBtn').addEventListener('click', async (e) => {
             e.stopPropagation();
-            document.getElementById('profileMenu').classList.toggle('show');
+            const menu = document.getElementById('profileMenu');
+            const isOpening = !menu.classList.contains('show');
+            menu.classList.toggle('show');
+            
+            // Menü açılırken profil fotoğrafını yeniden yükle
+            if (isOpening) {
+                const user = (window.auth || auth)?.currentUser;
+                if (user) {
+                    try {
+                        const token = await user.getIdToken();
+                        await loadProfilePhoto(user, token);
+                    } catch (error) {
+                        console.error('Profil fotoğrafı yüklenirken hata:', error);
+                    }
+                }
+            }
         });
 
         // Dışarı tıklanınca menüyü kapat
@@ -2237,29 +2270,32 @@
                 modal.style.cssText = 'max-width: 600px; z-index: 2000;';
                 modal.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="margin: 0;"><i class="fas fa-user-cog"></i> Profil Ayarları</h3>
+                        <h3 style="margin: 0;">Profil Ayarları</h3>
                         <button type="button" onclick="closeProfileSettings()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--gray-600); padding: 0; width: 30px; height: 30px;">&times;</button>
                     </div>
                     <form id="profileSettingsForm">
                         <div class="form-group" style="margin-bottom: 20px;">
-                            <label style="font-weight: 600; color: var(--gray-800); margin-bottom: 8px; display: block;"><i class="fas fa-user" style="color: var(--primary); margin-right: 8px;"></i> İsim</label>
+                            <label style="font-weight: 600; color: var(--gray-800); margin-bottom: 8px; display: block;">İsim</label>
                             <input type="text" class="form-control" id="profile-display-name" placeholder="İsminiz" style="padding: 12px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 1rem; width: 100%;">
                         </div>
                         <div class="form-group" style="margin-bottom: 20px;">
-                            <label style="font-weight: 600; color: var(--gray-800); margin-bottom: 8px; display: block;"><i class="fas fa-image" style="color: var(--primary); margin-right: 8px;"></i> Profil Fotoğrafı</label>
-                            <input type="file" class="form-control" id="profile-photo-input" accept="image/*" style="padding: 12px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 1rem; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                <label style="font-weight: 600; color: var(--gray-800); margin: 0;">Profil Fotoğrafı</label>
+                                <button type="button" id="profile-photo-upload-btn" style="padding: 6px 16px; border-radius: 6px; font-size: 0.9rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: 500;">Yükle</button>
+                            </div>
+                            <input type="file" class="form-control" id="profile-photo-input" accept="image/*" style="display: none;">
                             <img id="profile-photo-preview" style="max-width: 150px; margin-top: 10px; border-radius: 50%; display: none; border: 3px solid var(--primary);" alt="Profil fotoğrafı">
                         </div>
                         <div class="form-group" style="margin-bottom: 25px;">
                             <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600; color: var(--gray-800);">
                                 <input type="checkbox" id="profile-notifications" style="width: 20px; height: 20px; margin-right: 10px; cursor: pointer;">
-                                <i class="fas fa-bell" style="color: var(--primary); margin-right: 8px;"></i> Bildirimleri aç
+                                Bildirimleri aç
                             </label>
                         </div>
                         <div style="display: flex; gap: 10px; margin-top: 25px;">
                             <button type="button" class="btn btn-secondary" onclick="closeProfileSettings()" style="flex: 1; padding: 12px; border-radius: 10px; font-size: 1rem;">İptal</button>
                             <button type="submit" class="btn btn-primary" style="flex: 1; padding: 12px; border-radius: 10px; font-size: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
-                                <i class="fas fa-save"></i> Kaydet
+                                Kaydet
                             </button>
                         </div>
                     </form>
@@ -2283,6 +2319,11 @@
                         };
                         reader.readAsDataURL(file);
                     }
+                });
+
+                // Yükle butonu - dosya seçimini tetikle
+                document.getElementById('profile-photo-upload-btn').addEventListener('click', function() {
+                    document.getElementById('profile-photo-input').click();
                 });
             }
 
@@ -2342,11 +2383,40 @@
                     if (photoFile) {
                         const formData = new FormData();
                         formData.append('photo', photoFile);
-                        await fetch(`${apiUrl}/api/user/profile/photo`, {
+                        const photoResponse = await fetch(`${apiUrl}/api/user/profile/photo`, {
                             method: 'POST',
                             headers: { 'Authorization': `Bearer ${token}` },
                             body: formData
                         });
+                        
+                        if (photoResponse.ok) {
+                            const photoData = await photoResponse.json();
+                            if (photoData.success && photoData.photoURL) {
+                                // Firebase Auth'da da güncelle
+                                await updateProfile(user, { photoURL: photoData.photoURL });
+                                // Kullanıcı nesnesini yeniden yükle
+                                await user.reload();
+                                // Profil fotoğrafını hemen göster (API'den gelen URL ile)
+                                const profilePhotoImg = document.getElementById('profileBtnPhoto');
+                                const profileMenuPhotoImg = document.getElementById('profileMenuPhoto');
+                                
+                                if (profilePhotoImg) {
+                                    profilePhotoImg.src = photoData.photoURL;
+                                    profilePhotoImg.style.display = 'block';
+                                }
+                                if (profileMenuPhotoImg) {
+                                    profileMenuPhotoImg.src = photoData.photoURL;
+                                    profileMenuPhotoImg.style.display = 'block';
+                                    profileMenuPhotoImg.style.position = 'absolute';
+                                    profileMenuPhotoImg.style.top = '0';
+                                    profileMenuPhotoImg.style.left = '0';
+                                }
+                                
+                                // Profil fotoğrafını yeniden yükle (güncellenmiş user ile)
+                                const updatedUser = (window.auth || auth)?.currentUser;
+                                await loadProfilePhoto(updatedUser || user, token);
+                            }
+                        }
                     }
 
                     await fetch(`${apiUrl}/api/user/profile`, {
@@ -2438,12 +2508,96 @@
                     const joinDate = new Date(user.metadata.creationTime);
                     document.getElementById('profileJoinDate').textContent = `Üyelik: ${joinDate.toLocaleDateString('tr-TR')}`;
                 }
+                
+                // Profil fotoğrafını yükle
+                await loadProfilePhoto(user, token);
             } catch (error) {
                 console.error('Token alınamadı:', error);
                 // Hata durumunda login'e yönlendir
                 window.location.href = "templates/login.html";
             }
         });
+
+        // Profil fotoğrafını yükle
+        window.loadProfilePhoto = async function(user, token) {
+            try {
+                const profilePhotoImg = document.getElementById('profileBtnPhoto');
+                const profileMenuPhotoImg = document.getElementById('profileMenuPhoto');
+                
+                if (!profilePhotoImg && !profileMenuPhotoImg) return;
+
+                let photoURL = null;
+
+                // Önce Firebase Auth'dan kontrol et
+                if (user.photoURL) {
+                    photoURL = user.photoURL;
+                } else {
+                    // Backend API'den profil bilgilerini al
+                    try {
+                        const apiUrl = window.API_BASE_URL || API_BASE_URL || (typeof config !== 'undefined' ? config.apiUrl : 'http://localhost:5001');
+                        const response = await fetch(`${apiUrl}/api/user/profile`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.profile && data.profile.photoURL) {
+                                photoURL = data.profile.photoURL;
+                            }
+                        }
+                    } catch (apiError) {
+                        console.warn('Profil fotoğrafı API\'den alınamadı:', apiError);
+                    }
+                }
+
+                // Fotoğraf varsa göster
+                if (photoURL) {
+                    console.log('Profil fotoğrafı yükleniyor:', photoURL);
+                    // Profile button photo
+                    if (profilePhotoImg) {
+                        profilePhotoImg.src = photoURL;
+                        profilePhotoImg.style.display = 'block';
+                        profilePhotoImg.onerror = function() {
+                            console.error('Profil butonu fotoğrafı yüklenemedi:', photoURL);
+                            profilePhotoImg.style.display = 'none';
+                        };
+                        profilePhotoImg.onload = function() {
+                            console.log('Profil butonu fotoğrafı yüklendi');
+                        };
+                    }
+                    
+                    // Profile menu photo
+                    if (profileMenuPhotoImg) {
+                        profileMenuPhotoImg.src = photoURL;
+                        profileMenuPhotoImg.style.display = 'block';
+                        profileMenuPhotoImg.style.position = 'absolute';
+                        profileMenuPhotoImg.style.top = '0';
+                        profileMenuPhotoImg.style.left = '0';
+                        profileMenuPhotoImg.onerror = function() {
+                            console.error('Profil menü fotoğrafı yüklenemedi:', photoURL);
+                            profileMenuPhotoImg.style.display = 'none';
+                        };
+                        profileMenuPhotoImg.onload = function() {
+                            console.log('Profil menü fotoğrafı yüklendi');
+                        };
+                    }
+                } else {
+                    console.log('Profil fotoğrafı bulunamadı');
+                    // Fotoğraf yoksa gizle
+                    if (profilePhotoImg) {
+                        profilePhotoImg.style.display = 'none';
+                    }
+                    if (profileMenuPhotoImg) {
+                        profileMenuPhotoImg.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                console.error('Profil fotoğrafı yüklenirken hata:', error);
+            }
+        };
 
         // Randevuları yükle
         window.loadAppointments = async function() {
