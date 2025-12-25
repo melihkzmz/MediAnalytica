@@ -40,27 +40,31 @@ CRED_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'fireb
 app = Flask(__name__)
 
 # CORS yapılandırması - Sadece belirli origin'lere izin ver
+# Environment variable'dan CORS origins al, yoksa varsayılanları kullan
+CORS_ORIGINS_ENV = os.getenv('CORS_ORIGINS', '')
+if CORS_ORIGINS_ENV:
+    # Environment variable'dan gelen origins (virgülle ayrılmış)
+    CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_ENV.split(',') if origin.strip()]
+else:
+    # Varsayılan origins
+    CORS_ORIGINS = [
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:5500",
+        "http://127.0.0.1:3000",
+        "https://medi-analytica.vercel.app",  # Vercel production domain
+    ]
+
 CORS(app, resources={
     r"/api/*": {
-        "origins": [
-            "http://localhost:3000",
-            "http://localhost:8080",
-            "http://127.0.0.1:5500",
-            "http://127.0.0.1:3000",
-            # Production domain buraya eklenecek
-            # "https://yourdomain.com"
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "origins": CORS_ORIGINS,
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     },
     r"/auth/*": {
-        "origins": [
-            "http://localhost:3000",
-            "http://localhost:8080",
-            "http://127.0.0.1:5500",
-            "http://127.0.0.1:3000",
-        ],
-        "methods": ["POST"],
+        "origins": CORS_ORIGINS,
+        "methods": ["POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
 })

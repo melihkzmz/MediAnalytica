@@ -5,9 +5,10 @@
 
 const config = {
     // API Configuration
+    // TODO: Replace with your actual backend URL (Firebase Functions, Vercel Functions, or other hosting)
     apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:5001'
-        : 'https://api.yourdomain.com', // Production API URL
+        : null, // No backend deployed yet - set to null to disable API calls
     
     // Firebase Configuration
     firebase: {
