@@ -1776,10 +1776,10 @@
                 </label>
                 <select id="disease-type" aria-label="Hastalık türü seçin" style="width: 100%; padding: 15px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 1rem; background: white; transition: all 0.3s; cursor: pointer;" onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)'" onblur="this.style.borderColor='#e0e0e0'; this.style.boxShadow='none'">
                 <option value="">-- Hastalık türünü seçin --</option>
-                    <option value="bone">🦴 Kemik Hastalıkları</option>
-                    <option value="skin">✨ Deri Hastalıkları</option>
-                    <option value="lung">🫁 Akciğer Hastalıkları</option>
-                    <option value="eye">👁️ Göz Hastalıkları</option>
+                    <option value="bone">Kemik Hastalıkları</option>
+                    <option value="skin">Deri Hastalıkları</option>
+                    <option value="lung">Akciğer Hastalıkları</option>
+                    <option value="eye">Göz Hastalıkları</option>
             </select>
         </div>
 
@@ -1803,6 +1803,46 @@
             </div>
         </div>
 
+        <div id="bone-disease-warning" class="bone-disease-warning" style="display: none; margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px; color: #856404;">
+            <div style="display: flex; align-items: flex-start;">
+                <i class="fas fa-exclamation-triangle" style="margin-right: 10px; margin-top: 2px; color: #ffc107; font-size: 1.2rem;"></i>
+                <div>
+                    <strong style="display: block; margin-bottom: 8px; color: #856404;">Önemli Bilgi:</strong>
+                    <p style="margin: 0; line-height: 1.6; color: #856404;">
+                        Lütfen tek bir kemik bölgesinin röntgen görüntüsünü yükleyin.<br>
+                        Model yalnızca aşağıdaki kemik durumlarını analiz edebilir:
+                    </p>
+                    <ul style="margin: 8px 0 0 20px; padding: 0; color: #856404;">
+                        <li>Normal – sağlıklı kemik (Normal – healthy bone)</li>
+                        <li>Kırık – kırılmış veya çatlamış kemik (Fractured – broken or cracked bone)</li>
+                        <li>İyi Huylu Tümör – kanserli olmayan büyüme (Benign Tumor – non-cancerous growth)</li>
+                        <li>Kötü Huylu Tümör – kanserli büyüme (Malignant Tumor – cancerous growth)</li>
+                    </ul>
+                    <p style="margin: 8px 0 0 0; line-height: 1.6; color: #856404; font-style: italic;">
+                        ⚠ Not: Diğer kemik durumlarını gösteren görüntüler doğru şekilde sınıflandırılamayabilir.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div id="lung-disease-warning" class="lung-disease-warning" style="display: none; margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px; color: #856404;">
+            <div style="display: flex; align-items: flex-start;">
+                <i class="fas fa-exclamation-triangle" style="margin-right: 10px; margin-top: 2px; color: #ffc107; font-size: 1.2rem;"></i>
+                <div>
+                    <strong style="display: block; margin-bottom: 8px; color: #856404;">Önemli Bilgi:</strong>
+                    <p style="margin: 0; line-height: 1.6; color: #856404;">
+                        Lütfen bir göğüs röntgen görüntüsü yükleyin.<br>
+                        Model yalnızca aşağıdaki akciğer durumlarını analiz edebilir:
+                    </p>
+                    <ul style="margin: 8px 0 0 20px; padding: 0; color: #856404;">
+                        <li>Normal – sağlıklı akciğerler (Normal – healthy lungs)</li>
+                        <li>COVID-19 – COVID-19 enfeksiyonu belirtileri (COVID-19 – signs of COVID-19 infection)</li>
+                        <li>Non-COVID – COVID-19 kaynaklı olmayan diğer akciğer enfeksiyonları veya anormallikler (Non-COVID – other lung infections or abnormalities not caused by COVID-19)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
         <div class="form-group">
                 <label for="image-input"><i class="fas fa-image"></i> Görüntü Yükleyin:</label>
             <div class="file-upload-wrapper">
@@ -1815,6 +1855,9 @@
                         accept="image/jpeg,image/jpg,image/png"
                         aria-label="Görüntü dosyası seçin">
             </div>
+            <p style="margin-top: 8px; margin-bottom: 0; font-size: 0.85rem; color: var(--gray-600); font-style: italic;">
+                Desteklenen görüntü formatları: .jpg/.jpeg ve .png
+            </p>
             <div class="image-preview">
                 <img id="preview-image" alt="Önizleme">
             </div>
@@ -3073,12 +3116,28 @@
         document.getElementById('disease-type').addEventListener('change', function(e) {
             const diseaseType = e.target.value;
             const skinWarning = document.getElementById('skin-disease-warning');
+            const boneWarning = document.getElementById('bone-disease-warning');
+            const lungWarning = document.getElementById('lung-disease-warning');
             
             // Show/hide skin disease warning
             if (diseaseType === 'skin') {
                 skinWarning.style.display = 'block';
             } else {
                 skinWarning.style.display = 'none';
+            }
+            
+            // Show/hide bone disease warning
+            if (diseaseType === 'bone') {
+                boneWarning.style.display = 'block';
+            } else {
+                boneWarning.style.display = 'none';
+            }
+            
+            // Show/hide lung disease warning
+            if (diseaseType === 'lung') {
+                lungWarning.style.display = 'block';
+            } else {
+                lungWarning.style.display = 'none';
             }
             
             if (diseaseType) {
@@ -3096,6 +3155,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             const diseaseTypeSelect = document.getElementById('disease-type');
             const skinWarning = document.getElementById('skin-disease-warning');
+            const boneWarning = document.getElementById('bone-disease-warning');
+            const lungWarning = document.getElementById('lung-disease-warning');
             
             if (diseaseTypeSelect && diseaseTypeSelect.value) {
                 // Show/hide skin disease warning if skin is selected
@@ -3103,6 +3164,20 @@
                     skinWarning.style.display = 'block';
                 } else {
                     skinWarning.style.display = 'none';
+                }
+                
+                // Show/hide bone disease warning if bone is selected
+                if (diseaseTypeSelect.value === 'bone') {
+                    boneWarning.style.display = 'block';
+                } else {
+                    boneWarning.style.display = 'none';
+                }
+                
+                // Show/hide lung disease warning if lung is selected
+                if (diseaseTypeSelect.value === 'lung') {
+                    lungWarning.style.display = 'block';
+                } else {
+                    lungWarning.style.display = 'none';
                 }
                 
                 // Kısa bir gecikme ile model yükle (sayfa tamamen yüklensin)
