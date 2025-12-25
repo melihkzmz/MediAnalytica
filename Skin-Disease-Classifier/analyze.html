@@ -1783,6 +1783,26 @@
             </select>
         </div>
 
+        <div id="skin-disease-warning" class="skin-disease-warning" style="display: none; margin-bottom: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px; color: #856404;">
+            <div style="display: flex; align-items: flex-start;">
+                <i class="fas fa-exclamation-triangle" style="margin-right: 10px; margin-top: 2px; color: #ffc107; font-size: 1.2rem;"></i>
+                <div>
+                    <strong style="display: block; margin-bottom: 8px; color: #856404;">Önemli Bilgi:</strong>
+                    <p style="margin: 0; line-height: 1.6; color: #856404;">
+                        Lütfen tek bir deri lezyonunun dermatoskopik görüntüsünü yükleyin.<br>
+                        Model yalnızca aşağıdaki lezyon türlerini analiz edebilir:
+                    </p>
+                    <ul style="margin: 8px 0 0 20px; padding: 0; color: #856404;">
+                        <li>Melanom (MEL)</li>
+                        <li>İyi huylu keratoz benzeri lezyonlar (BKL)</li>
+                        <li>Bazal hücreli karsinom (BCC)</li>
+                        <li>Aktinik keratoz / intraepitelyal karsinom (AKIEC)</li>
+                        <li>Melanositik nevüs (NV)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
         <div class="form-group">
                 <label for="image-input"><i class="fas fa-image"></i> Görüntü Yükleyin:</label>
             <div class="file-upload-wrapper">
@@ -2106,7 +2126,8 @@
             }
 
             if (!ALLOWED_TYPES.includes(file.type)) {
-                showToast('Sadece JPEG ve PNG formatları desteklenir.', 'error');
+                const fileExtension = file.name.split('.').pop().toUpperCase();
+                showToast(`Yüklediğiniz görüntü formatı (${fileExtension}) desteklenmiyor. Lütfen JPEG veya PNG formatında bir görüntü yükleyin.`, 'error');
                 return false;
             }
 
@@ -3019,6 +3040,19 @@
         document.getElementById('image-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
+                // Validate file format and size before processing
+                if (!validateImageFile(file)) {
+                    // Clear the file input if validation fails
+                    e.target.value = '';
+                    // Hide preview if it was shown
+                    const img = document.getElementById('preview-image');
+                    img.classList.remove('show');
+                    img.src = '';
+                    // Disable analyze button
+                    document.getElementById('analyze-button').disabled = true;
+                    return;
+                }
+                
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     const img = document.getElementById('preview-image');
@@ -3038,6 +3072,15 @@
 
         document.getElementById('disease-type').addEventListener('change', function(e) {
             const diseaseType = e.target.value;
+            const skinWarning = document.getElementById('skin-disease-warning');
+            
+            // Show/hide skin disease warning
+            if (diseaseType === 'skin') {
+                skinWarning.style.display = 'block';
+            } else {
+                skinWarning.style.display = 'none';
+            }
+            
             if (diseaseType) {
                 loadModel(diseaseType);
                 document.getElementById('analyze-button').disabled = true;
@@ -3052,7 +3095,16 @@
         // Sayfa yüklendiğinde, eğer bir hastalık türü seçiliyse otomatik model yükle
         document.addEventListener('DOMContentLoaded', function() {
             const diseaseTypeSelect = document.getElementById('disease-type');
+            const skinWarning = document.getElementById('skin-disease-warning');
+            
             if (diseaseTypeSelect && diseaseTypeSelect.value) {
+                // Show/hide skin disease warning if skin is selected
+                if (diseaseTypeSelect.value === 'skin') {
+                    skinWarning.style.display = 'block';
+                } else {
+                    skinWarning.style.display = 'none';
+                }
+                
                 // Kısa bir gecikme ile model yükle (sayfa tamamen yüklensin)
                 setTimeout(() => {
                     loadModel(diseaseTypeSelect.value);
