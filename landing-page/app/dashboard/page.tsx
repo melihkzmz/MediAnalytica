@@ -675,17 +675,8 @@ export default function DashboardPage() {
       // Format results - handle different API response formats
       let formattedResult
       
-      if (result.prediction) {
-        // New format with prediction object
-        formattedResult = {
-          prediction: result.prediction.class || result.prediction.className || 'Bilinmiyor',
-          confidence: result.prediction.confidence || 0,
-          top_3: result.top_3 || [],
-          gradcam: result.gradcam || null,
-          fullData: result
-        }
-      } else if (result.top_3 && result.top_3.length > 0) {
-        // Format with top_3 array
+      // Priority 1: Use top_3 if available (most reliable)
+      if (result.top_3 && result.top_3.length > 0) {
         formattedResult = {
           prediction: result.top_3[0].class || result.top_3[0].class_tr || result.top_3[0].className || 'Bilinmiyor',
           confidence: result.top_3[0].confidence || result.top_3[0].probability || 0,
@@ -696,6 +687,26 @@ export default function DashboardPage() {
           })),
           gradcam: result.gradcam || null,
           fullData: result
+        }
+      } else if (result.prediction) {
+        // Priority 2: Check if prediction is an object (old format)
+        if (typeof result.prediction === 'object' && result.prediction !== null) {
+          formattedResult = {
+            prediction: result.prediction.class || result.prediction.className || 'Bilinmiyor',
+            confidence: result.prediction.confidence || 0,
+            top_3: result.top_3 || [],
+            gradcam: result.gradcam || null,
+            fullData: result
+          }
+        } else {
+          // Priority 3: prediction is a string (new HF Space format)
+          formattedResult = {
+            prediction: result.prediction || result.prediction_tr || 'Bilinmiyor',
+            confidence: result.confidence || 0,
+            top_3: result.top_3 || [],
+            gradcam: result.gradcam || null,
+            fullData: result
+          }
         }
       } else {
         // Fallback format
