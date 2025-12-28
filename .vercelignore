@@ -1,0 +1,4 @@
+Skin-Disease-Classifier/
+*.md
+!landing-page/**/*.md
+
