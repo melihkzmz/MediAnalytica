@@ -91,18 +91,46 @@ export default function DashboardPage() {
     if (!user) return
     setLoadingHistory(true)
     try {
-      const token = await user.getIdToken()
-      const response = await fetch(`${config.apiUrl}/api/user/analyses?page=1&per_page=20`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setAnalyses(data.analyses || [])
-      }
+      const { collection, query, where, orderBy, limit, getDocs } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      // Query analyses for current user, ordered by creation date
+      const analysesRef = collection(db, 'analyses')
+      const q = query(
+        analysesRef,
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+      )
+      
+      const querySnapshot = await getDocs(q)
+      const analysesData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      
+      setAnalyses(analysesData)
     } catch (error) {
       console.error('Error loading analyses:', error)
+      // If query fails (e.g., missing index), try without orderBy
+      try {
+        const { collection, query, where, limit, getDocs } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const analysesRef = collection(db, 'analyses')
+        const q = query(
+          analysesRef,
+          where('userId', '==', user.uid),
+          limit(20)
+        )
+        const querySnapshot = await getDocs(q)
+        const analysesData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        setAnalyses(analysesData)
+      } catch (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError)
+      }
     } finally {
       setLoadingHistory(false)
     }
@@ -112,16 +140,23 @@ export default function DashboardPage() {
     if (!user) return
     setLoadingFavorites(true)
     try {
-      const token = await user.getIdToken()
-      const response = await fetch(`${config.apiUrl}/api/user/favorites`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setFavorites(data.favorites || [])
-      }
+      const { collection, query, where, getDocs } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      // Query favorites for current user
+      const favoritesRef = collection(db, 'favorites')
+      const q = query(
+        favoritesRef,
+        where('userId', '==', user.uid)
+      )
+      
+      const querySnapshot = await getDocs(q)
+      const favoritesData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      
+      setFavorites(favoritesData)
     } catch (error) {
       console.error('Error loading favorites:', error)
     } finally {
@@ -133,16 +168,35 @@ export default function DashboardPage() {
     if (!user) return
     setLoadingStats(true)
     try {
-      const token = await user.getIdToken()
-      const response = await fetch(`${config.apiUrl}/api/user/stats`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const { collection, query, where, getDocs } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      // Query all analyses for current user to calculate stats
+      const analysesRef = collection(db, 'analyses')
+      const q = query(
+        analysesRef,
+        where('userId', '==', user.uid)
+      )
+      
+      const querySnapshot = await getDocs(q)
+      const allAnalyses = querySnapshot.docs.map(doc => doc.data())
+      
+      // Calculate stats
+      const totalAnalyses = allAnalyses.length
+      const diseaseCounts: { [key: string]: number } = {}
+      
+      allAnalyses.forEach((analysis: any) => {
+        const diseaseType = analysis.diseaseType || 'unknown'
+        diseaseCounts[diseaseType] = (diseaseCounts[diseaseType] || 0) + 1
       })
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data)
-      }
+      
+      const mostAnalyzed = Object.entries(diseaseCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'none'
+      
+      setStats({
+        totalAnalyses,
+        diseaseCounts,
+        mostAnalyzed
+      })
     } catch (error) {
       console.error('Error loading stats:', error)
     } finally {
@@ -153,20 +207,20 @@ export default function DashboardPage() {
   const addToFavorites = async (analysisId: string) => {
     if (!user) return
     try {
-      const token = await user.getIdToken()
-      const response = await fetch(`${config.apiUrl}/api/user/favorites`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ analysisId })
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      // Add to favorites collection
+      await addDoc(collection(db, 'favorites'), {
+        userId: user.uid,
+        analysisId: analysisId,
+        createdAt: serverTimestamp()
       })
-      if (response.ok) {
-        showToast('Favorilere eklendi!', 'success')
-        loadFavorites()
-      }
+      
+      showToast('Favorilere eklendi!', 'success')
+      loadFavorites()
     } catch (error) {
+      console.error('Error adding to favorites:', error)
       showToast('Favorilere eklenirken hata oluştu.', 'error')
     }
   }
@@ -174,18 +228,16 @@ export default function DashboardPage() {
   const removeFromFavorites = async (favoriteId: string) => {
     if (!user) return
     try {
-      const token = await user.getIdToken()
-      const response = await fetch(`${config.apiUrl}/api/user/favorites/${favoriteId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (response.ok) {
-        showToast('Favorilerden kaldırıldı!', 'success')
-        loadFavorites()
-      }
+      const { doc, deleteDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      // Remove from favorites collection
+      await deleteDoc(doc(db, 'favorites', favoriteId))
+      
+      showToast('Favorilerden kaldırıldı!', 'success')
+      loadFavorites()
     } catch (error) {
+      console.error('Error removing from favorites:', error)
       showToast('Favorilerden kaldırılırken hata oluştu.', 'error')
     }
   }
@@ -687,53 +739,40 @@ export default function DashboardPage() {
 
       // Upload image to Firebase Storage
       const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage')
-      const { storage } = await import('@/lib/firebase')
+      const { storage, db } = await import('@/lib/firebase')
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
       
       const storageRef = ref(storage, `analysis_images/${user.uid}/${Date.now()}_${imageFile.name}`)
       await uploadBytes(storageRef, imageFile)
       const imageUrl = await getDownloadURL(storageRef)
 
-      // Get token
-      const token = await user.getIdToken()
-
-      // Save to backend API
-      const response = await fetch(`${config.apiUrl}/api/user/analyses`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          diseaseType: diseaseType,
-          results: results.top_3 && results.top_3.length > 0 
-            ? results.top_3.map((item: any) => ({
-                class: item.class || item.className,
-                confidence: item.confidence || item.probability
-              }))
-            : [{
-                class: results.prediction,
-                confidence: results.confidence
-              }],
-          topPrediction: results.prediction,
-          imageUrl: imageUrl
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Analysis saved:', data)
-        return data.analysisId || data.id || null
-      } else {
-        const errorText = await response.text()
-        console.error('Failed to save analysis:', response.status, errorText)
-        try {
-          const errorData = JSON.parse(errorText)
-          console.error('Error details:', errorData)
-        } catch {
-          console.error('Error response:', errorText)
-        }
-        return null
+      // Prepare analysis data
+      const analysisData = {
+        userId: user.uid,
+        userEmail: user.email,
+        diseaseType: diseaseType,
+        results: results.top_3 && results.top_3.length > 0 
+          ? results.top_3.map((item: any) => ({
+              class: item.class || item.className,
+              confidence: item.confidence || item.probability
+            }))
+          : [{
+              class: results.prediction,
+              confidence: results.confidence
+            }],
+        topPrediction: results.prediction,
+        topConfidence: results.confidence,
+        imageUrl: imageUrl,
+        gradcamUrl: results.gradcam || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       }
+
+      // Save directly to Firestore (no backend API needed)
+      const docRef = await addDoc(collection(db, 'analyses'), analysisData)
+      console.log('Analysis saved to Firestore:', docRef.id)
+      return docRef.id
+      
     } catch (error) {
       console.error('Error saving analysis:', error)
       showToast('Analiz kaydedilirken bir hata oluştu.', 'error')
