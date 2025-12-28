@@ -551,24 +551,64 @@ export default function DashboardPage() {
       formData.append('with_gradcam', 'true')
 
       // Determine API endpoint based on disease type
-      const apiPorts: { [key: string]: string } = {
-        'bone': '5002',
-        'skin': '5003',
-        'lung': '5000'  // Akciğer API'si port 5000'de çalışıyor
+      // Use Hugging Face Space if configured, otherwise fallback to localhost
+      let apiUrl: string
+      let headers: HeadersInit = {}
+      
+      // Debug: Check why HF Space isn't being used
+      console.log('[API Config]', {
+        useHuggingFaceSpace: config.useHuggingFaceSpace,
+        hfSpaceUrl: config.hfSpaceUrl,
+        useProxyForHF: config.useProxyForHF,
+        envUseHF: process.env.NEXT_PUBLIC_USE_HF_SPACE,
+        envHFUrl: process.env.NEXT_PUBLIC_HF_SPACE_URL
+      })
+      
+      if (config.useHuggingFaceSpace && config.hfSpaceUrl) {
+        if (config.useProxyForHF) {
+          // Use Next.js API proxy (for private Spaces - token kept secure)
+          apiUrl = `/api/predict/${selectedDisease}`
+          console.log('[API] Using proxy:', apiUrl)
+        } else {
+          // Direct Hugging Face Space API: /predict/<disease_type>
+          apiUrl = `${config.hfSpaceUrl}/predict/${selectedDisease}`
+          console.log('[API] Using HF Space:', apiUrl)
+        }
+      } else {
+        // Localhost fallback (for development)
+        const apiPorts: { [key: string]: string } = {
+          'bone': '5002',
+          'skin': '5003',
+          'lung': '5004',
+          'eye': '5005'
+        }
+        apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
+        console.warn('[API] Using localhost (HF Space not configured):', apiUrl)
+        console.warn('[API] Reason - useHuggingFaceSpace:', config.useHuggingFaceSpace, 'hfSpaceUrl:', config.hfSpaceUrl)
       }
-
-      const apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
 
       let response
       try {
         response = await fetch(apiUrl, {
           method: 'POST',
+          headers: headers,
           body: formData
         })
       } catch (fetchError: any) {
-        // Connection error - backend servisi çalışmıyor olabilir
+        // Connection error
+        console.error('[API] Fetch error:', fetchError)
         if (fetchError.message?.includes('Failed to fetch') || fetchError.message?.includes('ERR_CONNECTION_REFUSED')) {
-          throw new Error(`Backend API servisi çalışmıyor. Lütfen ${apiPorts[selectedDisease]} portunda çalışan ${selectedDisease === 'bone' ? 'kemik' : selectedDisease === 'skin' ? 'deri' : 'akciğer'} hastalıkları API servisini başlatın.`)
+          if (config.useHuggingFaceSpace && config.hfSpaceUrl) {
+            throw new Error(`Hugging Face Space API'ye bağlanılamıyor. Lütfen Space'in çalıştığından ve URL'in doğru olduğundan emin olun. (${config.hfSpaceUrl})`)
+          } else {
+            const apiPorts: { [key: string]: string } = {
+              'bone': '5002',
+              'skin': '5003',
+              'lung': '5004',
+              'eye': '5005'
+            }
+            throw new Error(`Backend API servisi çalışmıyor. Lütfen ${apiPorts[selectedDisease]} portunda çalışan ${selectedDisease === 'bone' ? 'kemik' : selectedDisease === 'skin' ? 'deri' : selectedDisease === 'lung' ? 'akciğer' : 'göz'} hastalıkları API servisini başlatın. Veya Hugging Face Space kullanmak için NEXT_PUBLIC_USE_HF_SPACE ve NEXT_PUBLIC_HF_SPACE_URL environment variable'larını ayarlayın.`)
+          }
         }
         throw fetchError
       }

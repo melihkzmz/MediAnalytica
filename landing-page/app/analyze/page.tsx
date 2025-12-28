@@ -208,17 +208,38 @@ export default function AnalyzePage() {
       formData.append('with_gradcam', 'true')
 
       // Determine API endpoint based on disease type
-      const apiPorts: { [key: string]: string } = {
-        'bone': '5002',
-        'skin': '5003',
-        'lung': '5004',
-        'eye': '5005'
+      // Use Hugging Face Space if configured, otherwise fallback to localhost
+      let apiUrl: string
+      let headers: HeadersInit = {}
+      
+      if (config.useHuggingFaceSpace && config.hfSpaceUrl) {
+        if (config.useProxyForHF) {
+          // Use Next.js API proxy (for private Spaces - token kept secure)
+          apiUrl = `/api/predict/${selectedDisease}`
+        } else {
+          // Direct Hugging Face Space API: /predict/<disease_type>
+          // For private Spaces, you'll need to add token here (not recommended for production)
+          apiUrl = `${config.hfSpaceUrl}/predict/${selectedDisease}`
+          // Uncomment below if your Space requires authentication and you want to use direct access
+          // const hfToken = process.env.NEXT_PUBLIC_HF_TOKEN // ⚠️ Security risk: token exposed to client
+          // if (hfToken) {
+          //   headers['Authorization'] = `Bearer ${hfToken}`
+          // }
+        }
+      } else {
+        // Localhost fallback (for development)
+        const apiPorts: { [key: string]: string } = {
+          'bone': '5002',
+          'skin': '5003',
+          'lung': '5004',
+          'eye': '5005'
+        }
+        apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
       }
-
-      const apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
 
       const response = await fetch(apiUrl, {
         method: 'POST',
+        headers: headers,
         body: formData
       })
 
