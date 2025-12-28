@@ -246,10 +246,10 @@ export default function DashboardPage() {
       })
 
       // Colors (RGB)
-      const primaryColor = [59, 130, 246] // Blue
-      const successColor = [34, 197, 94] // Green
-      const warningColor = [255, 193, 7] // Yellow
-      const grayColor = [128, 128, 128] // Gray
+      const primaryColor: [number, number, number] = [59, 130, 246] // Blue
+      const successColor: [number, number, number] = [34, 197, 94] // Green
+      const warningColor: [number, number, number] = [255, 193, 7] // Yellow
+      const grayColor: [number, number, number] = [128, 128, 128] // Gray
 
       let yPos = margin
 
@@ -395,7 +395,7 @@ export default function DashboardPage() {
         analysisResult.top_3.forEach((item: any, index: number) => {
           checkPageBreak(12)
           
-          const rowColor = index === 0 ? [240, 253, 244] : index === 1 ? [239, 246, 255] : [250, 250, 250]
+          const rowColor: [number, number, number] = index === 0 ? [240, 253, 244] : index === 1 ? [239, 246, 255] : [250, 250, 250]
           doc.setFillColor(...rowColor)
           doc.roundedRect(margin, yPos, contentWidth, 10, 2, 2, 'F')
           
