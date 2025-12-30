@@ -36,24 +36,21 @@ export default function LoginPage() {
   const [bio, setBio] = useState('')
 
   useEffect(() => {
-    // Check if user is already logged in
+    // Only check for existing logged-in users when in login mode
+    // During registration, we handle redirects manually
+    if (!isLogin) {
+      return // Don't set up auth listener during registration
+    }
+    
+    // Check if user is already logged in (only in login mode)
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        // Don't redirect if we're in the middle of doctor registration
-        // Use ref to check immediately, as state updates are async
-        if (isDoctorRegistrationRef.current) {
-          return
-        }
-        // Don't redirect if we're in the middle of doctor registration (state check as backup)
-        if (!isLogin && registrationStep === 'doctor') {
-          return
-        }
-        // Email verification check removed - direct redirect
+      if (user && isLogin) {
+        // Only redirect if we're in login mode
         router.push('/dashboard')
       }
     })
     return () => unsubscribe()
-  }, [router, isLogin, registrationStep])
+  }, [router, isLogin])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -83,6 +80,11 @@ export default function LoginPage() {
             return
           }
 
+          // If doctor, set ref BEFORE creating user to prevent redirect
+          if (userType === 'doctor') {
+            isDoctorRegistrationRef.current = true
+          }
+
           // Create user account
           const userCredential = await createUserWithEmailAndPassword(auth, email, password)
           const user = userCredential.user
@@ -106,6 +108,7 @@ export default function LoginPage() {
             
             // If patient, complete registration
             if (userType === 'patient') {
+              isDoctorRegistrationRef.current = false // Ensure ref is false for patient
               showToast('Kayıt başarılı! Giriş yapılıyor...', 'success')
               const token = await user.getIdToken()
               localStorage.setItem('firebase_id_token', token)
@@ -113,7 +116,6 @@ export default function LoginPage() {
               return
             } else {
               // If doctor, show additional form
-              isDoctorRegistrationRef.current = true // Set ref before state update
               setRegistrationStep('doctor')
               setLoading(false) // Stop loading to show the form
               showToast('Lütfen doktor bilgilerinizi doldurun.', 'info')
