@@ -3,11 +3,11 @@ type ToastType = 'success' | 'error' | 'warning' | 'info'
 export const showToast = (message: string, type: ToastType = 'info') => {
   // Create toast element
   const toast = document.createElement('div')
-  toast.className = `fixed top-4 right-4 z-50 px-6 py-4 rounded-lg shadow-lg text-white font-medium transform transition-all duration-300 ${
-    type === 'success' ? 'bg-green-500' :
-    type === 'error' ? 'bg-red-500' :
-    type === 'warning' ? 'bg-yellow-500' :
-    'bg-blue-500'
+  toast.className = `fixed top-20 right-4 z-[100] px-6 py-4 rounded-lg shadow-lg text-gray-900 font-medium transform transition-all duration-300 ${
+    type === 'success' ? 'bg-green-50 border-l-4 border-green-500' :
+    type === 'error' ? 'bg-red-50 border-l-4 border-red-500' :
+    type === 'warning' ? 'bg-yellow-50 border-l-4 border-yellow-500' :
+    'bg-blue-50 border-l-4 border-blue-500'
   }`
   toast.textContent = message
   
