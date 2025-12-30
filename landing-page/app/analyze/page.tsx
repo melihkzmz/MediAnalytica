@@ -59,6 +59,13 @@ export default function AnalyzePage() {
     }
   }, [user, currentSection])
 
+  // Load favorites when analyze section is active to check favorite status
+  useEffect(() => {
+    if (user && currentSection === 'analyze') {
+      loadFavorites()
+    }
+  }, [user, currentSection])
+
   useEffect(() => {
     if (user && currentSection === 'stats') {
       loadStats()
@@ -239,22 +246,56 @@ export default function AnalyzePage() {
     }
   }
 
-  const addToFavorites = async (analysisId: string) => {
+  // Helper function to check if an analysis is already in favorites
+  const isAnalysisFavorite = (analysisId: string): { isFavorite: boolean; favoriteId: string | null } => {
+    const favorite = favorites.find((fav: any) => fav.analysisId === analysisId)
+    return {
+      isFavorite: !!favorite,
+      favoriteId: favorite?.id || null
+    }
+  }
+
+  const toggleFavorite = async (analysisId: string) => {
     if (!user) return
-    try {
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
-      const { db } = await import('@/lib/firebase')
-      
-      await addDoc(collection(db, 'favorites'), {
-        userId: user.uid,
-        analysisId: analysisId,
-        createdAt: serverTimestamp()
-      })
-      
-      showToast('Favorilere eklendi!', 'success')
-      loadFavorites()
-    } catch (error) {
-      showToast('Favorilere eklenirken hata oluştu.', 'error')
+    
+    const { isFavorite, favoriteId } = isAnalysisFavorite(analysisId)
+    
+    if (isFavorite && favoriteId) {
+      // Remove from favorites
+      await removeFromFavorites(favoriteId)
+    } else {
+      // Add to favorites (check for duplicate first)
+      try {
+        const { collection, query, where, getDocs, addDoc, serverTimestamp } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        
+        // Check if already exists (prevent duplicates)
+        const favoritesRef = collection(db, 'favorites')
+        const q = query(
+          favoritesRef,
+          where('userId', '==', user.uid),
+          where('analysisId', '==', analysisId)
+        )
+        const existingFavorites = await getDocs(q)
+        
+        if (!existingFavorites.empty) {
+          showToast('Bu analiz zaten favorilerde!', 'info')
+          loadFavorites() // Refresh to update UI
+          return
+        }
+        
+        await addDoc(collection(db, 'favorites'), {
+          userId: user.uid,
+          analysisId: analysisId,
+          createdAt: serverTimestamp()
+        })
+        
+        showToast('Favorilere eklendi!', 'success')
+        loadFavorites()
+      } catch (error) {
+        console.error('Error adding to favorites:', error)
+        showToast('Favorilere eklenirken hata oluştu.', 'error')
+      }
     }
   }
 
@@ -777,27 +818,31 @@ export default function AnalyzePage() {
                   )}
 
                   {/* Action Buttons */}
-                  {currentAnalysisId && (
-                    <div className="flex gap-4 pt-4 border-t border-gray-200">
-                      <button
-                        onClick={() => {
-                          addToFavorites(currentAnalysisId)
-                          loadFavorites()
-                        }}
-                        className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center"
-                      >
-                        <Heart className="w-5 h-5 mr-2" />
-                        Favorilere Ekle
-                      </button>
-                      <button
-                        onClick={() => setCurrentSection('history')}
-                        className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center"
-                      >
-                        <History className="w-5 h-5 mr-2" />
-                        Geçmişe Git
-                      </button>
-                    </div>
-                  )}
+                  {currentAnalysisId && (() => {
+                    const { isFavorite } = isAnalysisFavorite(currentAnalysisId)
+                    return (
+                      <div className="flex gap-4 pt-4 border-t border-gray-200">
+                        <button
+                          onClick={() => toggleFavorite(currentAnalysisId)}
+                          className={`flex-1 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center ${
+                            isFavorite
+                              ? 'bg-red-500 hover:bg-red-600 text-white'
+                              : 'bg-red-50 hover:bg-red-100 text-red-600'
+                          }`}
+                        >
+                          <Heart className={`w-5 h-5 mr-2 ${isFavorite ? 'fill-current' : ''}`} />
+                          {isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
+                        </button>
+                        <button
+                          onClick={() => setCurrentSection('history')}
+                          className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center"
+                        >
+                          <History className="w-5 h-5 mr-2" />
+                          Geçmişe Git
+                        </button>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>
@@ -861,12 +906,21 @@ export default function AnalyzePage() {
                             <img src={analysis.imageUrl} alt="Analysis" className="w-32 h-32 object-cover rounded-lg" />
                           )}
                         </div>
-                        <button
-                          onClick={() => addToFavorites(analysis.id)}
-                          className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <Heart className="w-5 h-5" />
-                        </button>
+                        {(() => {
+                          const { isFavorite } = isAnalysisFavorite(analysis.id)
+                          return (
+                            <button
+                              onClick={() => toggleFavorite(analysis.id)}
+                              className={`p-2 transition-colors ${
+                                isFavorite
+                                  ? 'text-red-500 hover:text-red-600'
+                                  : 'text-gray-400 hover:text-red-500'
+                              }`}
+                            >
+                              <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+                            </button>
+                          )
+                        })()}
                       </div>
                     </div>
                   ))}
