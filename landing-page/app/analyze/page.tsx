@@ -81,10 +81,19 @@ export default function AnalyzePage() {
       )
       
       const querySnapshot = await getDocs(q)
-      const analysesData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const analysesData = querySnapshot.docs.map(doc => {
+        const data = doc.data()
+        // Convert Firestore Timestamp to JavaScript Date
+        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+          data.createdAt = data.createdAt.toDate().getTime()
+        } else if (data.createdAt?.seconds) {
+          data.createdAt = data.createdAt.seconds * 1000
+        }
+        return {
+          id: doc.id,
+          ...data
+        }
+      })
       
       setAnalyses(analysesData)
     } catch (error) {
@@ -100,10 +109,19 @@ export default function AnalyzePage() {
           limit(20)
         )
         const querySnapshot = await getDocs(q)
-        const analysesData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
+        const analysesData = querySnapshot.docs.map(doc => {
+          const data = doc.data()
+          // Convert Firestore Timestamp to JavaScript Date
+          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+            data.createdAt = data.createdAt.toDate().getTime()
+          } else if (data.createdAt?.seconds) {
+            data.createdAt = data.createdAt.seconds * 1000
+          }
+          return {
+            id: doc.id,
+            ...data
+          }
+        })
         setAnalyses(analysesData)
       } catch (fallbackError) {
         console.error('Fallback query failed:', fallbackError)
@@ -774,7 +792,23 @@ export default function AnalyzePage() {
                                analysis.diseaseType === 'eye' ? '👁️ Göz' : analysis.diseaseType}
                             </span>
                             <span className="text-sm text-gray-500">
-                              {analysis.createdAt ? new Date(analysis.createdAt * 1000).toLocaleDateString('tr-TR') : 'Tarih yok'}
+                              {analysis.createdAt ? (() => {
+                                // Handle different timestamp formats
+                                let date: Date
+                                if (analysis.createdAt instanceof Date) {
+                                  date = analysis.createdAt
+                                } else if (typeof analysis.createdAt === 'number') {
+                                  // If it's already milliseconds, use directly; if seconds, multiply by 1000
+                                  date = new Date(analysis.createdAt > 1000000000000 ? analysis.createdAt : analysis.createdAt * 1000)
+                                } else if (analysis.createdAt?.toDate) {
+                                  date = analysis.createdAt.toDate()
+                                } else if (analysis.createdAt?.seconds) {
+                                  date = new Date(analysis.createdAt.seconds * 1000)
+                                } else {
+                                  return 'Tarih yok'
+                                }
+                                return date.toLocaleDateString('tr-TR')
+                              })() : 'Tarih yok'}
                             </span>
                           </div>
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">
