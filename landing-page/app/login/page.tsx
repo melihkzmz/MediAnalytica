@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { auth, db } from '@/lib/firebase'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { showToast } from '@/lib/utils'
-import { Brain, Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, Zap, Users } from 'lucide-react'
+import { Brain, Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, Zap, Users, User, Stethoscope } from 'lucide-react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [userType, setUserType] = useState<'patient' | 'doctor'>('patient')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -51,6 +53,38 @@ export default function LoginPage() {
         // Register
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
+
+        // Save user data to Firestore
+        try {
+          const userDoc = {
+            email: email,
+            displayName: name || email.split('@')[0],
+            userType: userType, // 'patient' or 'doctor'
+            createdAt: serverTimestamp(),
+            lastLogin: serverTimestamp(),
+            settings: {
+              notifications: true,
+              language: 'tr'
+            }
+          }
+          
+          await setDoc(doc(db, 'users', user.uid), userDoc)
+          
+          // If doctor, also create a doctor document (pending approval)
+          if (userType === 'doctor') {
+            await setDoc(doc(db, 'doctors', user.uid), {
+              userId: user.uid,
+              firstName: name.split(' ')[0] || '',
+              lastName: name.split(' ').slice(1).join(' ') || '',
+              status: 'pending', // Requires approval
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            })
+          }
+        } catch (error: any) {
+          console.error('Error saving user data:', error)
+          // Continue even if Firestore save fails
+        }
 
         // Email verification removed
         
@@ -184,18 +218,58 @@ export default function LoginPage() {
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {!isLogin && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Ad Soyad
-                      </label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
-                        placeholder="Adınız ve soyadınız"
-                      />
-                    </div>
+                    <>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Ad Soyad
+                        </label>
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
+                          placeholder="Adınız ve soyadınız"
+                        />
+                      </div>
+
+                      {/* User Type Selection */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          Kayıt Türü
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setUserType('patient')}
+                            className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
+                              userType === 'patient'
+                                ? 'border-primary bg-primary/5 text-primary'
+                                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            <User className="w-5 h-5" />
+                            <span className="font-semibold">Hasta</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUserType('doctor')}
+                            className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
+                              userType === 'doctor'
+                                ? 'border-primary bg-primary/5 text-primary'
+                                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            <Stethoscope className="w-5 h-5" />
+                            <span className="font-semibold">Doktor</span>
+                          </button>
+                        </div>
+                        {userType === 'doctor' && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            Doktor kaydı onay gerektirir. Kayıt sonrası ek bilgiler istenebilir.
+                          </p>
+                        )}
+                      </div>
+                    </>
                   )}
 
                   <div>
@@ -276,7 +350,10 @@ export default function LoginPage() {
                     {isLogin ? 'Hesabınız yok mu?' : 'Zaten hesabınız var mı?'}
                   </p>
                   <button
-                    onClick={() => setIsLogin(!isLogin)}
+                    onClick={() => {
+                      setIsLogin(!isLogin)
+                      setUserType('patient') // Reset to default when switching
+                    }}
                     className="text-primary hover:text-primary-dark font-semibold transition-colors"
                   >
                     {isLogin ? 'Kayıt Ol' : 'Giriş Yap'}
