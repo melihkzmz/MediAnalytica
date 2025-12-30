@@ -162,28 +162,26 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    if (!diplomaPhoto) {
-      showToast('Lütfen diploma fotoğrafı yükleyin.', 'error')
-      setLoading(false)
-      return
-    }
+
 
     try {
       // Now create the user account with all information
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
 
-      // Upload diploma photo
+      // Upload diploma photo (optional)
       let diplomaUrl = ''
-      try {
-        const diplomaRef = ref(storage, `doctors/${user.uid}/diploma/${diplomaPhoto.name}`)
-        await uploadBytes(diplomaRef, diplomaPhoto)
-        diplomaUrl = await getDownloadURL(diplomaRef)
-      } catch (uploadError: any) {
-        console.error('Error uploading diploma:', uploadError)
-        showToast('Diploma fotoğrafı yüklenirken hata oluştu.', 'error')
-        setLoading(false)
-        return
+      if (diplomaPhoto) {
+        try {
+          const diplomaRef = ref(storage, `doctors/${user.uid}/diploma/${diplomaPhoto.name}`)
+          await uploadBytes(diplomaRef, diplomaPhoto)
+          diplomaUrl = await getDownloadURL(diplomaRef)
+        } catch (uploadError: any) {
+          console.error('Error uploading diploma:', uploadError)
+          showToast('Diploma fotoğrafı yüklenirken hata oluştu.', 'error')
+          setLoading(false)
+          return
+        }
       }
 
       // Save user data to Firestore
@@ -627,7 +625,7 @@ export default function LoginPage() {
                     {/* Diploma Photo */}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Diploma Fotoğrafı <span className="text-red-500">*</span>
+                        Diploma Fotoğrafı <span className="text-gray-400 text-xs">(Opsiyonel)</span>
                       </label>
                       {diplomaPreview ? (
                         <div className="relative">
@@ -654,7 +652,6 @@ export default function LoginPage() {
                             accept="image/*"
                             onChange={handleDiplomaUpload}
                             className="hidden"
-                            required
                           />
                         </label>
                       )}
