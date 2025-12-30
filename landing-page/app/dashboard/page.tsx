@@ -158,7 +158,7 @@ export default function DashboardPage() {
     if (!user) return
     setLoadingFavorites(true)
     try {
-      const { collection, query, where, getDocs } = await import('firebase/firestore')
+      const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
       
       // Query favorites for current user
@@ -169,10 +169,41 @@ export default function DashboardPage() {
       )
       
       const querySnapshot = await getDocs(q)
-      const favoritesData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      
+      // Fetch analysis data for each favorite
+      const favoritesData = await Promise.all(
+        querySnapshot.docs.map(async (favoriteDoc) => {
+          const favoriteData = favoriteDoc.data()
+          const analysisId = favoriteData.analysisId
+          
+          // Fetch the analysis document
+          let analysis = null
+          if (analysisId) {
+            try {
+              const analysisRef = doc(db, 'analyses', analysisId)
+              const analysisDoc = await getDoc(analysisRef)
+              if (analysisDoc.exists()) {
+                analysis = analysisDoc.data()
+                // Convert Firestore Timestamp to JavaScript Date
+                if (analysis.createdAt && typeof analysis.createdAt.toDate === 'function') {
+                  analysis.createdAt = analysis.createdAt.toDate().getTime()
+                } else if (analysis.createdAt?.seconds) {
+                  analysis.createdAt = analysis.createdAt.seconds * 1000
+                }
+                analysis.id = analysisDoc.id
+              }
+            } catch (error) {
+              console.error(`Error fetching analysis ${analysisId}:`, error)
+            }
+          }
+          
+          return {
+            id: favoriteDoc.id,
+            ...favoriteData,
+            analysis: analysis
+          }
+        })
+      )
       
       setFavorites(favoritesData)
     } catch (error) {
