@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
-import { auth, db } from '@/lib/firebase'
+import { auth, db, storage } from '@/lib/firebase'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { showToast } from '@/lib/utils'
-import { Brain, Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, Zap, Users, User, Stethoscope } from 'lucide-react'
+import { Brain, Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, Zap, Users, User, Stethoscope, Phone, Briefcase, Award, FileText, Upload, X } from 'lucide-react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 
@@ -19,6 +20,19 @@ export default function LoginPage() {
   const [userType, setUserType] = useState<'patient' | 'doctor'>('patient')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [registrationStep, setRegistrationStep] = useState<'basic' | 'doctor'>('basic')
+  const [createdUser, setCreatedUser] = useState<any>(null) // Store created user for doctor registration
+  
+  // Doctor additional fields
+  const [tcNo, setTcNo] = useState('')
+  const [specialty, setSpecialty] = useState('')
+  const [diplomaPhoto, setDiplomaPhoto] = useState<File | null>(null)
+  const [diplomaPreview, setDiplomaPreview] = useState<string | null>(null)
+  const [certificates, setCertificates] = useState('')
+  const [phone, setPhone] = useState('')
+  const [experienceYears, setExperienceYears] = useState('')
+  const [institution, setInstitution] = useState('')
+  const [bio, setBio] = useState('')
 
   useEffect(() => {
     // Check if user is already logged in
@@ -50,52 +64,53 @@ export default function LoginPage() {
         showToast('Giriş başarılı!', 'success')
         router.push('/dashboard')
       } else {
-        // Register
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-        const user = userCredential.user
-
-        // Save user data to Firestore
-        try {
-          const userDoc = {
-            email: email,
-            displayName: name || email.split('@')[0],
-            userType: userType, // 'patient' or 'doctor'
-            createdAt: serverTimestamp(),
-            lastLogin: serverTimestamp(),
-            settings: {
-              notifications: true,
-              language: 'tr'
-            }
+        // Register - Basic step
+        if (registrationStep === 'basic') {
+          // Validate basic fields
+          if (!name.trim()) {
+            showToast('Lütfen ad soyad girin.', 'error')
+            setLoading(false)
+            return
           }
-          
-          await setDoc(doc(db, 'users', user.uid), userDoc)
-          
-          // If doctor, also create a doctor document (pending approval)
-          if (userType === 'doctor') {
-            await setDoc(doc(db, 'doctors', user.uid), {
-              userId: user.uid,
-              firstName: name.split(' ')[0] || '',
-              lastName: name.split(' ').slice(1).join(' ') || '',
-              status: 'pending', // Requires approval
+
+          // Create user account
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+          const user = userCredential.user
+          setCreatedUser(user)
+
+          // Save basic user data to Firestore
+          try {
+            const userDoc = {
+              email: email,
+              displayName: name || email.split('@')[0],
+              userType: userType, // 'patient' or 'doctor'
               createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            })
+              lastLogin: serverTimestamp(),
+              settings: {
+                notifications: true,
+                language: 'tr'
+              }
+            }
+            
+            await setDoc(doc(db, 'users', user.uid), userDoc)
+            
+            // If patient, complete registration
+            if (userType === 'patient') {
+              showToast('Kayıt başarılı! Giriş yapılıyor...', 'success')
+              const token = await user.getIdToken()
+              localStorage.setItem('firebase_id_token', token)
+              router.push('/dashboard')
+              return
+            } else {
+              // If doctor, show additional form
+              setRegistrationStep('doctor')
+              showToast('Lütfen doktor bilgilerinizi doldurun.', 'info')
+            }
+          } catch (error: any) {
+            console.error('Error saving user data:', error)
+            showToast('Kullanıcı oluşturulurken hata oluştu.', 'error')
           }
-        } catch (error: any) {
-          console.error('Error saving user data:', error)
-          // Continue even if Firestore save fails
         }
-
-        // Email verification removed
-        
-        showToast('Kayıt başarılı! Giriş yapılıyor...', 'success')
-        
-        // Auto login after registration
-        const token = await user.getIdToken()
-        localStorage.setItem('firebase_id_token', token)
-        router.push('/dashboard')
-        return
-        setIsLogin(true)
       }
     } catch (error: any) {
       const errorMessages: { [key: string]: string } = {
@@ -110,6 +125,123 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDoctorRegistration = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    // Validate required fields
+    if (!specialty.trim()) {
+      showToast('Lütfen uzmanlık alanı girin.', 'error')
+      setLoading(false)
+      return
+    }
+    if (!phone.trim()) {
+      showToast('Lütfen telefon numarası girin.', 'error')
+      setLoading(false)
+      return
+    }
+    if (!experienceYears.trim() || isNaN(Number(experienceYears))) {
+      showToast('Lütfen geçerli bir deneyim yılı girin.', 'error')
+      setLoading(false)
+      return
+    }
+    if (!institution.trim()) {
+      showToast('Lütfen çalışılan kurum bilgisi girin.', 'error')
+      setLoading(false)
+      return
+    }
+    if (!bio.trim()) {
+      showToast('Lütfen hakkında bilgisi girin.', 'error')
+      setLoading(false)
+      return
+    }
+    if (!diplomaPhoto) {
+      showToast('Lütfen diploma fotoğrafı yükleyin.', 'error')
+      setLoading(false)
+      return
+    }
+
+    try {
+      if (!createdUser) {
+        showToast('Bir hata oluştu. Lütfen tekrar deneyin.', 'error')
+        setLoading(false)
+        return
+      }
+
+      // Upload diploma photo
+      let diplomaUrl = ''
+      try {
+        const diplomaRef = ref(storage, `doctors/${createdUser.uid}/diploma/${diplomaPhoto.name}`)
+        await uploadBytes(diplomaRef, diplomaPhoto)
+        diplomaUrl = await getDownloadURL(diplomaRef)
+      } catch (uploadError: any) {
+        console.error('Error uploading diploma:', uploadError)
+        showToast('Diploma fotoğrafı yüklenirken hata oluştu.', 'error')
+        setLoading(false)
+        return
+      }
+
+      // Save doctor data to Firestore
+      const doctorData = {
+        userId: createdUser.uid,
+        firstName: name.split(' ')[0] || '',
+        lastName: name.split(' ').slice(1).join(' ') || '',
+        specialty: specialty.trim(),
+        phone: phone.trim(),
+        tcNo: tcNo.trim() || null,
+        experienceYears: parseInt(experienceYears),
+        institution: institution.trim(),
+        bio: bio.trim(),
+        certificates: certificates.trim() || null,
+        diplomaUrl: diplomaUrl,
+        status: 'pending', // Requires approval
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }
+
+      await setDoc(doc(db, 'doctors', createdUser.uid), doctorData)
+
+      showToast('Doktor kaydı başarılı! Onay sonrası giriş yapabileceksiniz.', 'success')
+      
+      // Auto login after registration
+      const token = await createdUser.getIdToken()
+      localStorage.setItem('firebase_id_token', token)
+      router.push('/dashboard')
+    } catch (error: any) {
+      console.error('Error saving doctor data:', error)
+      showToast('Doktor bilgileri kaydedilirken hata oluştu.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDiplomaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        showToast('Lütfen bir görüntü dosyası seçin.', 'error')
+        return
+      }
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        showToast('Dosya boyutu 10MB\'dan küçük olmalıdır.', 'error')
+        return
+      }
+      setDiplomaPhoto(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setDiplomaPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeDiplomaPhoto = () => {
+    setDiplomaPhoto(null)
+    setDiplomaPreview(null)
   }
 
   const handleForgotPassword = async () => {
@@ -208,15 +340,16 @@ export default function LoginPage() {
                 {/* Title */}
                 <div className="text-center mb-8">
                   <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-                    {isLogin ? 'Giriş Yap' : 'Kayıt Ol'}
+                    {isLogin ? 'Giriş Yap' : registrationStep === 'doctor' ? 'Doktor Bilgileri' : 'Kayıt Ol'}
                   </h2>
                   <p className="text-gray-600">
-                    {isLogin ? 'Hesabınıza giriş yapın' : 'Yeni hesap oluşturun'}
+                    {isLogin ? 'Hesabınıza giriş yapın' : registrationStep === 'doctor' ? 'Doktor bilgilerinizi tamamlayın' : 'Yeni hesap oluşturun'}
                   </p>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-6">
+                {registrationStep === 'basic' ? (
+                  <form onSubmit={handleSubmit} className="space-y-6">
                   {!isLogin && (
                     <>
                       <div>
@@ -240,7 +373,10 @@ export default function LoginPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <button
                             type="button"
-                            onClick={() => setUserType('patient')}
+                            onClick={() => {
+                              setUserType('patient')
+                              setRegistrationStep('basic')
+                            }}
                             className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
                               userType === 'patient'
                                 ? 'border-primary bg-primary/5 text-primary'
@@ -252,7 +388,10 @@ export default function LoginPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setUserType('doctor')}
+                            onClick={() => {
+                              setUserType('doctor')
+                              setRegistrationStep('basic')
+                            }}
                             className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
                               userType === 'doctor'
                                 ? 'border-primary bg-primary/5 text-primary'
@@ -343,6 +482,194 @@ export default function LoginPage() {
                     )}
                   </button>
                 </form>
+                ) : (
+                  <form onSubmit={handleDoctorRegistration} className="space-y-6">
+                    <div className="mb-6 pb-6 border-b border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xl font-bold text-gray-900">Doktor Bilgileri</h3>
+                        <span className="text-sm text-gray-500">2/2</span>
+                      </div>
+                      <p className="text-sm text-gray-600">Lütfen doktor bilgilerinizi eksiksiz doldurun.</p>
+                    </div>
+
+                    {/* TC Kimlik No */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        T.C. Kimlik No <span className="text-gray-400 text-xs">(Opsiyonel)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={tcNo}
+                        onChange={(e) => setTcNo(e.target.value)}
+                        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
+                        placeholder="T.C. Kimlik Numaranız"
+                        maxLength={11}
+                      />
+                    </div>
+
+                    {/* Specialty */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Uzmanlık Alanı <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={specialty}
+                        onChange={(e) => setSpecialty(e.target.value)}
+                        required
+                        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
+                        placeholder="Örn: Kardiyoloji, Dermatoloji, Ortopedi"
+                      />
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Telefon Numarası <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          required
+                          className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
+                          placeholder="05XX XXX XX XX"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Experience Years */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Deneyim Yılı <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={experienceYears}
+                        onChange={(e) => setExperienceYears(e.target.value)}
+                        required
+                        min="0"
+                        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
+                        placeholder="Kaç yıllık deneyiminiz var?"
+                      />
+                    </div>
+
+                    {/* Institution */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Çalışılan Kurum <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Briefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                          type="text"
+                          value={institution}
+                          onChange={(e) => setInstitution(e.target.value)}
+                          required
+                          className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
+                          placeholder="Hastane, Klinik veya Kurum adı"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bio */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Hakkında (Kısa Özgeçmiş) <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={bio}
+                        onChange={(e) => setBio(e.target.value)}
+                        required
+                        rows={4}
+                        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white resize-none"
+                        placeholder="Kısa özgeçmişinizi yazın..."
+                      />
+                    </div>
+
+                    {/* Certificates */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Sertifikalar <span className="text-gray-400 text-xs">(Opsiyonel)</span>
+                      </label>
+                      <div className="relative">
+                        <Award className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <textarea
+                          value={certificates}
+                          onChange={(e) => setCertificates(e.target.value)}
+                          rows={3}
+                          className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white resize-none"
+                          placeholder="Sertifikalarınızı listeleyin..."
+                        />
+                      </div>
+                    </div>
+
+                    {/* Diploma Photo */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Diploma Fotoğrafı <span className="text-red-500">*</span>
+                      </label>
+                      {diplomaPreview ? (
+                        <div className="relative">
+                          <img src={diplomaPreview} alt="Diploma preview" className="w-full h-48 object-contain border-2 border-gray-200 rounded-xl bg-gray-50" />
+                          <button
+                            type="button"
+                            onClick={removeDiplomaPhoto}
+                            className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <Upload className="w-8 h-8 mb-2 text-gray-400" />
+                            <p className="mb-2 text-sm text-gray-500">
+                              <span className="font-semibold">Dosya seçin</span> veya sürükleyip bırakın
+                            </p>
+                            <p className="text-xs text-gray-400">PNG, JPG veya JPEG (MAX. 10MB)</p>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleDiplomaUpload}
+                            className="hidden"
+                            required
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setRegistrationStep('basic')}
+                        className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+                      >
+                        Geri
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="flex-1 bg-primary hover:bg-primary-dark text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? (
+                          <span className="flex items-center justify-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Kaydediliyor...
+                          </span>
+                        ) : (
+                          'Kayıt Ol'
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
 
                 {/* Toggle Login/Register */}
                 <div className="mt-8 text-center">
@@ -353,6 +680,21 @@ export default function LoginPage() {
                     onClick={() => {
                       setIsLogin(!isLogin)
                       setUserType('patient') // Reset to default when switching
+                      setRegistrationStep('basic') // Reset registration step
+                      // Reset all form fields
+                      setEmail('')
+                      setPassword('')
+                      setName('')
+                      setTcNo('')
+                      setSpecialty('')
+                      setDiplomaPhoto(null)
+                      setDiplomaPreview(null)
+                      setCertificates('')
+                      setPhone('')
+                      setExperienceYears('')
+                      setInstitution('')
+                      setBio('')
+                      setCreatedUser(null)
                     }}
                     className="text-primary hover:text-primary-dark font-semibold transition-colors"
                   >
