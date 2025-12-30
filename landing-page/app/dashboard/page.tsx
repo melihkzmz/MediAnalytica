@@ -87,6 +87,18 @@ export default function DashboardPage() {
     }
   }, [user, currentSection])
 
+  // Reset form state when analyze section is activated
+  useEffect(() => {
+    if (currentSection === 'analyze') {
+      setSelectedDisease(null)
+      setSelectedImage(null)
+      setImagePreview(null)
+      setAnalysisResult(null)
+      setCurrentAnalysisId(null)
+      setAnalyzing(false)
+    }
+  }, [currentSection])
+
   const loadAnalyses = async () => {
     if (!user) return
     setLoadingHistory(true)
