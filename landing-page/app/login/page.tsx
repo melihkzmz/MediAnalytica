@@ -38,12 +38,16 @@ export default function LoginPage() {
     // Check if user is already logged in
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
+        // Don't redirect if we're in the middle of doctor registration
+        if (!isLogin && registrationStep === 'doctor') {
+          return
+        }
         // Email verification check removed - direct redirect
         router.push('/dashboard')
       }
     })
     return () => unsubscribe()
-  }, [router])
+  }, [router, isLogin, registrationStep])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -104,7 +108,9 @@ export default function LoginPage() {
             } else {
               // If doctor, show additional form
               setRegistrationStep('doctor')
+              setLoading(false) // Stop loading to show the form
               showToast('Lütfen doktor bilgilerinizi doldurun.', 'info')
+              return // Important: return here to prevent any further execution
             }
           } catch (error: any) {
             console.error('Error saving user data:', error)
