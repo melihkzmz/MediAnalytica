@@ -81,6 +81,13 @@ export default function DashboardPage() {
     }
   }, [user, currentSection])
 
+  // Load favorites when analyze section is active to check favorite status
+  useEffect(() => {
+    if (user && currentSection === 'analyze') {
+      loadFavorites()
+    }
+  }, [user, currentSection])
+
   useEffect(() => {
     if (user && currentSection === 'stats') {
       loadStats()
@@ -265,24 +272,56 @@ export default function DashboardPage() {
     }
   }
 
-  const addToFavorites = async (analysisId: string) => {
+  // Helper function to check if an analysis is already in favorites
+  const isAnalysisFavorite = (analysisId: string): { isFavorite: boolean; favoriteId: string | null } => {
+    const favorite = favorites.find((fav: any) => fav.analysisId === analysisId)
+    return {
+      isFavorite: !!favorite,
+      favoriteId: favorite?.id || null
+    }
+  }
+
+  const toggleFavorite = async (analysisId: string) => {
     if (!user) return
-    try {
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
-      const { db } = await import('@/lib/firebase')
-      
-      // Add to favorites collection
-      await addDoc(collection(db, 'favorites'), {
-        userId: user.uid,
-        analysisId: analysisId,
-        createdAt: serverTimestamp()
-      })
-      
-      showToast('Favorilere eklendi!', 'success')
-      loadFavorites()
-    } catch (error) {
-      console.error('Error adding to favorites:', error)
-      showToast('Favorilere eklenirken hata oluştu.', 'error')
+    
+    const { isFavorite, favoriteId } = isAnalysisFavorite(analysisId)
+    
+    if (isFavorite && favoriteId) {
+      // Remove from favorites
+      await removeFromFavorites(favoriteId)
+    } else {
+      // Add to favorites (check for duplicate first)
+      try {
+        const { collection, query, where, getDocs, addDoc, serverTimestamp } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        
+        // Check if already exists (prevent duplicates)
+        const favoritesRef = collection(db, 'favorites')
+        const q = query(
+          favoritesRef,
+          where('userId', '==', user.uid),
+          where('analysisId', '==', analysisId)
+        )
+        const existingFavorites = await getDocs(q)
+        
+        if (!existingFavorites.empty) {
+          showToast('Bu analiz zaten favorilerde!', 'info')
+          loadFavorites() // Refresh to update UI
+          return
+        }
+        
+        await addDoc(collection(db, 'favorites'), {
+          userId: user.uid,
+          analysisId: analysisId,
+          createdAt: serverTimestamp()
+        })
+        
+        showToast('Favorilere eklendi!', 'success')
+        loadFavorites()
+      } catch (error) {
+        console.error('Error adding to favorites:', error)
+        showToast('Favorilere eklenirken hata oluştu.', 'error')
+      }
     }
   }
 
@@ -1312,18 +1351,22 @@ export default function DashboardPage() {
                       <Download className="w-5 h-5" />
                       <span>PDF Rapor İndir</span>
                     </button>
-                    {currentAnalysisId && (
-                      <button
-                        onClick={() => {
-                          addToFavorites(currentAnalysisId)
-                          loadFavorites()
-                        }}
-                        className="flex-1 bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 text-red-600 py-4 rounded-2xl font-bold transition-all flex items-center justify-center space-x-2 border-2 border-red-200 hover:border-red-300 hover:shadow-lg transform hover:scale-[1.02]"
-                      >
-                        <Heart className="w-5 h-5" />
-                        <span>Favorilere Ekle</span>
-                      </button>
-                    )}
+                    {currentAnalysisId && (() => {
+                      const { isFavorite } = isAnalysisFavorite(currentAnalysisId)
+                      return (
+                        <button
+                          onClick={() => toggleFavorite(currentAnalysisId)}
+                          className={`flex-1 py-4 rounded-2xl font-bold transition-all flex items-center justify-center space-x-2 border-2 hover:shadow-lg transform hover:scale-[1.02] ${
+                            isFavorite
+                              ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white border-red-600 hover:border-red-700'
+                              : 'bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 text-red-600 border-red-200 hover:border-red-300'
+                          }`}
+                        >
+                          <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+                          <span>{isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}</span>
+                        </button>
+                      )
+                    })()}
                     <button
                       onClick={() => {
                         setCurrentSection('history')
