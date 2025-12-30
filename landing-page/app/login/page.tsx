@@ -114,14 +114,16 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       const errorMessages: { [key: string]: string } = {
-        'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+        'auth/invalid-credential': 'Bu bilgilere ait bir hesap bulunamadı. Lütfen e-posta ve şifrenizi kontrol edin.',
+        'auth/user-not-found': 'Bu e-posta adresine ait bir hesap bulunamadı. Lütfen kayıt olun.',
+        'auth/wrong-password': 'Şifre hatalı. Lütfen şifrenizi kontrol edin.',
         'auth/email-already-in-use': 'Bu e-posta adresi zaten kullanımda.',
         'auth/weak-password': 'Şifre en az 6 karakter olmalıdır.',
-        'auth/user-not-found': 'Kullanıcı bulunamadı.',
-        'auth/wrong-password': 'Şifre hatalı.',
         'auth/too-many-requests': 'Çok fazla deneme. Lütfen daha sonra tekrar deneyin.',
+        'auth/invalid-email': 'Geçersiz e-posta adresi formatı.',
+        'auth/user-disabled': 'Bu hesap devre dışı bırakılmış.',
       }
-      showToast(errorMessages[error.code] || 'Bir hata oluştu.', 'error')
+      showToast(errorMessages[error.code] || 'Bir hata oluştu. Lütfen tekrar deneyin.', 'error')
     } finally {
       setLoading(false)
     }
