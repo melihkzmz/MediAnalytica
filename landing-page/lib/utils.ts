@@ -1,14 +1,46 @@
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
 export const showToast = (message: string, type: ToastType = 'info') => {
+  // Remove any existing toasts first
+  const existingToasts = document.querySelectorAll('[data-toast]')
+  existingToasts.forEach(toast => toast.remove())
+  
   // Create toast element
   const toast = document.createElement('div')
-  toast.className = `fixed top-20 right-4 z-[100] px-6 py-4 rounded-lg shadow-lg text-gray-900 font-medium transform transition-all duration-300 ${
-    type === 'success' ? 'bg-green-50 border-l-4 border-green-500' :
-    type === 'error' ? 'bg-red-50 border-l-4 border-red-500' :
-    type === 'warning' ? 'bg-yellow-50 border-l-4 border-yellow-500' :
-    'bg-blue-50 border-l-4 border-blue-500'
-  }`
+  toast.setAttribute('data-toast', 'true')
+  
+  // Set base styles inline to ensure they work
+  toast.style.position = 'fixed'
+  toast.style.top = '80px'
+  toast.style.right = '16px'
+  toast.style.zIndex = '9999'
+  toast.style.padding = '16px 24px'
+  toast.style.borderRadius = '12px'
+  toast.style.boxShadow = '0 10px 40px rgba(0, 0, 0, 0.15)'
+  toast.style.color = '#111827'
+  toast.style.fontWeight = '500'
+  toast.style.fontSize = '14px'
+  toast.style.lineHeight = '1.5'
+  toast.style.maxWidth = '400px'
+  toast.style.minWidth = '300px'
+  toast.style.transition = 'all 0.3s ease'
+  toast.style.pointerEvents = 'auto'
+  
+  // Set type-specific styles
+  if (type === 'success') {
+    toast.style.backgroundColor = '#f0fdf4'
+    toast.style.borderLeft = '4px solid #10b981'
+  } else if (type === 'error') {
+    toast.style.backgroundColor = '#fef2f2'
+    toast.style.borderLeft = '4px solid #ef4444'
+  } else if (type === 'warning') {
+    toast.style.backgroundColor = '#fffbeb'
+    toast.style.borderLeft = '4px solid #f59e0b'
+  } else {
+    toast.style.backgroundColor = '#eff6ff'
+    toast.style.borderLeft = '4px solid #3b82f6'
+  }
+  
   toast.textContent = message
   
   // Set initial styles for animation
@@ -18,11 +50,14 @@ export const showToast = (message: string, type: ToastType = 'info') => {
   // Add to DOM
   document.body.appendChild(toast)
   
+  // Force reflow to ensure initial styles are applied
+  toast.offsetHeight
+  
   // Animate in
-  setTimeout(() => {
+  requestAnimationFrame(() => {
     toast.style.opacity = '1'
     toast.style.transform = 'translateX(0)'
-  }, 10)
+  })
   
   // Remove after 3 seconds
   setTimeout(() => {
