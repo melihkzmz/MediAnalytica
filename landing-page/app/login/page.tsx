@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth'
 import { auth, db, storage } from '@/lib/firebase'
@@ -21,8 +21,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [registrationStep, setRegistrationStep] = useState<'basic' | 'doctor'>('basic')
-  const [createdUser, setCreatedUser] = useState<any>(null) // Store created user for doctor registration
-  const isDoctorRegistrationRef = useRef(false) // Use ref to track doctor registration state
   
   // Doctor additional fields
   const [tcNo, setTcNo] = useState('')
@@ -36,16 +34,10 @@ export default function LoginPage() {
   const [bio, setBio] = useState('')
 
   useEffect(() => {
-    // Only check for existing logged-in users when in login mode
-    // During registration, we handle redirects manually
-    if (!isLogin) {
-      return // Don't set up auth listener during registration
-    }
-    
-    // Check if user is already logged in (only in login mode)
+    // Check if user is already logged in
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user && isLogin) {
-        // Only redirect if we're in login mode
+        // Only redirect if we're in login mode (not during registration)
         router.push('/dashboard')
       }
     })
@@ -80,55 +72,43 @@ export default function LoginPage() {
             return
           }
 
-          // If doctor, set ref BEFORE creating user to prevent redirect
-          if (userType === 'doctor') {
-            isDoctorRegistrationRef.current = true
-          }
+          // If patient, create account immediately
+          if (userType === 'patient') {
+            // Create user account
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+            const user = userCredential.user
 
-          // Create user account
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-          const user = userCredential.user
-          setCreatedUser(user)
-
-          // Save basic user data to Firestore
-          try {
-            const userDoc = {
-              email: email,
-              displayName: name || email.split('@')[0],
-              userType: userType, // 'patient' or 'doctor'
-              createdAt: serverTimestamp(),
-              lastLogin: serverTimestamp(),
-              settings: {
-                notifications: true,
-                language: 'tr'
+            // Save basic user data to Firestore
+            try {
+              const userDoc = {
+                email: email,
+                displayName: name || email.split('@')[0],
+                userType: 'patient',
+                createdAt: serverTimestamp(),
+                lastLogin: serverTimestamp(),
+                settings: {
+                  notifications: true,
+                  language: 'tr'
+                }
               }
-            }
-            
-            await setDoc(doc(db, 'users', user.uid), userDoc)
-            
-            // If patient, complete registration
-            if (userType === 'patient') {
-              isDoctorRegistrationRef.current = false // Ensure ref is false for patient
+              
+              await setDoc(doc(db, 'users', user.uid), userDoc)
+              
               showToast('Kayıt başarılı! Giriş yapılıyor...', 'success')
               const token = await user.getIdToken()
               localStorage.setItem('firebase_id_token', token)
               router.push('/dashboard')
               return
-            } else {
-              // If doctor, sign out immediately so they're not "logged in" until form is complete
-              await signOut(auth)
-              // Clear token from localStorage
-              localStorage.removeItem('firebase_id_token')
-              
-              // Show additional form
-              setRegistrationStep('doctor')
-              setLoading(false) // Stop loading to show the form
-              showToast('Lütfen doktor bilgilerinizi doldurun.', 'info')
-              return // Important: return here to prevent any further execution
+            } catch (error: any) {
+              console.error('Error saving user data:', error)
+              showToast('Kullanıcı oluşturulurken hata oluştu.', 'error')
             }
-          } catch (error: any) {
-            console.error('Error saving user data:', error)
-            showToast('Kullanıcı oluşturulurken hata oluştu.', 'error')
+          } else {
+            // If doctor, don't create account yet - just show the additional form
+            setRegistrationStep('doctor')
+            setLoading(false) // Stop loading to show the form
+            showToast('Lütfen doktor bilgilerinizi doldurun.', 'info')
+            return // Important: return here to prevent account creation
           }
         }
       }
@@ -184,16 +164,14 @@ export default function LoginPage() {
     }
 
     try {
-      if (!createdUser) {
-        showToast('Bir hata oluştu. Lütfen tekrar deneyin.', 'error')
-        setLoading(false)
-        return
-      }
+      // Now create the user account with all information
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
 
       // Upload diploma photo
       let diplomaUrl = ''
       try {
-        const diplomaRef = ref(storage, `doctors/${createdUser.uid}/diploma/${diplomaPhoto.name}`)
+        const diplomaRef = ref(storage, `doctors/${user.uid}/diploma/${diplomaPhoto.name}`)
         await uploadBytes(diplomaRef, diplomaPhoto)
         diplomaUrl = await getDownloadURL(diplomaRef)
       } catch (uploadError: any) {
@@ -203,9 +181,24 @@ export default function LoginPage() {
         return
       }
 
+      // Save user data to Firestore
+      const userDoc = {
+        email: email,
+        displayName: name || email.split('@')[0],
+        userType: 'doctor',
+        createdAt: serverTimestamp(),
+        lastLogin: serverTimestamp(),
+        settings: {
+          notifications: true,
+          language: 'tr'
+        }
+      }
+      
+      await setDoc(doc(db, 'users', user.uid), userDoc)
+
       // Save doctor data to Firestore
       const doctorData = {
-        userId: createdUser.uid,
+        userId: user.uid,
         firstName: name.split(' ')[0] || '',
         lastName: name.split(' ').slice(1).join(' ') || '',
         specialty: specialty.trim(),
@@ -221,32 +214,14 @@ export default function LoginPage() {
         updatedAt: serverTimestamp()
       }
 
-      await setDoc(doc(db, 'doctors', createdUser.uid), doctorData)
+      await setDoc(doc(db, 'doctors', user.uid), doctorData)
 
-      // Sign in the user now that registration is complete
-      // Use the email and password from the first step to sign in
-      try {
-        const signInCredential = await signInWithEmailAndPassword(auth, email, password)
-        const token = await signInCredential.user.getIdToken()
-        localStorage.setItem('firebase_id_token', token)
-        
-        showToast('Doktor kaydı başarılı! Giriş yapılıyor...', 'success')
-        
-        // Reset the ref
-        isDoctorRegistrationRef.current = false
-        
-        // Redirect to dashboard
-        router.push('/dashboard')
-      } catch (signInError: any) {
-        console.error('Error signing in after doctor registration:', signInError)
-        // If sign in fails, redirect to login page
-        showToast('Doktor kaydı başarılı! Lütfen giriş yapın.', 'success')
-        isDoctorRegistrationRef.current = false
-        setIsLogin(true)
-        setRegistrationStep('basic')
-        // Clear password for security
-        setPassword('')
-      }
+      showToast('Doktor kaydı başarılı! Giriş yapılıyor...', 'success')
+      
+      // Save token and redirect
+      const token = await user.getIdToken()
+      localStorage.setItem('firebase_id_token', token)
+      router.push('/dashboard')
     } catch (error: any) {
       console.error('Error saving doctor data:', error)
       showToast('Doktor bilgileri kaydedilirken hata oluştu.', 'error')
@@ -414,7 +389,6 @@ export default function LoginPage() {
                             onClick={() => {
                               setUserType('patient')
                               setRegistrationStep('basic')
-                              isDoctorRegistrationRef.current = false
                             }}
                             className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
                               userType === 'patient'
@@ -430,7 +404,6 @@ export default function LoginPage() {
                             onClick={() => {
                               setUserType('doctor')
                               setRegistrationStep('basic')
-                              isDoctorRegistrationRef.current = false
                             }}
                             className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
                               userType === 'doctor'
@@ -685,10 +658,7 @@ export default function LoginPage() {
                     <div className="flex gap-3 pt-4">
                       <button
                         type="button"
-                        onClick={() => {
-                          setRegistrationStep('basic')
-                          isDoctorRegistrationRef.current = false
-                        }}
+                        onClick={() => setRegistrationStep('basic')}
                         className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
                       >
                         Geri
@@ -724,7 +694,6 @@ export default function LoginPage() {
                       setIsLogin(!isLogin)
                       setUserType('patient') // Reset to default when switching
                       setRegistrationStep('basic') // Reset registration step
-                      isDoctorRegistrationRef.current = false // Reset ref
                       // Reset all form fields
                       setEmail('')
                       setPassword('')
@@ -738,7 +707,6 @@ export default function LoginPage() {
                       setExperienceYears('')
                       setInstitution('')
                       setBio('')
-                      setCreatedUser(null)
                     }}
                     className="text-primary hover:text-primary-dark font-semibold transition-colors"
                   >
