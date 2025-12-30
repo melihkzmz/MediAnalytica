@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth'
 import { auth, db, storage } from '@/lib/firebase'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -115,7 +115,12 @@ export default function LoginPage() {
               router.push('/dashboard')
               return
             } else {
-              // If doctor, show additional form
+              // If doctor, sign out immediately so they're not "logged in" until form is complete
+              await signOut(auth)
+              // Clear token from localStorage
+              localStorage.removeItem('firebase_id_token')
+              
+              // Show additional form
               setRegistrationStep('doctor')
               setLoading(false) // Stop loading to show the form
               showToast('Lütfen doktor bilgilerinizi doldurun.', 'info')
@@ -218,15 +223,30 @@ export default function LoginPage() {
 
       await setDoc(doc(db, 'doctors', createdUser.uid), doctorData)
 
-      showToast('Doktor kaydı başarılı! Onay sonrası giriş yapabileceksiniz.', 'success')
-      
-      // Reset the ref before redirecting
-      isDoctorRegistrationRef.current = false
-      
-      // Auto login after registration
-      const token = await createdUser.getIdToken()
-      localStorage.setItem('firebase_id_token', token)
-      router.push('/dashboard')
+      // Sign in the user now that registration is complete
+      // Use the email and password from the first step to sign in
+      try {
+        const signInCredential = await signInWithEmailAndPassword(auth, email, password)
+        const token = await signInCredential.user.getIdToken()
+        localStorage.setItem('firebase_id_token', token)
+        
+        showToast('Doktor kaydı başarılı! Giriş yapılıyor...', 'success')
+        
+        // Reset the ref
+        isDoctorRegistrationRef.current = false
+        
+        // Redirect to dashboard
+        router.push('/dashboard')
+      } catch (signInError: any) {
+        console.error('Error signing in after doctor registration:', signInError)
+        // If sign in fails, redirect to login page
+        showToast('Doktor kaydı başarılı! Lütfen giriş yapın.', 'success')
+        isDoctorRegistrationRef.current = false
+        setIsLogin(true)
+        setRegistrationStep('basic')
+        // Clear password for security
+        setPassword('')
+      }
     } catch (error: any) {
       console.error('Error saving doctor data:', error)
       showToast('Doktor bilgileri kaydedilirken hata oluştu.', 'error')
