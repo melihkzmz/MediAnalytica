@@ -4,19 +4,34 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Brain, Menu, X, User, LogOut } from 'lucide-react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { auth, db } from '@/lib/firebase'
+import { doc, getDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [userType, setUserType] = useState<'patient' | 'doctor' | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
     // Check authentication state on mount and when it changes
-    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
       setUser(user)
+      if (user) {
+        // Fetch user type from Firestore
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid))
+          if (userDoc.exists()) {
+            setUserType(userDoc.data().userType || 'patient')
+          }
+        } catch (error) {
+          console.error('Error fetching user type:', error)
+        }
+      } else {
+        setUserType(null)
+      }
       setLoading(false)
     })
     return () => unsubscribe()
@@ -25,11 +40,34 @@ export default function Navbar() {
   const handleSignOut = async () => {
     try {
       await signOut(auth)
+      setUserType(null)
       router.push('/')
     } catch (error) {
       console.error('Error signing out:', error)
     }
   }
+
+  // Patient navigation links
+  const patientLinks = [
+    { href: '/', label: 'Ana Menü' },
+    { href: '/dashboard#analyze', label: 'Analiz Yap' },
+    { href: '/dashboard#history', label: 'Analiz Geçmişi' },
+    { href: '/dashboard#favorites', label: 'Favoriler' },
+    { href: '/dashboard#stats', label: 'İstatistikler' },
+    { href: '/dashboard#appointment', label: 'Randevu Talep' },
+  ]
+
+  // Doctor navigation links
+  const doctorLinks = [
+    { href: '/', label: 'Ana Menü' },
+    { href: '/dashboard#pending-requests', label: 'Bekleyen Talepler' },
+    { href: '/dashboard#appointments', label: 'Randevularım' },
+    { href: '/dashboard#appointment-history', label: 'Randevu Geçmişi' },
+    { href: '/dashboard#patients', label: 'Hastalarım' },
+  ]
+
+  // Choose links based on user type
+  const navLinks = userType === 'doctor' ? doctorLinks : patientLinks
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200 fixed top-0 left-0 right-0 z-50">
@@ -45,24 +83,15 @@ export default function Navbar() {
 
           {/* Center Menu - Desktop */}
           <div className="hidden md:flex items-center justify-center flex-1 space-x-1">
-            <Link href="/" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
-              Ana Menü
-            </Link>
-            <Link href="/dashboard#analyze" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
-              Analiz Yap
-            </Link>
-            <Link href="/dashboard#history" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
-              Analiz Geçmişi
-            </Link>
-            <Link href="/dashboard#favorites" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
-              Favoriler
-            </Link>
-            <Link href="/dashboard#stats" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
-              İstatistikler
-            </Link>
-            <Link href="/dashboard#appointment" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
-              Randevu Talep
-            </Link>
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
 
           <div className="flex items-center space-x-4">
@@ -111,48 +140,16 @@ export default function Navbar() {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 py-4">
             <div className="flex flex-col space-y-2">
-              <Link 
-                href="/" 
-                className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Ana Menü
-              </Link>
-              <Link 
-                href="/dashboard#analyze" 
-                className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Analiz Yap
-              </Link>
-              <Link 
-                href="/dashboard#history" 
-                className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Analiz Geçmişi
-              </Link>
-              <Link 
-                href="/dashboard#favorites" 
-                className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Favoriler
-              </Link>
-              <Link 
-                href="/dashboard#stats" 
-                className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                İstatistikler
-              </Link>
-              <Link 
-                href="/dashboard#appointment" 
-                className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Randevu Talep
-              </Link>
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ))}
             </div>
           </div>
         )}
