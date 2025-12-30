@@ -1450,6 +1450,7 @@ export default function DashboardPage() {
                             return (
                               <button
                                 onClick={() => toggleFavorite(analysis.id)}
+                                title={isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
                                 className={`absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all shadow-lg opacity-0 group-hover:opacity-100 ${
                                   isFavorite
                                     ? 'text-red-500 hover:text-red-600 hover:bg-white'
