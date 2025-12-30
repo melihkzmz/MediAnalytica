@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { auth, db, storage } from '@/lib/firebase'
@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [registrationStep, setRegistrationStep] = useState<'basic' | 'doctor'>('basic')
   const [createdUser, setCreatedUser] = useState<any>(null) // Store created user for doctor registration
+  const isDoctorRegistrationRef = useRef(false) // Use ref to track doctor registration state
   
   // Doctor additional fields
   const [tcNo, setTcNo] = useState('')
@@ -39,6 +40,11 @@ export default function LoginPage() {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
         // Don't redirect if we're in the middle of doctor registration
+        // Use ref to check immediately, as state updates are async
+        if (isDoctorRegistrationRef.current) {
+          return
+        }
+        // Don't redirect if we're in the middle of doctor registration (state check as backup)
         if (!isLogin && registrationStep === 'doctor') {
           return
         }
@@ -107,6 +113,7 @@ export default function LoginPage() {
               return
             } else {
               // If doctor, show additional form
+              isDoctorRegistrationRef.current = true // Set ref before state update
               setRegistrationStep('doctor')
               setLoading(false) // Stop loading to show the form
               showToast('Lütfen doktor bilgilerinizi doldurun.', 'info')
@@ -210,6 +217,9 @@ export default function LoginPage() {
       await setDoc(doc(db, 'doctors', createdUser.uid), doctorData)
 
       showToast('Doktor kaydı başarılı! Onay sonrası giriş yapabileceksiniz.', 'success')
+      
+      // Reset the ref before redirecting
+      isDoctorRegistrationRef.current = false
       
       // Auto login after registration
       const token = await createdUser.getIdToken()
@@ -382,6 +392,7 @@ export default function LoginPage() {
                             onClick={() => {
                               setUserType('patient')
                               setRegistrationStep('basic')
+                              isDoctorRegistrationRef.current = false
                             }}
                             className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
                               userType === 'patient'
@@ -397,6 +408,7 @@ export default function LoginPage() {
                             onClick={() => {
                               setUserType('doctor')
                               setRegistrationStep('basic')
+                              isDoctorRegistrationRef.current = false
                             }}
                             className={`flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl border-2 transition-all ${
                               userType === 'doctor'
@@ -651,7 +663,10 @@ export default function LoginPage() {
                     <div className="flex gap-3 pt-4">
                       <button
                         type="button"
-                        onClick={() => setRegistrationStep('basic')}
+                        onClick={() => {
+                          setRegistrationStep('basic')
+                          isDoctorRegistrationRef.current = false
+                        }}
                         className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
                       >
                         Geri
@@ -687,6 +702,7 @@ export default function LoginPage() {
                       setIsLogin(!isLogin)
                       setUserType('patient') // Reset to default when switching
                       setRegistrationStep('basic') // Reset registration step
+                      isDoctorRegistrationRef.current = false // Reset ref
                       // Reset all form fields
                       setEmail('')
                       setPassword('')
