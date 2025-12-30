@@ -1445,12 +1445,21 @@ export default function DashboardPage() {
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                          <button
-                            onClick={() => addToFavorites(analysis.id)}
-                            className="absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-white transition-all shadow-lg opacity-0 group-hover:opacity-100"
-                          >
-                            <Heart className="w-5 h-5" />
-                          </button>
+                          {(() => {
+                            const { isFavorite } = isAnalysisFavorite(analysis.id)
+                            return (
+                              <button
+                                onClick={() => toggleFavorite(analysis.id)}
+                                className={`absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all shadow-lg opacity-0 group-hover:opacity-100 ${
+                                  isFavorite
+                                    ? 'text-red-500 hover:text-red-600 hover:bg-white'
+                                    : 'text-gray-400 hover:text-red-500 hover:bg-white'
+                                }`}
+                              >
+                                <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+                              </button>
+                            )
+                          })()}
                         </div>
                       )}
 
