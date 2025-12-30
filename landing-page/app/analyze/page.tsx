@@ -349,14 +349,9 @@ export default function AnalyzePage() {
       const analysisId = await saveAnalysisToFirebase(selectedDisease, formattedResult, selectedImage)
       if (analysisId) {
         setCurrentAnalysisId(analysisId)
-        // Refresh history if on history page
-        if (currentSection === 'history') {
-          loadAnalyses()
-        }
-        // Refresh stats if on stats page
-        if (currentSection === 'stats') {
-          loadStats()
-        }
+        // Always refresh history and stats after saving
+        loadAnalyses()
+        loadStats()
       }
     } catch (error: any) {
       console.error('Analysis error:', error)
