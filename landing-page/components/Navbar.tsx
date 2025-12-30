@@ -1,11 +1,35 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Brain, Menu, X, User } from 'lucide-react'
+import { Brain, Menu, X, User, LogOut } from 'lucide-react'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { auth } from '@/lib/firebase'
+import { useRouter } from 'next/navigation'
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+
+  useEffect(() => {
+    // Check authentication state on mount and when it changes
+    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
+      setUser(user)
+      setLoading(false)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth)
+      router.push('/')
+    } catch (error) {
+      console.error('Error signing out:', error)
+    }
+  }
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200 fixed top-0 left-0 right-0 z-50">
@@ -51,13 +75,35 @@ export default function Navbar() {
             </button>
 
             {/* Profile/Login Button */}
-            <Link
-              href="/login"
-              className="flex items-center space-x-2 px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors"
-            >
-              <User className="w-5 h-5 text-gray-600" />
-              <span className="hidden sm:inline text-gray-700">Giriş Yap</span>
-            </Link>
+            {!loading && (
+              user ? (
+                <div className="flex items-center space-x-2">
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+                  >
+                    <User className="w-5 h-5" />
+                    <span className="hidden sm:inline">Dashboard</span>
+                  </Link>
+                  <button
+                    onClick={handleSignOut}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+                    title="Çıkış Yap"
+                  >
+                    <LogOut className="w-5 h-5 text-gray-600" />
+                    <span className="hidden sm:inline text-gray-700">Çıkış</span>
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+                >
+                  <User className="w-5 h-5 text-gray-600" />
+                  <span className="hidden sm:inline text-gray-700">Giriş Yap</span>
+                </Link>
+              )
+            )}
           </div>
         </div>
 
