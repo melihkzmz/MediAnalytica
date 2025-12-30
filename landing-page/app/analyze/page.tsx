@@ -911,6 +911,7 @@ export default function AnalyzePage() {
                           return (
                             <button
                               onClick={() => toggleFavorite(analysis.id)}
+                              title={isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
                               className={`p-2 transition-colors ${
                                 isFavorite
                                   ? 'text-red-500 hover:text-red-600'
