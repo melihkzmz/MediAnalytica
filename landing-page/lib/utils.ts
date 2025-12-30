@@ -11,21 +11,27 @@ export const showToast = (message: string, type: ToastType = 'info') => {
   }`
   toast.textContent = message
   
+  // Set initial styles for animation
+  toast.style.opacity = '0'
+  toast.style.transform = 'translateX(400px)'
+  
   // Add to DOM
   document.body.appendChild(toast)
   
   // Animate in
   setTimeout(() => {
     toast.style.opacity = '1'
-    toast.style.transform = 'translateY(0)'
+    toast.style.transform = 'translateX(0)'
   }, 10)
   
   // Remove after 3 seconds
   setTimeout(() => {
     toast.style.opacity = '0'
-    toast.style.transform = 'translateY(-20px)'
+    toast.style.transform = 'translateX(400px)'
     setTimeout(() => {
-      document.body.removeChild(toast)
+      if (toast.parentNode) {
+        document.body.removeChild(toast)
+      }
     }, 300)
   }, 3000)
 }

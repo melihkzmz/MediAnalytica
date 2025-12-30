@@ -113,6 +113,7 @@ export default function LoginPage() {
         }
       }
     } catch (error: any) {
+      console.error('Login/Register error:', error)
       const errorMessages: { [key: string]: string } = {
         'auth/invalid-credential': 'Bu bilgilere ait bir hesap bulunamadı. Lütfen e-posta ve şifrenizi kontrol edin.',
         'auth/user-not-found': 'Bu e-posta adresine ait bir hesap bulunamadı. Lütfen kayıt olun.',
@@ -123,7 +124,9 @@ export default function LoginPage() {
         'auth/invalid-email': 'Geçersiz e-posta adresi formatı.',
         'auth/user-disabled': 'Bu hesap devre dışı bırakılmış.',
       }
-      showToast(errorMessages[error.code] || 'Bir hata oluştu. Lütfen tekrar deneyin.', 'error')
+      const errorMessage = errorMessages[error.code] || 'Bir hata oluştu. Lütfen tekrar deneyin.'
+      console.log('Showing toast with message:', errorMessage, 'Error code:', error.code)
+      showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
     }
