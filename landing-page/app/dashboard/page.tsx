@@ -745,6 +745,7 @@ export default function DashboardPage() {
     try {
       if (!user) {
         console.error('No user found')
+        showToast('Kullanıcı giriş yapmamış. Lütfen giriş yapın.', 'error')
         return null
       }
 
@@ -753,9 +754,12 @@ export default function DashboardPage() {
       const { storage, db } = await import('@/lib/firebase')
       const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
       
+      console.log('Uploading image to Storage...')
       const storageRef = ref(storage, `analysis_images/${user.uid}/${Date.now()}_${imageFile.name}`)
       await uploadBytes(storageRef, imageFile)
+      console.log('Image uploaded successfully')
       const imageUrl = await getDownloadURL(storageRef)
+      console.log('Got image URL:', imageUrl)
 
       // Prepare analysis data
       const analysisData = {
@@ -780,13 +784,31 @@ export default function DashboardPage() {
       }
 
       // Save directly to Firestore (no backend API needed)
+      console.log('Saving analysis to Firestore...')
       const docRef = await addDoc(collection(db, 'analyses'), analysisData)
       console.log('Analysis saved to Firestore:', docRef.id)
       return docRef.id
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving analysis:', error)
-      showToast('Analiz kaydedilirken bir hata oluştu.', 'error')
+      console.error('Error code:', error?.code)
+      console.error('Error message:', error?.message)
+      
+      // More specific error messages
+      let errorMessage = 'Bilinmeyen hata'
+      if (error?.code === 'storage/unauthorized' || error?.code === 'permission-denied') {
+        errorMessage = 'Firebase izin hatası. Lütfen Firebase Console\'da Storage ve Firestore kurallarını kontrol edin.'
+      } else if (error?.code === 'storage/quota-exceeded') {
+        errorMessage = 'Firebase Storage kotası aşıldı.'
+      } else if (error?.code === 'unavailable' || error?.code === 'deadline-exceeded') {
+        errorMessage = 'Ağ bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.'
+      } else if (error?.message) {
+        errorMessage = error.message
+      } else if (error?.code) {
+        errorMessage = `Hata kodu: ${error.code}`
+      }
+      
+      showToast(`Analiz kaydedilirken bir hata oluştu: ${errorMessage}`, 'error')
       return null
     }
   }
