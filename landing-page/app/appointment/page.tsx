@@ -35,6 +35,13 @@ export default function AppointmentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validate user is logged in
+    if (!user) {
+      showToast('Lütfen önce giriş yapın.', 'error')
+      return
+    }
+    
     setSubmitting(true)
 
     try {
@@ -59,8 +66,17 @@ export default function AppointmentPage() {
         reason: '',
         doctorType: ''
       })
-    } catch (error) {
-      showToast('Randevu oluşturulurken bir hata oluştu.', 'error')
+    } catch (error: any) {
+      console.error('Error creating appointment:', error)
+      console.error('Error code:', error.code)
+      console.error('Error message:', error.message)
+      
+      // Show more specific error message
+      if (error.code === 'permission-denied') {
+        showToast('Randevu oluşturma izniniz yok. Lütfen Firebase güvenlik kurallarını kontrol edin.', 'error')
+      } else {
+        showToast(`Randevu oluşturulurken bir hata oluştu: ${error.message || 'Bilinmeyen hata'}`, 'error')
+      }
     } finally {
       setSubmitting(false)
     }
