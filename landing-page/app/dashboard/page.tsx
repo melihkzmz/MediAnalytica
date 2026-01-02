@@ -13,6 +13,8 @@ import {
   Clock, Calendar, Users, AlertCircle
 } from 'lucide-react'
 import Link from 'next/link'
+import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
+import { isAppointmentTime } from '@/lib/appointmentUtils'
 
 type DiseaseType = 'skin' | 'bone' | 'lung'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 
@@ -68,6 +70,8 @@ export default function DashboardPage() {
   const [appointmentHistory, setAppointmentHistory] = useState<any[]>([])
   const [myPatients, setMyPatients] = useState<any[]>([])
   const [loadingAppointments, setLoadingAppointments] = useState(false)
+  const [activeAppointments, setActiveAppointments] = useState<any[]>([])
+  const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -138,6 +142,76 @@ export default function DashboardPage() {
       }
     }
   }, [user, isDoctor, doctorData, currentSection])
+
+  // Check for active appointments (appointments that are happening now)
+  useEffect(() => {
+    if (!user) return
+
+    const checkActiveAppointments = async () => {
+      try {
+        const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        
+        let appointmentsQuery
+        
+        if (isDoctor) {
+          // For doctors: check approved appointments assigned to them
+          appointmentsQuery = query(
+            collection(db, 'appointments'),
+            where('status', '==', 'approved'),
+            where('doctorId', '==', user.uid)
+          )
+        } else {
+          // For patients: check their approved appointments
+          appointmentsQuery = query(
+            collection(db, 'appointments'),
+            where('status', '==', 'approved'),
+            where('userId', '==', user.uid)
+          )
+        }
+
+        const querySnapshot = await getDocs(appointmentsQuery)
+        const active: any[] = []
+
+        for (const appointmentDoc of querySnapshot.docs) {
+          const appointment = {
+            id: appointmentDoc.id,
+            ...appointmentDoc.data()
+          }
+
+          // Check if appointment time has arrived
+          if (isAppointmentTime(appointment)) {
+            // Fetch patient data for doctors
+            if (isDoctor && appointment.userId) {
+              try {
+                const userRef = doc(db, 'users', appointment.userId)
+                const userDoc = await getDoc(userRef)
+                if (userDoc.exists()) {
+                  appointment.patient = userDoc.data()
+                }
+              } catch (error) {
+                console.error('Error fetching patient:', error)
+              }
+            }
+            
+            active.push(appointment)
+          }
+        }
+
+        setActiveAppointments(active)
+      } catch (error) {
+        console.error('Error checking active appointments:', error)
+      }
+    }
+
+    // Check immediately
+    checkActiveAppointments()
+
+    // Check every minute
+    const interval = setInterval(checkActiveAppointments, 60000)
+
+    return () => clearInterval(interval)
+  }, [user, isDoctor])
 
   // Reset form state when analyze section is activated
   useEffect(() => {
@@ -637,12 +711,22 @@ export default function DashboardPage() {
   const acceptAppointment = async (appointmentId: string) => {
     if (!user) return
     try {
-      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+      const { doc, updateDoc, serverTimestamp, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
+      const { generateJitsiRoomName } = await import('@/lib/appointmentUtils')
       
-      await updateDoc(doc(db, 'appointments', appointmentId), {
+      // Get appointment to check if jitsiRoom exists
+      const appointmentRef = doc(db, 'appointments', appointmentId)
+      const appointmentDoc = await getDoc(appointmentRef)
+      const appointmentData = appointmentDoc.data()
+      
+      // Generate room name if not exists
+      const jitsiRoom = appointmentData?.jitsiRoom || generateJitsiRoomName(appointmentId)
+      
+      await updateDoc(appointmentRef, {
         status: 'approved',
         doctorId: user.uid,
+        jitsiRoom: jitsiRoom,
         updatedAt: serverTimestamp(),
         approvedAt: serverTimestamp()
       })
@@ -1449,6 +1533,20 @@ export default function DashboardPage() {
       </nav>
 
       <div className="pt-16">
+        {/* Active Appointment Notifications */}
+        {activeAppointments
+          .filter(apt => !dismissedNotifications.has(apt.id))
+          .map((appointment) => (
+            <AppointmentNotificationCard
+              key={appointment.id}
+              appointment={appointment}
+              isDoctor={isDoctor}
+              onDismiss={() => {
+                setDismissedNotifications(prev => new Set(prev).add(appointment.id))
+              }}
+            />
+          ))}
+
         {/* Main Content */}
         <main className="p-6 md:p-8">
           {currentSection === 'dashboard' && (
