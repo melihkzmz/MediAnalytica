@@ -36,10 +36,19 @@ export async function POST(request: NextRequest) {
     // JWT typically works with paid 8x8 accounts or self-hosted Jitsi
     const hasJWT = appId && apiKey
 
-    let joinUrl: string
     let token: string | null = null
     let jwtUsed = false
 
+    // Default: Direct URL without JWT (for free 8x8.vc service)
+    const params = new URLSearchParams({
+      'userInfo.displayName': userName || 'User',
+      'userInfo.email': userEmail || '',
+      'config.startWithAudioMuted': 'false',
+      'config.startWithVideoMuted': 'false',
+    })
+    let joinUrl = `https://${domain}/${cleanRoomName}?${params.toString()}`
+
+    // Try JWT if credentials are available
     if (hasJWT) {
       try {
         // Generate JWT token for 8x8/Jitsi (for paid accounts or self-hosted)
@@ -70,24 +79,13 @@ export async function POST(request: NextRequest) {
           algorithm: 'HS256',
         })
         
-        // Try JWT in URL parameter
+        // Use JWT in URL parameter
         joinUrl = `https://${domain}/${cleanRoomName}?jwt=${token}`
         jwtUsed = true
       } catch (jwtError) {
         console.error('JWT signing error:', jwtError)
-        // Will fallback to non-JWT URL below
+        // Fallback to non-JWT URL (already set above)
       }
-    }
-
-    // Fallback: Direct URL without JWT (for free 8x8.vc service or if JWT fails)
-    if (!jwtUsed || !token) {
-      const params = new URLSearchParams({
-        'userInfo.displayName': userName || 'User',
-        'userInfo.email': userEmail || '',
-        'config.startWithAudioMuted': 'false',
-        'config.startWithVideoMuted': 'false',
-      })
-      joinUrl = `https://${domain}/${cleanRoomName}?${params.toString()}`
     }
     
     // Option 2: If 8x8 has a meeting creation API, use it here
