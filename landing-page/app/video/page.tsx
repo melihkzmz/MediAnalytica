@@ -116,8 +116,24 @@ function VideoConferenceContent() {
             // API failed - show error message
             const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
             console.error('❌ Whereby API error response:', errorData)
-            const errorMessage = errorData.message || errorData.error || errorData.details || 'Whereby API anahtarı eksik veya oda oluşturulamadı. Lütfen WHEREBY_API_KEY environment variable\'ını ayarlayın.'
+            console.error('❌ Full error details:', JSON.stringify(errorData, null, 2))
+            
+            // Build detailed error message
+            let errorMessage = errorData.message || errorData.error || 'Whereby API hatası'
+            if (errorData.details) {
+              errorMessage += `: ${errorData.details}`
+            }
+            if (errorData.apiError && errorData.apiError.message) {
+              errorMessage += ` (${errorData.apiError.message})`
+            }
+            
+            // Add troubleshooting info if available
+            if (errorData.troubleshooting && Array.isArray(errorData.troubleshooting)) {
+              errorMessage += '\n\nÇözüm önerileri:\n' + errorData.troubleshooting.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n')
+            }
+            
             setError(errorMessage)
+            
             if (errorData.instructions) {
               console.error('Instructions:', errorData.instructions)
             }
@@ -148,12 +164,30 @@ function VideoConferenceContent() {
   }
 
   if (error) {
+    // Parse error message to show details better
+    const errorLines = error.split('\n')
+    const mainError = errorLines[0]
+    const troubleshooting = errorLines.slice(1).filter(line => line.trim())
+    
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center max-w-md mx-auto px-4">
+        <div className="text-center max-w-2xl mx-auto px-4">
           <Video className="w-16 h-16 text-red-300 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Oda Oluşturulamadı</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-left">
+            <p className="text-sm text-red-800 font-semibold mb-2">Hata Detayı:</p>
+            <p className="text-sm text-red-700 whitespace-pre-wrap">{mainError}</p>
+            {troubleshooting.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-red-200">
+                <p className="text-sm text-red-800 font-semibold mb-2">Çözüm Önerileri:</p>
+                <ul className="text-sm text-red-700 list-disc list-inside space-y-1">
+                  {troubleshooting.map((item, index) => (
+                    <li key={index}>{item.replace(/^\d+\.\s*/, '')}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 text-left">
             <p className="text-sm text-yellow-800 font-semibold mb-2">Kontrol Adımları:</p>
             <ol className="text-sm text-yellow-700 list-decimal list-inside space-y-1 mb-3">
