@@ -23,7 +23,8 @@ function VideoConferenceContent() {
   const [appointment, setAppointment] = useState<any>(null)
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
-  const [isModerator, setIsModerator] = useState(false)
+  // Doctor is always moderator - set immediately based on URL parameter
+  const [isModerator, setIsModerator] = useState(isDoctor)
   const apiRef = useRef<any>(null)
 
   useEffect(() => {
@@ -43,11 +44,33 @@ function VideoConferenceContent() {
           const appointmentRef = doc(db, 'appointments', appointmentId)
           const appointmentDoc = await getDoc(appointmentRef)
           if (appointmentDoc.exists()) {
-            setAppointment(appointmentDoc.data())
+            const appointmentData = appointmentDoc.data()
+            setAppointment(appointmentData)
+            
+            // Verify doctor is moderator (double-check)
+            if (isDoctor && appointmentData.doctorId === currentUser.uid) {
+              setIsModerator(true)
+            } else if (isDoctor) {
+              // Doctor joining - they're moderator
+              setIsModerator(true)
+            } else {
+              // Patient is not moderator
+              setIsModerator(false)
+            }
+          } else if (isDoctor) {
+            // If no appointment data but user is doctor, they're moderator
+            setIsModerator(true)
           }
         } catch (error) {
           console.error('Error fetching appointment:', error)
+          // If error but user is doctor, still set as moderator
+          if (isDoctor) {
+            setIsModerator(true)
+          }
         }
+      } else if (isDoctor) {
+        // If no appointment ID but user is doctor, they're moderator
+        setIsModerator(true)
       }
 
       setLoading(false)
@@ -134,7 +157,7 @@ function VideoConferenceContent() {
             prejoinPageEnabled: false,
             // Enable lobby/knocking for doctor-controlled rooms
             enableLobbyChat: true,
-            enableKnockingLobby: !isModerator, // Only patients need to knock
+            enableKnockingLobby: !isDoctor, // Only patients need to knock, doctors join directly
             enableInsecureRoomNameWarning: false,
             requireDisplayName: false,
             // Disable authentication requirements
