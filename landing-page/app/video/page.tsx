@@ -35,12 +35,18 @@ function VideoConferenceContent() {
       setUserEmail(currentUser.email || '')
 
       // Fetch appointment data if appointmentId is provided
+      let finalRoomName = roomName
       if (appointmentId) {
         try {
           const appointmentRef = doc(db, 'appointments', appointmentId)
           const appointmentDoc = await getDoc(appointmentRef)
           if (appointmentDoc.exists()) {
-            setAppointment(appointmentDoc.data())
+            const appointmentData = appointmentDoc.data()
+            setAppointment(appointmentData)
+            // Use jitsiRoom from appointment data (this ensures doctor and patient use the same room)
+            if (appointmentData.jitsiRoom) {
+              finalRoomName = appointmentData.jitsiRoom
+            }
           }
         } catch (error) {
           console.error('Error fetching appointment:', error)
@@ -48,8 +54,9 @@ function VideoConferenceContent() {
       }
 
       // Create Whereby room via API or direct URL
-      if (roomName) {
-        const cleanRoomName = roomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
+      // Use the room name from appointment data to ensure both doctor and patient join the same room
+      if (finalRoomName) {
+        const cleanRoomName = finalRoomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
         
         try {
           // Try to create room via Whereby API
