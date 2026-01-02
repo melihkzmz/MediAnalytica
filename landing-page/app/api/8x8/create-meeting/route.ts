@@ -25,52 +25,70 @@ export async function POST(request: NextRequest) {
     const appId = process.env.EIGHTEIGHT_APP_ID
     const apiKey = process.env.EIGHTEIGHT_API_KEY
 
-    if (!appId || !apiKey) {
-      return NextResponse.json(
-        { error: '8x8 credentials not configured. Please set EIGHTEIGHT_APP_ID and EIGHTEIGHT_API_KEY environment variables.' },
-        { status: 500 }
-      )
-    }
-
     // Clean room name
     const cleanRoomName = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
     
     // 8x8/Jitsi domain - adjust based on your 8x8 setup
     const domain = process.env.EIGHTEIGHT_DOMAIN || '8x8.vc'
-    const audience = domain // JWT audience is typically the domain
 
-    // Generate JWT token for 8x8/Jitsi
-    // JWT payload structure for Jitsi/8x8
-    const now = Math.floor(Date.now() / 1000)
-    const jwtPayload = {
-      iss: appId, // Issuer (App ID)
-      aud: audience, // Audience (domain)
-      exp: now + (2 * 60 * 60), // Expires in 2 hours
-      nbf: now, // Not before
-      room: cleanRoomName, // Room name
-      sub: userEmail || userName || 'user', // Subject (user identifier)
-      context: {
-        user: {
-          name: userName || 'User',
-          email: userEmail || '',
-          moderator: isDoctor || false, // Doctor is moderator
+    // Check if JWT credentials are available
+    // Note: 8x8.vc (free service) may not support JWT authentication
+    // JWT typically works with paid 8x8 accounts or self-hosted Jitsi
+    const hasJWT = appId && apiKey
+
+    let joinUrl: string
+    let token: string | null = null
+    let jwtUsed = false
+
+    if (hasJWT) {
+      try {
+        // Generate JWT token for 8x8/Jitsi (for paid accounts or self-hosted)
+        const audience = domain
+        const now = Math.floor(Date.now() / 1000)
+        
+        // JWT payload structure for Jitsi/8x8
+        // Note: Format may vary - check 8x8 documentation for your account type
+        const jwtPayload = {
+          iss: appId, // Issuer (App ID)
+          aud: audience, // Audience (domain) - some use 'jitsi' or specific value
+          exp: now + (2 * 60 * 60), // Expires in 2 hours
+          nbf: now, // Not before
+          room: cleanRoomName, // Room name
+          sub: userEmail || userName || 'user', // Subject (user identifier)
+          context: {
+            user: {
+              name: userName || 'User',
+              email: userEmail || '',
+              moderator: isDoctor || false,
+            }
+          },
+          moderator: isDoctor || false,
         }
-      },
-      moderator: isDoctor || false, // Moderator flag
+
+        // Sign JWT with API key
+        token = jwt.sign(jwtPayload, apiKey, {
+          algorithm: 'HS256',
+        })
+        
+        // Try JWT in URL parameter
+        joinUrl = `https://${domain}/${cleanRoomName}?jwt=${token}`
+        jwtUsed = true
+      } catch (jwtError) {
+        console.error('JWT signing error:', jwtError)
+        // Will fallback to non-JWT URL below
+      }
     }
 
-    // Sign JWT with API key
-    const token = jwt.sign(jwtPayload, apiKey, {
-      algorithm: 'HS256',
-    })
-
-    // For 8x8/Jitsi, we can either:
-    // 1. Return the JWT token and room URL (client embeds with token)
-    // 2. Use the token to create meeting via API (if 8x8 has such API)
-    
-    // Option 1: Return JWT token for client-side embedding
-    // The client will use this token when joining the room
-    const joinUrl = `https://${domain}/${cleanRoomName}?jwt=${token}`
+    // Fallback: Direct URL without JWT (for free 8x8.vc service or if JWT fails)
+    if (!jwtUsed || !token) {
+      const params = new URLSearchParams({
+        'userInfo.displayName': userName || 'User',
+        'userInfo.email': userEmail || '',
+        'config.startWithAudioMuted': 'false',
+        'config.startWithVideoMuted': 'false',
+      })
+      joinUrl = `https://${domain}/${cleanRoomName}?${params.toString()}`
+    }
     
     // Option 2: If 8x8 has a meeting creation API, use it here
     // const apiUrl = process.env.EIGHTEIGHT_API_URL || 'https://api.8x8.com/v1/meetings'
@@ -90,8 +108,9 @@ export async function POST(request: NextRequest) {
       success: true,
       roomName: cleanRoomName,
       joinUrl: joinUrl,
-      token: token, // Include token for client-side use
+      token: token || null, // Include token if JWT was used
       domain: domain,
+      useJWT: jwtUsed, // Indicate if JWT was used
     })
   } catch (error: any) {
     console.error('Error creating 8x8 meeting:', error)
