@@ -166,6 +166,11 @@ function VideoConferenceContent() {
             enableKnockingLobby: false, // Disable knocking - open room for everyone
             enableInsecureRoomNameWarning: false,
             requireDisplayName: false,
+            // Network settings
+            enableLayerSuspension: true,
+            enableRemb: true,
+            enableTcc: true,
+            useStunTurn: true,
             // Disable authentication requirements
             enableTalkWhileMuted: false,
             enableRemoteVideoMenu: true,
