@@ -47,13 +47,13 @@ function VideoConferenceContent() {
         }
       }
 
-      // Create 8x8 meeting via API with JWT (better control) or fallback to direct URL
+      // Create Whereby room via API or direct URL
       if (roomName) {
-        const cleanRoomName = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        const cleanRoomName = roomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
         
         try {
-          // Try to create meeting via 8x8 API with JWT
-          const response = await fetch('/api/8x8/create-meeting', {
+          // Try to create room via Whereby API
+          const response = await fetch('/api/whereby/create-room', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -61,48 +61,34 @@ function VideoConferenceContent() {
             body: JSON.stringify({
               roomName: cleanRoomName,
               userName: userName,
-              userEmail: userEmail,
-              isDoctor: isDoctor
+              userEmail: userEmail
             })
           })
 
           if (response.ok) {
             const data = await response.json()
-            // Use JWT token in URL for authenticated access
-            if (data.token && data.joinUrl) {
-              setRoomUrl(data.joinUrl)
-            } else if (data.joinUrl) {
-              setRoomUrl(data.joinUrl)
-            } else {
-              // Fallback if response format is different
-              const params = new URLSearchParams({
-                'jwt': data.token || '',
-                'userInfo.displayName': userName,
-                'userInfo.email': userEmail,
-              })
-              setRoomUrl(`https://${data.domain || '8x8.vc'}/${cleanRoomName}?${params.toString()}`)
-            }
+            setRoomUrl(data.joinUrl || data.hostUrl || data.viewerUrl)
           } else {
-            // Fallback to direct 8x8.vc URL if API fails
-            console.log('8x8 API not available, using direct URL')
+            // Fallback to direct Whereby URL if API fails
+            console.log('Whereby API not available, using direct URL')
             const params = new URLSearchParams({
-              'userInfo.displayName': userName,
-              'userInfo.email': userEmail,
-              'config.startWithAudioMuted': 'false',
-              'config.startWithVideoMuted': 'false',
+              'embed': 'true',
+              'userName': userName || 'User',
+              'userEmail': userEmail || ''
             })
-            setRoomUrl(`https://8x8.vc/${cleanRoomName}?${params.toString()}`)
+            const domain = process.env.NEXT_PUBLIC_WHEREBY_DOMAIN || 'medianalytica.whereby.com'
+            setRoomUrl(`https://${domain}/${cleanRoomName}?${params.toString()}`)
           }
         } catch (error) {
           // Fallback to direct URL if API call fails
-          console.error('Error creating 8x8 meeting via API:', error)
+          console.error('Error creating Whereby room via API:', error)
           const params = new URLSearchParams({
-            'userInfo.displayName': userName,
-            'userInfo.email': userEmail,
-            'config.startWithAudioMuted': 'false',
-            'config.startWithVideoMuted': 'false',
+            'embed': 'true',
+            'userName': userName || 'User',
+            'userEmail': userEmail || ''
           })
-          setRoomUrl(`https://8x8.vc/${cleanRoomName}?${params.toString()}`)
+          const domain = process.env.NEXT_PUBLIC_WHEREBY_DOMAIN || 'medianalytica.whereby.com'
+          setRoomUrl(`https://${domain}/${cleanRoomName}?${params.toString()}`)
         }
       }
 
@@ -169,24 +155,19 @@ function VideoConferenceContent() {
         </div>
       </div>
 
-      {/* 8x8.vc Video Conference - Free Jitsi service */}
-      <div className="h-[calc(100vh-80px)] w-full relative">
-        {/* Info banner for login and moderator */}
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm max-w-md">
-          <p className="font-semibold">💡 İpucu:</p>
-          <p>Login yaparken input alanlarına manuel olarak tıklayın (tarayıcı güvenlik nedeniyle otomatik odaklanmayı engeller). Login sonrası <strong>"Start meeting"</strong> butonuna tıklayın.</p>
-        </div>
+      {/* Whereby Video Conference */}
+      <div className="h-[calc(100vh-80px)] w-full">
         <iframe
           ref={iframeRef}
           src={roomUrl}
-          allow="camera; microphone; fullscreen; speaker; display-capture; autoplay; clipboard-read; clipboard-write; forms"
+          allow="camera; microphone; fullscreen; speaker; display-capture; autoplay"
           allowFullScreen
           style={{
             width: '100%',
             height: '100%',
             border: 'none'
           }}
-          title="8x8.vc Video Conference"
+          title="Whereby Video Conference"
         />
       </div>
     </div>
