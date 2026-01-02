@@ -174,13 +174,17 @@ export default function DashboardPage() {
         const active: any[] = []
 
         for (const appointmentDoc of querySnapshot.docs) {
-          const appointment = {
+          const appointmentData = appointmentDoc.data()
+          const appointment: any = {
             id: appointmentDoc.id,
-            ...appointmentDoc.data()
+            ...appointmentData
           }
 
-          // Check if appointment time has arrived
-          if (isAppointmentTime(appointment)) {
+          // Check if appointment has required fields and time has arrived
+          if (appointment.date && appointment.time && isAppointmentTime({
+            date: appointment.date,
+            time: appointment.time
+          })) {
             // Fetch patient data for doctors
             if (isDoctor && appointment.userId) {
               try {
