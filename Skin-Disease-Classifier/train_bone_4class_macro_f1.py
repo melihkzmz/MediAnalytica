@@ -819,10 +819,10 @@ model = keras.models.load_model(
     }
 )
 
-# Check intermediate results
-print("\n[EVAL] Phase 1 Results:")
-test_generator.reset()
-results_phase1 = model.evaluate(test_generator, verbose=0)
+# Check intermediate results on VALIDATION set (not test set - best practice)
+print("\n[EVAL] Phase 1 Results (Validation Set):")
+val_generator.reset()
+results_phase1 = model.evaluate(val_generator, verbose=0)
 
 # Find metric indices
 metric_names = model.metrics_names
@@ -832,16 +832,16 @@ loss_idx = metric_names.index('loss')
 accuracy_idx = metric_names.index('accuracy')
 macro_f1_idx = metric_names.index('macro_f1_metric') if 'macro_f1_metric' in metric_names else -1
 
-print(f"\n  Test Loss (Macro F1 Loss): {results_phase1[loss_idx]:.4f}")
-print(f"  Test Accuracy: {results_phase1[accuracy_idx]*100:.2f}%")
+print(f"\n  Validation Loss (Macro F1 Loss): {results_phase1[loss_idx]:.4f}")
+print(f"  Validation Accuracy: {results_phase1[accuracy_idx]*100:.2f}%")
 if macro_f1_idx >= 0:
-    print(f"  Test Macro F1: {results_phase1[macro_f1_idx]*100:.2f}%")
+    print(f"  Validation Macro F1: {results_phase1[macro_f1_idx]*100:.2f}%")
 
-# Check if model is learning all classes
-test_generator.reset()
-y_pred_phase1 = model.predict(test_generator, verbose=0)
+# Check if model is learning all classes (using validation set)
+val_generator.reset()
+y_pred_phase1 = model.predict(val_generator, verbose=0)
 y_pred_classes_phase1 = np.argmax(y_pred_phase1, axis=1)
-y_true = test_generator.classes
+y_true = val_generator.classes
 
 unique_preds = np.unique(y_pred_classes_phase1)
 print(f"\n[INFO] Phase 1: Model predicts {len(unique_preds)} unique classes out of {NUM_CLASSES}")
@@ -854,7 +854,8 @@ else:
 
 # Calculate Macro F1 using sklearn for verification
 macro_f1_sklearn = f1_score(y_true, y_pred_classes_phase1, average='macro', zero_division=0)
-print(f"  Macro F1 (sklearn): {macro_f1_sklearn*100:.2f}%")
+print(f"  Validation Macro F1 (sklearn): {macro_f1_sklearn*100:.2f}%")
+print(f"\n[NOTE] Test set will be evaluated only once at the end (best practice)")
 
 # ============================================================================
 # PHASE 2: FINE-TUNING
@@ -1008,6 +1009,22 @@ else:
 final_model_path = 'models/bone_disease_model_4class_densenet121_macro_f1.keras'
 model.save(final_model_path)
 print(f"\n[SUCCESS] Final model saved to: {final_model_path}")
+
+# Also save as SavedModel format (Keras 3.x compatible - like bone_disease_api.py)
+final_model_path_savedmodel = 'models/bone_disease_model_4class_densenet121_macro_f1_savedmodel'
+try:
+    # Remove old SavedModel if it exists
+    import shutil
+    if os.path.exists(final_model_path_savedmodel):
+        shutil.rmtree(final_model_path_savedmodel, ignore_errors=True)
+    
+    # Use tf.saved_model.save() directly for better compatibility
+    tf.saved_model.save(model, final_model_path_savedmodel)
+    print(f"[SUCCESS] Final model saved to: {final_model_path_savedmodel} (SavedModel format)")
+    print(f"[INFO] SavedModel format is more compatible with Keras 3.x and API deployment")
+except Exception as e:
+    print(f"[WARNING] Failed to save SavedModel format: {e}")
+    print(f"[INFO] Using .keras format only")
 
 # ============================================================================
 # PLOT TRAINING HISTORY
