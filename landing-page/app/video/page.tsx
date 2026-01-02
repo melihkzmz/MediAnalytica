@@ -128,15 +128,16 @@ function VideoConferenceContent() {
 
       {/* 8x8.vc Video Conference - Free Jitsi service */}
       <div className="h-[calc(100vh-80px)] w-full relative">
-        {/* Info banner for moderator message */}
+        {/* Info banner for login and moderator */}
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm max-w-md">
           <p className="font-semibold">💡 İpucu:</p>
-          <p>Eğer "moderator" mesajı görürseniz, ekrandaki <strong>"Start meeting"</strong> veya <strong>"Join as moderator"</strong> butonuna tıklayın. Login gerektirmez!</p>
+          <p>Login yaparken input alanlarına manuel olarak tıklayın (tarayıcı güvenlik nedeniyle otomatik odaklanmayı engeller). Login sonrası <strong>"Start meeting"</strong> butonuna tıklayın.</p>
         </div>
         <iframe
           ref={iframeRef}
           src={roomUrl}
-          allow="camera; microphone; fullscreen; speaker; display-capture"
+          allow="camera; microphone; fullscreen; speaker; display-capture; autoplay; clipboard-read; clipboard-write; forms"
+          allowFullScreen
           style={{
             width: '100%',
             height: '100%',
