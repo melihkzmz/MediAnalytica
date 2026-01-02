@@ -73,11 +73,10 @@ service cloud.firestore {
       
       // UPDATE: 
       // - Kullanıcılar kendi randevularını güncelleyebilir
-      // - Doktorlar randevuları onaylayabilir/reddedebilir (status ve doctorId güncellemesi)
+      // - Doktorlar bekleyen randevuları onaylayabilir/reddedebilir
       allow update: if request.auth != null && (
         resource.data.userId == request.auth.uid ||
-        (resource.data.status == 'pending' && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'doctorId', 'updatedAt', 'approvedAt', 'doctorNote']))
+        resource.data.status == 'pending'
       );
       
       // DELETE: Sadece kendi randevularını silebilir
