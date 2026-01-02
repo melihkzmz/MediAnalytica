@@ -53,11 +53,13 @@ export function isAppointmentUpcoming(appointment: {
 
 /**
  * Generate unique Jitsi room name for appointment
+ * Use simple format to avoid membersOnly errors
  */
 export function generateJitsiRoomName(appointmentId: string): string {
-  // Use appointment ID to ensure uniqueness
-  // Format: medi-analytica-{appointmentId}
-  return `medi-analytica-${appointmentId}`
+  // Use only alphanumeric characters - remove hyphens and special chars
+  // Format: ma{appointmentId} (ma = medi-analytica abbreviation)
+  const cleanId = appointmentId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+  return `ma${cleanId}`
 }
 
 /**

@@ -12,16 +12,18 @@ import Link from 'next/link'
 function VideoConferenceContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  // Clean room name - remove any special characters that might trigger members-only mode
+  // Clean room name - remove any special characters
   const rawRoomName = searchParams.get('room') || ''
   const roomName = rawRoomName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase()
   const appointmentId = searchParams.get('appointmentId') || ''
+  const isDoctor = searchParams.get('isDoctor') === 'true'
   
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [appointment, setAppointment] = useState<any>(null)
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [isModerator, setIsModerator] = useState(false)
   const apiRef = useRef<any>(null)
 
   useEffect(() => {
@@ -130,9 +132,9 @@ function VideoConferenceContent() {
             enableNoAudioDetection: true,
             enableNoisyMicDetection: true,
             prejoinPageEnabled: false,
-            // Disable lobby and members-only features
-            enableLobbyChat: false,
-            enableKnockingLobby: false,
+            // Enable lobby/knocking for doctor-controlled rooms
+            enableLobbyChat: true,
+            enableKnockingLobby: !isModerator, // Only patients need to knock
             enableInsecureRoomNameWarning: false,
             requireDisplayName: false,
             // Disable authentication requirements
