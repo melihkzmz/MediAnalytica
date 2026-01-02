@@ -12,7 +12,9 @@ import Link from 'next/link'
 function VideoConferenceContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const roomName = searchParams.get('room') || ''
+  // Clean room name - remove any special characters that might trigger members-only mode
+  const rawRoomName = searchParams.get('room') || ''
+  const roomName = rawRoomName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase()
   const appointmentId = searchParams.get('appointmentId') || ''
   
   const [user, setUser] = useState<any>(null)
@@ -127,8 +129,21 @@ function VideoConferenceContent() {
             disableThirdPartyRequests: true,
             enableNoAudioDetection: true,
             enableNoisyMicDetection: true,
-            enablePrejoinPage: false,
             prejoinPageEnabled: false,
+            // Disable lobby and members-only features
+            enableLobbyChat: false,
+            enableKnockingLobby: false,
+            enableInsecureRoomNameWarning: false,
+            requireDisplayName: false,
+            // Disable authentication requirements
+            enableTalkWhileMuted: false,
+            enableRemoteVideoMenu: true,
+            enableLocalVideoMenu: true,
+            // Network settings
+            enableLayerSuspension: true,
+            enableRemb: true,
+            enableTcc: true,
+            useStunTurn: true,
             toolbarButtons: [
               'microphone',
               'camera',
@@ -151,10 +166,6 @@ function VideoConferenceContent() {
               'download',
               'help',
             ],
-            enableLayerSuspension: true,
-            enableRemb: true,
-            enableTcc: true,
-            useStunTurn: true,
           }}
           interfaceConfigOverwrite={{
             DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
