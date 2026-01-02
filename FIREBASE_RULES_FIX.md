@@ -61,13 +61,28 @@ service cloud.firestore {
       allow create: if request.auth != null && 
                      request.auth.uid == request.resource.data.userId;
       
-      // READ: Sadece kendi randevularını okuyabilir
-      allow read: if request.auth != null && 
-                   resource.data.userId == request.auth.uid;
+      // READ: 
+      // - Kullanıcılar kendi randevularını okuyabilir
+      // - Doktorlar bekleyen randevuları okuyabilir (pending status)
+      // - Doktorlar kendilerine atanmış randevuları okuyabilir (doctorId matches)
+      allow read: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.status == 'pending' ||
+        resource.data.doctorId == request.auth.uid
+      );
       
-      // UPDATE/DELETE: Sadece kendi randevularını güncelleyebilir/silebilir
-      allow update, delete: if request.auth != null && 
-                             resource.data.userId == request.auth.uid;
+      // UPDATE: 
+      // - Kullanıcılar kendi randevularını güncelleyebilir
+      // - Doktorlar randevuları onaylayabilir/reddedebilir (status ve doctorId güncellemesi)
+      allow update: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        (resource.data.status == 'pending' && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'doctorId', 'updatedAt', 'approvedAt', 'doctorNote']))
+      );
+      
+      // DELETE: Sadece kendi randevularını silebilir
+      allow delete: if request.auth != null && 
+                     resource.data.userId == request.auth.uid;
     }
     
     // Doktorlar
