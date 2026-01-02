@@ -47,20 +47,63 @@ function VideoConferenceContent() {
         }
       }
 
-      // Create 8x8.vc room URL (free Jitsi service)
+      // Create 8x8 meeting via API with JWT (better control) or fallback to direct URL
       if (roomName) {
-        // Clean room name for 8x8.vc
         const cleanRoomName = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
-        // 8x8.vc uses Jitsi - format: https://8x8.vc/roomname
-        // Add parameters to make it easier to start
-        const params = new URLSearchParams({
-          'userInfo.displayName': userName,
-          'userInfo.email': userEmail,
-          'config.startWithAudioMuted': 'false',
-          'config.startWithVideoMuted': 'false',
-        })
-        const eightEightUrl = `https://8x8.vc/${cleanRoomName}?${params.toString()}`
-        setRoomUrl(eightEightUrl)
+        
+        try {
+          // Try to create meeting via 8x8 API with JWT
+          const response = await fetch('/api/8x8/create-meeting', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              roomName: cleanRoomName,
+              userName: userName,
+              userEmail: userEmail,
+              isDoctor: isDoctor
+            })
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            // Use JWT token in URL for authenticated access
+            if (data.token && data.joinUrl) {
+              setRoomUrl(data.joinUrl)
+            } else if (data.joinUrl) {
+              setRoomUrl(data.joinUrl)
+            } else {
+              // Fallback if response format is different
+              const params = new URLSearchParams({
+                'jwt': data.token || '',
+                'userInfo.displayName': userName,
+                'userInfo.email': userEmail,
+              })
+              setRoomUrl(`https://${data.domain || '8x8.vc'}/${cleanRoomName}?${params.toString()}`)
+            }
+          } else {
+            // Fallback to direct 8x8.vc URL if API fails
+            console.log('8x8 API not available, using direct URL')
+            const params = new URLSearchParams({
+              'userInfo.displayName': userName,
+              'userInfo.email': userEmail,
+              'config.startWithAudioMuted': 'false',
+              'config.startWithVideoMuted': 'false',
+            })
+            setRoomUrl(`https://8x8.vc/${cleanRoomName}?${params.toString()}`)
+          }
+        } catch (error) {
+          // Fallback to direct URL if API call fails
+          console.error('Error creating 8x8 meeting via API:', error)
+          const params = new URLSearchParams({
+            'userInfo.displayName': userName,
+            'userInfo.email': userEmail,
+            'config.startWithAudioMuted': 'false',
+            'config.startWithVideoMuted': 'false',
+          })
+          setRoomUrl(`https://8x8.vc/${cleanRoomName}?${params.toString()}`)
+        }
       }
 
       setLoading(false)
