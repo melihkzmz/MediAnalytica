@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
@@ -9,7 +9,7 @@ import { JitsiMeeting } from '@jitsi/react-sdk'
 import { Loader2, ArrowLeft, Video } from 'lucide-react'
 import Link from 'next/link'
 
-export default function VideoConferencePage() {
+function VideoConferenceContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const roomName = searchParams.get('room') || ''
@@ -209,5 +209,20 @@ export default function VideoConferencePage() {
         />
       </div>
     </div>
+  )
+}
+
+export default function VideoConferencePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Yükleniyor...</p>
+        </div>
+      </div>
+    }>
+      <VideoConferenceContent />
+    </Suspense>
   )
 }
