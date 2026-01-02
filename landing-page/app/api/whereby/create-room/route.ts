@@ -24,9 +24,44 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.WHEREBY_API_KEY
     const domain = process.env.WHEREBY_DOMAIN || 'medianalytica.whereby.com'
 
-    // Clean room name for Whereby (alphanumeric and hyphens)
-    // IMPORTANT: Use exact same cleaning logic everywhere to ensure same room name
-    const cleanRoomName = roomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
+    // Clean room name for Whereby
+    // Whereby requirements: 
+    // - Alphanumeric characters, hyphens, underscores only
+    // - 3-200 characters
+    // - Must start with alphanumeric (not hyphen or underscore)
+    // - Must end with alphanumeric (not hyphen or underscore)
+    let cleanRoomName = roomName.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase()
+    
+    // Remove "medi-analytica-" prefix if present (to make it shorter)
+    if (cleanRoomName.startsWith('medi-analytica-')) {
+      cleanRoomName = cleanRoomName.replace('medi-analytica-', 'ma-')
+    }
+    
+    // Ensure it starts with alphanumeric (not hyphen or underscore)
+    cleanRoomName = cleanRoomName.replace(/^[-_]+/, '')
+    
+    // Ensure it ends with alphanumeric (not hyphen or underscore)
+    cleanRoomName = cleanRoomName.replace(/[-_]+$/, '')
+    
+    // Ensure minimum length (Whereby requires at least 3 characters)
+    if (cleanRoomName.length < 3) {
+      cleanRoomName = 'ma' + cleanRoomName
+    }
+    
+    // Limit maximum length (Whereby allows up to 200, but keep it reasonable for custom domains)
+    if (cleanRoomName.length > 100) {
+      cleanRoomName = cleanRoomName.substring(0, 100)
+    }
+    
+    // Final validation: must start and end with alphanumeric
+    if (!/^[a-z0-9]/.test(cleanRoomName)) {
+      cleanRoomName = 'r' + cleanRoomName
+    }
+    if (!/[a-z0-9]$/.test(cleanRoomName)) {
+      cleanRoomName = cleanRoomName + '1'
+    }
+    
+    console.log('🧹 Cleaned room name:', { original: roomName, cleaned: cleanRoomName, length: cleanRoomName.length })
 
     // For custom domains, API key is REQUIRED - rooms must be created via API
     if (!apiKey) {
@@ -79,12 +114,16 @@ export async function POST(request: NextRequest) {
 
       // If room doesn't exist, create it
       if (!roomData) {
-        const createPayload = {
+        // Whereby API payload - use roomName (not roomNamePrefix) for custom domains
+        const createPayload: any = {
           endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Expires in 7 days
-          roomName: cleanRoomName, // Use exact room name
           roomMode: 'normal',
           fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName', 'meetingId', 'roomUrl']
         }
+        
+        // Use roomName (not roomNamePrefix) for better control
+        // Whereby will use this exact name for the room
+        createPayload.roomName = cleanRoomName
         
         console.log('📤 Creating Whereby room with payload:', JSON.stringify(createPayload, null, 2))
         
