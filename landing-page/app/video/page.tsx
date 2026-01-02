@@ -49,7 +49,7 @@ function VideoConferenceContent() {
 
       // Generate Daily.co room URL
       if (roomName) {
-        const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'your-domain.daily.co'
+        const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'medianalytica.daily.co'
         // Daily.co room URL format: https://domain.daily.co/room-name
         const url = `https://${dailyDomain}/${roomName}`
         setRoomUrl(url)
