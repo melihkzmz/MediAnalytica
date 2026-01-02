@@ -155,6 +155,8 @@ function VideoConferenceContent() {
             enableNoAudioDetection: true,
             enableNoisyMicDetection: true,
             prejoinPageEnabled: false,
+            // Disable pre-join page completely - join directly
+            enablePrejoinPage: false,
             // Enable lobby/knocking for doctor-controlled rooms
             enableLobbyChat: true,
             enableKnockingLobby: !isDoctor, // Only patients need to knock, doctors join directly
