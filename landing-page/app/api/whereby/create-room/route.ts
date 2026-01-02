@@ -28,12 +28,25 @@ export async function POST(request: NextRequest) {
     // IMPORTANT: Use exact same cleaning logic everywhere to ensure same room name
     const cleanRoomName = roomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
 
-    // Option 1: Create room via Whereby API (if API key is available)
-    if (apiKey) {
+    // For custom domains, API key is REQUIRED - rooms must be created via API
+    if (!apiKey) {
+      return NextResponse.json(
+        { 
+          error: 'WHEREBY_API_KEY is required for custom domains',
+          message: 'Please set WHEREBY_API_KEY environment variable. Custom Whereby domains require rooms to be created via API.',
+          domain: domain
+        },
+        { status: 400 }
+      )
+    }
+
+    // Create room via Whereby API (required for custom domains)
+    try {
+      // First, try to list existing rooms and find one with matching name
+      let roomData: any = null
+      
       try {
-        // First, try to get existing room with this name
-        // Whereby API: Check if room exists, if not create it
-        const response = await fetch(`https://api.whereby.dev/v1/meetings?roomName=${encodeURIComponent(cleanRoomName)}`, {
+        const listResponse = await fetch('https://api.whereby.dev/v1/meetings', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -41,71 +54,100 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        let roomData: any = null
-        
-        // If room exists, use it
-        if (response.ok) {
-          const meetings = await response.json()
+        if (listResponse.ok) {
+          const meetings = await listResponse.json()
           // Find room with exact name match
-          if (meetings && meetings.length > 0) {
-            roomData = meetings.find((m: any) => m.roomName === cleanRoomName) || meetings[0]
+          if (meetings && meetings.data && Array.isArray(meetings.data)) {
+            roomData = meetings.data.find((m: any) => m.roomName === cleanRoomName)
+          } else if (meetings && Array.isArray(meetings)) {
+            roomData = meetings.find((m: any) => m.roomName === cleanRoomName)
           }
         }
-
-        // If room doesn't exist, create it
-        if (!roomData) {
-          const createResponse = await fetch('https://api.whereby.dev/v1/meetings', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-              endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expires in 24 hours
-              roomName: cleanRoomName, // Use exact room name, not prefix
-              roomMode: 'normal', // or 'group' for larger meetings
-              fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName']
-            })
-          })
-
-          if (createResponse.ok) {
-            roomData = await createResponse.json()
-          } else {
-            const error = await createResponse.text()
-            console.error('Whereby API create error:', error)
-          }
-        }
-
-        if (roomData) {
-          // Use the same URL for both host and viewer to ensure same room
-          const joinUrl = roomData.hostRoomUrl || roomData.viewerRoomUrl || `https://${domain}/${cleanRoomName}`
-          return NextResponse.json({
-            success: true,
-            roomName: roomData.roomName || cleanRoomName,
-            joinUrl: joinUrl, // Same URL for everyone
-            roomId: roomData.meetingId,
-            hostUrl: roomData.hostRoomUrl,
-            viewerUrl: roomData.viewerRoomUrl
-          })
-        }
-      } catch (apiError) {
-        console.error('Whereby API call failed:', apiError)
-        // Fallback to direct URL
+      } catch (listError) {
+        console.log('Could not list existing rooms, will create new one:', listError)
       }
+
+      // If room doesn't exist, create it
+      if (!roomData) {
+        const createResponse = await fetch('https://api.whereby.dev/v1/meetings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Expires in 7 days
+            roomName: cleanRoomName, // Use exact room name
+            roomMode: 'normal',
+            fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName', 'meetingId']
+          })
+        })
+
+        if (createResponse.ok) {
+          roomData = await createResponse.json()
+          console.log('Created new Whereby room:', cleanRoomName)
+        } else {
+          const errorText = await createResponse.text()
+          console.error('Whereby API create error:', errorText)
+          try {
+            const errorJson = JSON.parse(errorText)
+            return NextResponse.json(
+              { 
+                error: 'Failed to create Whereby room',
+                details: errorJson.message || errorText,
+                apiError: errorJson
+              },
+              { status: createResponse.status }
+            )
+          } catch {
+            return NextResponse.json(
+              { 
+                error: 'Failed to create Whereby room',
+                details: errorText
+              },
+              { status: createResponse.status }
+            )
+          }
+        }
+      } else {
+        console.log('Using existing Whereby room:', cleanRoomName)
+      }
+
+      if (roomData) {
+        // Use hostRoomUrl if available (same permissions for all), otherwise viewerRoomUrl
+        // Both should work, but hostRoomUrl gives more control
+        const joinUrl = roomData.hostRoomUrl || roomData.viewerRoomUrl || `https://${domain}/${cleanRoomName}`
+        
+        return NextResponse.json({
+          success: true,
+          roomName: roomData.roomName || cleanRoomName,
+          joinUrl: joinUrl,
+          roomId: roomData.meetingId,
+          hostUrl: roomData.hostRoomUrl,
+          viewerUrl: roomData.viewerRoomUrl,
+          useAPI: true
+        })
+      }
+    } catch (apiError: any) {
+      console.error('Whereby API call failed:', apiError)
+      return NextResponse.json(
+        { 
+          error: 'Whereby API error',
+          details: apiError.message || 'Unknown error',
+          message: 'Failed to create or access Whereby room. Please check your API key and domain configuration.'
+        },
+        { status: 500 }
+      )
     }
 
-    // Option 2: Direct URL (works without API key for basic rooms)
-    // IMPORTANT: Use exact same URL format for all users
-    // Don't add userName/userEmail as params - they might cause different room instances
-    const joinUrl = `https://${domain}/${cleanRoomName}`
-
-    return NextResponse.json({
-      success: true,
-      roomName: cleanRoomName,
-      joinUrl: joinUrl,
-      domain: domain,
-      useAPI: false // Indicates direct URL was used
-    })
+    // This should not be reached, but just in case
+    return NextResponse.json(
+      { 
+        error: 'Failed to create room',
+        message: 'Unable to create or find Whereby room'
+      },
+      { status: 500 }
+    )
   } catch (error: any) {
     console.error('Error creating Whereby room:', error)
     return NextResponse.json(

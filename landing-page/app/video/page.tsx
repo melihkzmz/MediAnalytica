@@ -21,6 +21,7 @@ function VideoConferenceContent() {
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
   const [roomUrl, setRoomUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -85,61 +86,37 @@ function VideoConferenceContent() {
             const data = await response.json()
             // Use the exact same URL for all users
             const roomUrl = data.joinUrl || data.hostUrl || data.viewerUrl
-            setRoomUrl(roomUrl)
-            
-            // Store the Whereby URL in appointment for future use
-            if (appointmentId && roomUrl) {
-              try {
-                const { updateDoc } = await import('firebase/firestore')
-                const appointmentRef = doc(db, 'appointments', appointmentId)
-                await updateDoc(appointmentRef, {
-                  wherebyUrl: roomUrl
-                })
-              } catch (updateError) {
-                console.error('Error storing Whereby URL:', updateError)
+            if (roomUrl) {
+              setRoomUrl(roomUrl)
+              setError(null)
+              
+              // Store the Whereby URL in appointment for future use
+              if (appointmentId && roomUrl) {
+                try {
+                  const { updateDoc } = await import('firebase/firestore')
+                  const appointmentRef = doc(db, 'appointments', appointmentId)
+                  await updateDoc(appointmentRef, {
+                    wherebyUrl: roomUrl
+                  })
+                } catch (updateError) {
+                  console.error('Error storing Whereby URL:', updateError)
+                }
               }
+            } else {
+              setError('Whereby room URL not received from API')
             }
           } else {
-            // Fallback to direct Whereby URL if API fails
-            // IMPORTANT: Use exact same URL format (no params that might vary)
-            console.log('Whereby API not available, using direct URL')
-            const domain = process.env.NEXT_PUBLIC_WHEREBY_DOMAIN || 'medianalytica.whereby.com'
-            const directUrl = `https://${domain}/${cleanRoomName}`
-            setRoomUrl(directUrl)
-            
-            // Store the direct URL in appointment
-            if (appointmentId) {
-              try {
-                const { updateDoc } = await import('firebase/firestore')
-                const appointmentRef = doc(db, 'appointments', appointmentId)
-                await updateDoc(appointmentRef, {
-                  wherebyUrl: directUrl
-                })
-              } catch (updateError) {
-                console.error('Error storing Whereby URL:', updateError)
-              }
-            }
+            // API failed - show error message
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+            const errorMessage = errorData.message || errorData.error || 'Whereby API anahtarı eksik veya oda oluşturulamadı. Lütfen WHEREBY_API_KEY environment variable\'ını ayarlayın.'
+            setError(errorMessage)
+            console.error('Whereby API error:', errorData)
           }
-        } catch (error) {
-          // Fallback to direct URL if API call fails
-          // IMPORTANT: Use exact same URL format (no params that might vary)
+        } catch (error: any) {
+          // API call failed - show error
+          const errorMessage = error.message || 'Whereby oda oluşturulurken bir hata oluştu. Lütfen WHEREBY_API_KEY environment variable\'ını kontrol edin.'
+          setError(errorMessage)
           console.error('Error creating Whereby room via API:', error)
-          const domain = process.env.NEXT_PUBLIC_WHEREBY_DOMAIN || 'medianalytica.whereby.com'
-          const directUrl = `https://${domain}/${cleanRoomName}`
-          setRoomUrl(directUrl)
-          
-          // Store the direct URL in appointment
-          if (appointmentId) {
-            try {
-              const { updateDoc } = await import('firebase/firestore')
-              const appointmentRef = doc(db, 'appointments', appointmentId)
-              await updateDoc(appointmentRef, {
-                wherebyUrl: directUrl
-              })
-            } catch (updateError) {
-              console.error('Error storing Whereby URL:', updateError)
-            }
-          }
         }
       }
 
@@ -160,13 +137,23 @@ function VideoConferenceContent() {
     )
   }
 
-  if (!roomName || !roomUrl) {
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Video className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Geçersiz Oda</h2>
-          <p className="text-gray-600 mb-6">Randevu odası bulunamadı.</p>
+        <div className="text-center max-w-md mx-auto px-4">
+          <Video className="w-16 h-16 text-red-300 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Oda Oluşturulamadı</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
+            <p className="text-sm text-yellow-800 font-semibold mb-2">Çözüm:</p>
+            <ol className="text-sm text-yellow-700 list-decimal list-inside space-y-1">
+              <li>Vercel proje ayarlarına gidin</li>
+              <li>Environment Variables bölümüne gidin</li>
+              <li><code className="bg-yellow-100 px-1 rounded">WHEREBY_API_KEY</code> ekleyin</li>
+              <li>Whereby API anahtarınızı girin</li>
+              <li>Deploy'u yeniden yapın</li>
+            </ol>
+          </div>
           <Link
             href="/dashboard"
             className="inline-flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
@@ -174,6 +161,17 @@ function VideoConferenceContent() {
             <ArrowLeft className="w-5 h-5" />
             <span>Dashboard'a Dön</span>
           </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (!roomName || !roomUrl) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Oda yükleniyor...</p>
         </div>
       </div>
     )
