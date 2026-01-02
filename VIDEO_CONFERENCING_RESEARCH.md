@@ -101,7 +101,40 @@ For a medical appointment system, you need a video conferencing solution that is
 
 ---
 
-### 5. OpenVidu
+### 5. LiveKit ⭐ **STRONG ALTERNATIVE**
+
+**Pros:**
+- ✅ **Open Source** - Free and self-hosted option
+- ✅ **Modern Architecture** - Built with modern WebRTC
+- ✅ **Excellent React Support** - `@livekit/components-react` package
+- ✅ **Low Latency** - Under 300ms latency
+- ✅ **Adaptive Streaming** - Auto-adjusts quality based on network
+- ✅ **Scalable** - Supports 1-on-1 to 2000+ participants
+- ✅ **Prebuilt Components** - VideoConference component ready to use
+- ✅ **Next.js Integration** - Built with Next.js (LiveKit Meet example)
+- ✅ **Selective Subscriptions** - Efficient bandwidth usage
+- ✅ **Cloud Option Available** - Managed service available
+- ✅ **Good Documentation** - Well-documented React SDK
+
+**Cons:**
+- ⚠️ **Newer Platform** - Less mature than Jitsi (but actively developed)
+- ⚠️ **Cloud Pricing** - Can be expensive at scale
+- ⚠️ **Self-Hosting** - Requires more setup than Jitsi Cloud
+- ⚠️ **Smaller Community** - Less community support than Jitsi
+
+**Best For:** Modern React/Next.js apps needing high-quality video
+
+**Integration Difficulty:** ⭐⭐⭐ (Medium - Similar to Jitsi)
+
+**Cost:** 
+- Self-hosted: FREE (server costs apply)
+- Cloud: ~$0.004-0.01 per participant per minute (~$0.24-0.60/hour)
+
+**Notable:** LiveKit Meet is built with Next.js, making it perfect for your stack!
+
+---
+
+### 6. OpenVidu
 
 **Pros:**
 - ✅ **Open Source** - Free and self-hosted
@@ -124,16 +157,30 @@ For a medical appointment system, you need a video conferencing solution that is
 
 ## Recommendation for MediAnalytica
 
-### **Primary Recommendation: Jitsi Meet** ⭐
+### **Primary Recommendation: LiveKit** ⭐⭐ **UPDATED**
 
-**Why Jitsi is Best for Your Project:**
+**Why LiveKit is Best for Your Project:**
+
+1. **Perfect Tech Stack Match**: Built with Next.js (LiveKit Meet example)
+2. **Modern React Integration**: Excellent `@livekit/components-react` package
+3. **Low Latency**: Under 300ms - crucial for medical consultations
+4. **Adaptive Quality**: Auto-adjusts for poor connections (important for patients)
+5. **Prebuilt Components**: VideoConference component ready to use
+6. **Scalable**: Can grow from 1-on-1 to large consultations
+7. **Open Source**: Free self-hosted option available
+8. **Active Development**: Modern, actively maintained platform
+
+### **Alternative: Jitsi Meet** ⭐
+
+**Why Jitsi is Also Good:**
 
 1. **Cost-Effective**: FREE for self-hosted, very low cost for cloud
-2. **Easy Integration**: Simple React component integration
-3. **Perfect for Scheduled Appointments**: Room-based system works great
-4. **Turkish Market**: No language barriers, full localization
-5. **Privacy**: Self-hosting gives you full control over patient data
-6. **Quick Implementation**: Can be integrated in 1-2 days
+2. **Mature Platform**: More established, larger community
+3. **Easy Integration**: Simple React component integration
+4. **Perfect for Scheduled Appointments**: Room-based system works great
+5. **Turkish Market**: No language barriers, full localization
+6. **Privacy**: Self-hosting gives you full control over patient data
+7. **Quick Implementation**: Can be integrated in 1-2 days
 
 ### Implementation Approach:
 
@@ -187,7 +234,103 @@ For a medical appointment system, you need a video conferencing solution that is
 
 ---
 
-## Code Example: Jitsi Integration
+## Code Examples
+
+### Example 1: LiveKit Integration (Recommended)
+
+```typescript
+// components/VideoConference.tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+import {
+  LiveKitRoom,
+  VideoConference as LiveKitVideoConference,
+  RoomAudioRenderer,
+  useTracks,
+} from '@livekit/components-react'
+import '@livekit/components-styles'
+
+interface VideoConferenceProps {
+  roomName: string
+  userInfo: {
+    name: string
+    identity: string
+  }
+  token: string // LiveKit access token (generated server-side)
+  serverUrl: string
+  onLeave: () => void
+}
+
+export default function VideoConference({
+  roomName,
+  userInfo,
+  token,
+  serverUrl,
+  onLeave,
+}: VideoConferenceProps) {
+  return (
+    <LiveKitRoom
+      video={true}
+      audio={true}
+      token={token}
+      serverUrl={serverUrl}
+      data-lk-theme="default"
+      style={{ height: '100vh' }}
+      onDisconnected={onLeave}
+    >
+      <LiveKitVideoConference />
+      <RoomAudioRenderer />
+    </LiveKitRoom>
+  )
+}
+
+// app/api/livekit/token/route.ts (Server-side token generation)
+import { NextRequest, NextResponse } from 'next/server'
+import { AccessToken } from 'livekit-server-sdk'
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const roomName = searchParams.get('room')
+  const participantName = searchParams.get('username')
+  const participantIdentity = searchParams.get('identity')
+
+  if (!roomName || !participantName) {
+    return NextResponse.json(
+      { error: 'Missing room or username' },
+      { status: 400 }
+    )
+  }
+
+  const apiKey = process.env.LIVEKIT_API_KEY
+  const apiSecret = process.env.LIVEKIT_API_SECRET
+
+  if (!apiKey || !apiSecret) {
+    return NextResponse.json(
+      { error: 'Server misconfigured' },
+      { status: 500 }
+    )
+  }
+
+  const at = new AccessToken(apiKey, apiSecret, {
+    identity: participantIdentity || participantName,
+    name: participantName,
+  })
+
+  at.addGrant({
+    room: roomName,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+  })
+
+  const token = await at.toJwt()
+
+  return NextResponse.json({ token })
+}
+```
+
+### Example 2: Jitsi Integration
 
 ```typescript
 // components/VideoConference.tsx
@@ -466,6 +609,8 @@ export default function VideoConference({
 
 | Solution | Monthly Cost | Notes |
 |----------|--------------|-------|
+| **LiveKit Cloud** | $120-300 | $0.004-0.01/min × 50 hours |
+| **LiveKit Self-Hosted** | $20-100 | Server costs only |
 | **Jitsi Cloud** | $0-50 | Free tier available, pay-as-you-go |
 | **Jitsi Self-Hosted** | $20-100 | Server costs only |
 | **Twilio** | $360+ | $0.24/hour × 50 hours |
@@ -477,19 +622,51 @@ export default function VideoConference({
 
 ## Final Recommendation
 
-### **Start with Jitsi Meet Cloud** ⭐
+### **Option 1: LiveKit (Recommended for Next.js)** ⭐⭐
+
+**Reasons:**
+1. ✅ Perfect match for Next.js stack
+2. ✅ Modern React components (`@livekit/components-react`)
+3. ✅ Low latency (under 300ms) - important for medical consultations
+4. ✅ Adaptive streaming - better for patients with poor internet
+5. ✅ Prebuilt VideoConference component
+6. ✅ Active development and modern architecture
+7. ✅ Can start with cloud, migrate to self-hosted
+
+**Migration Path:**
+- Phase 1: Use LiveKit Cloud (free tier available)
+- Phase 2: Evaluate usage and quality
+- Phase 3: Migrate to self-hosted for better control/cost
+
+### **Option 2: Jitsi Meet (Alternative)** ⭐
 
 **Reasons:**
 1. ✅ Zero setup time - start immediately
 2. ✅ FREE tier available
-3. ✅ Easy to migrate to self-hosted later
-4. ✅ Perfect for MVP/testing
-5. ✅ Can scale as needed
+3. ✅ More mature platform
+4. ✅ Larger community
+5. ✅ Easy to migrate to self-hosted later
+6. ✅ Perfect for MVP/testing
 
 **Migration Path:**
 - Phase 1: Use Jitsi Cloud (meet.jit.si)
 - Phase 2: Evaluate usage and costs
 - Phase 3: If needed, migrate to self-hosted for better control
+
+### **Decision Matrix:**
+
+| Factor | LiveKit | Jitsi |
+|--------|---------|-------|
+| **Next.js Integration** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Modern Architecture** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| **Ease of Setup** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Cost (Cloud)** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Cost (Self-hosted)** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Latency** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Community** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Documentation** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+
+**My Recommendation:** Start with **LiveKit** if you want the best Next.js integration and modern features. Choose **Jitsi** if you prioritize cost and ease of setup.
 
 ---
 
@@ -519,6 +696,14 @@ export default function VideoConference({
 
 ## Resources
 
+### LiveKit
+- **LiveKit React SDK:** https://github.com/livekit/components-react
+- **LiveKit Documentation:** https://docs.livekit.io/
+- **LiveKit Meet (Next.js Example):** https://meet.livekit.io/
+- **LiveKit Cloud:** https://cloud.livekit.io/ (free tier available)
+- **LiveKit Self-Hosting:** https://docs.livekit.io/home/self-hosting/
+
+### Jitsi
 - **Jitsi React SDK:** https://github.com/jitsi/jitsi-meet-react-sdk
 - **Jitsi Documentation:** https://jitsi.github.io/handbook/docs/dev-guide/dev-guide-react-sdk
 - **Jitsi Self-Hosting:** https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker
@@ -528,12 +713,22 @@ export default function VideoConference({
 
 ## Conclusion
 
-**Jitsi Meet is the best choice** for your medical appointment system because:
-- ✅ Cost-effective (FREE to start)
-- ✅ Easy integration with React/Next.js
-- ✅ Perfect for scheduled appointments
-- ✅ Can be self-hosted for full control
-- ✅ Good enough quality for medical consultations
-- ✅ Quick to implement (1-2 days)
+### **LiveKit is the best choice** for your Next.js medical appointment system because:
+- ✅ Perfect Next.js integration (LiveKit Meet built with Next.js)
+- ✅ Modern React components (`@livekit/components-react`)
+- ✅ Low latency (under 300ms) - crucial for medical consultations
+- ✅ Adaptive streaming - better for patients with varying internet speeds
+- ✅ Prebuilt VideoConference component - faster development
+- ✅ Can be self-hosted for full control and HIPAA compliance
+- ✅ Active development and modern architecture
 
-Start with Jitsi Cloud, then migrate to self-hosted if needed for better control and HIPAA compliance.
+### **Jitsi is a solid alternative** if you prioritize:
+- ✅ Zero setup cost (free cloud tier)
+- ✅ More mature platform with larger community
+- ✅ Simpler initial setup
+- ✅ Proven track record
+
+### **Final Recommendation:**
+Start with **LiveKit Cloud** (free tier available) for the best Next.js experience and modern features. Migrate to self-hosted later if needed for better control, cost savings, or HIPAA compliance.
+
+If budget is the primary concern, start with **Jitsi Cloud** (completely free) and migrate to LiveKit later if you need better performance or more modern features.
