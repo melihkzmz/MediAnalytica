@@ -36,6 +36,8 @@ function VideoConferenceContent() {
 
       // Fetch appointment data if appointmentId is provided
       let finalRoomName = roomName
+      let storedWherebyUrl: string | null = null
+      
       if (appointmentId) {
         try {
           const appointmentRef = doc(db, 'appointments', appointmentId)
@@ -47,15 +49,22 @@ function VideoConferenceContent() {
             if (appointmentData.jitsiRoom) {
               finalRoomName = appointmentData.jitsiRoom
             }
+            // Check if Whereby URL is already stored (created when appointment was made)
+            if (appointmentData.wherebyUrl) {
+              storedWherebyUrl = appointmentData.wherebyUrl
+            }
           }
         } catch (error) {
           console.error('Error fetching appointment:', error)
         }
       }
 
-      // Create Whereby room via API or direct URL
-      // Use the room name from appointment data to ensure both doctor and patient join the same room
-      if (finalRoomName) {
+      // Use stored Whereby URL if available (ensures same room for all users)
+      if (storedWherebyUrl) {
+        setRoomUrl(storedWherebyUrl)
+      } else if (finalRoomName) {
+        // Create Whereby room via API or direct URL
+        // Use the room name from appointment data to ensure both doctor and patient join the same room
         const cleanRoomName = finalRoomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
         
         try {
@@ -74,28 +83,63 @@ function VideoConferenceContent() {
 
           if (response.ok) {
             const data = await response.json()
-            setRoomUrl(data.joinUrl || data.hostUrl || data.viewerUrl)
+            // Use the exact same URL for all users
+            const roomUrl = data.joinUrl || data.hostUrl || data.viewerUrl
+            setRoomUrl(roomUrl)
+            
+            // Store the Whereby URL in appointment for future use
+            if (appointmentId && roomUrl) {
+              try {
+                const { updateDoc } = await import('firebase/firestore')
+                const appointmentRef = doc(db, 'appointments', appointmentId)
+                await updateDoc(appointmentRef, {
+                  wherebyUrl: roomUrl
+                })
+              } catch (updateError) {
+                console.error('Error storing Whereby URL:', updateError)
+              }
+            }
           } else {
             // Fallback to direct Whereby URL if API fails
+            // IMPORTANT: Use exact same URL format (no params that might vary)
             console.log('Whereby API not available, using direct URL')
-            const params = new URLSearchParams({
-              'embed': 'true',
-              'userName': userName || 'User',
-              'userEmail': userEmail || ''
-            })
             const domain = process.env.NEXT_PUBLIC_WHEREBY_DOMAIN || 'medianalytica.whereby.com'
-            setRoomUrl(`https://${domain}/${cleanRoomName}?${params.toString()}`)
+            const directUrl = `https://${domain}/${cleanRoomName}`
+            setRoomUrl(directUrl)
+            
+            // Store the direct URL in appointment
+            if (appointmentId) {
+              try {
+                const { updateDoc } = await import('firebase/firestore')
+                const appointmentRef = doc(db, 'appointments', appointmentId)
+                await updateDoc(appointmentRef, {
+                  wherebyUrl: directUrl
+                })
+              } catch (updateError) {
+                console.error('Error storing Whereby URL:', updateError)
+              }
+            }
           }
         } catch (error) {
           // Fallback to direct URL if API call fails
+          // IMPORTANT: Use exact same URL format (no params that might vary)
           console.error('Error creating Whereby room via API:', error)
-          const params = new URLSearchParams({
-            'embed': 'true',
-            'userName': userName || 'User',
-            'userEmail': userEmail || ''
-          })
           const domain = process.env.NEXT_PUBLIC_WHEREBY_DOMAIN || 'medianalytica.whereby.com'
-          setRoomUrl(`https://${domain}/${cleanRoomName}?${params.toString()}`)
+          const directUrl = `https://${domain}/${cleanRoomName}`
+          setRoomUrl(directUrl)
+          
+          // Store the direct URL in appointment
+          if (appointmentId) {
+            try {
+              const { updateDoc } = await import('firebase/firestore')
+              const appointmentRef = doc(db, 'appointments', appointmentId)
+              await updateDoc(appointmentRef, {
+                wherebyUrl: directUrl
+              })
+            } catch (updateError) {
+              console.error('Error storing Whereby URL:', updateError)
+            }
+          }
         }
       }
 

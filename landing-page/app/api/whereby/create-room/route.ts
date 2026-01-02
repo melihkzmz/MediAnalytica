@@ -25,39 +25,68 @@ export async function POST(request: NextRequest) {
     const domain = process.env.WHEREBY_DOMAIN || 'medianalytica.whereby.com'
 
     // Clean room name for Whereby (alphanumeric and hyphens)
+    // IMPORTANT: Use exact same cleaning logic everywhere to ensure same room name
     const cleanRoomName = roomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
 
     // Option 1: Create room via Whereby API (if API key is available)
     if (apiKey) {
       try {
-        const response = await fetch('https://api.whereby.dev/v1/meetings', {
-          method: 'POST',
+        // First, try to get existing room with this name
+        // Whereby API: Check if room exists, if not create it
+        const response = await fetch(`https://api.whereby.dev/v1/meetings?roomName=${encodeURIComponent(cleanRoomName)}`, {
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expires in 24 hours
-            roomNamePrefix: cleanRoomName,
-            roomMode: 'normal', // or 'group' for larger meetings
-            fields: ['hostRoomUrl', 'viewerRoomUrl']
-          })
+          }
         })
 
+        let roomData: any = null
+        
+        // If room exists, use it
         if (response.ok) {
-          const roomData = await response.json()
+          const meetings = await response.json()
+          // Find room with exact name match
+          if (meetings && meetings.length > 0) {
+            roomData = meetings.find((m: any) => m.roomName === cleanRoomName) || meetings[0]
+          }
+        }
+
+        // If room doesn't exist, create it
+        if (!roomData) {
+          const createResponse = await fetch('https://api.whereby.dev/v1/meetings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Expires in 24 hours
+              roomName: cleanRoomName, // Use exact room name, not prefix
+              roomMode: 'normal', // or 'group' for larger meetings
+              fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName']
+            })
+          })
+
+          if (createResponse.ok) {
+            roomData = await createResponse.json()
+          } else {
+            const error = await createResponse.text()
+            console.error('Whereby API create error:', error)
+          }
+        }
+
+        if (roomData) {
+          // Use the same URL for both host and viewer to ensure same room
+          const joinUrl = roomData.hostRoomUrl || roomData.viewerRoomUrl || `https://${domain}/${cleanRoomName}`
           return NextResponse.json({
             success: true,
             roomName: roomData.roomName || cleanRoomName,
-            joinUrl: roomData.hostRoomUrl || roomData.viewerRoomUrl || `https://${domain}/${cleanRoomName}`,
+            joinUrl: joinUrl, // Same URL for everyone
             roomId: roomData.meetingId,
             hostUrl: roomData.hostRoomUrl,
             viewerUrl: roomData.viewerRoomUrl
           })
-        } else {
-          const error = await response.text()
-          console.error('Whereby API error:', error)
-          // Fallback to direct URL if API fails
         }
       } catch (apiError) {
         console.error('Whereby API call failed:', apiError)
@@ -66,13 +95,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Option 2: Direct URL (works without API key for basic rooms)
-    // Whereby can create rooms on-demand when accessed
-    const params = new URLSearchParams({
-      'embed': 'true',
-      'userName': userName || 'User',
-      'userEmail': userEmail || ''
-    })
-    const joinUrl = `https://${domain}/${cleanRoomName}?${params.toString()}`
+    // IMPORTANT: Use exact same URL format for all users
+    // Don't add userName/userEmail as params - they might cause different room instances
+    const joinUrl = `https://${domain}/${cleanRoomName}`
 
     return NextResponse.json({
       success: true,
