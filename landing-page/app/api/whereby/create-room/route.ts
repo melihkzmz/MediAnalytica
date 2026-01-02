@@ -39,9 +39,9 @@ export async function POST(request: NextRequest) {
     if (cleanRoomName.length > 30 || cleanRoomName.length < 3) {
       // Use a hash of the original room name for consistency
       // This ensures same input = same output
-      const hash = roomName.split('').reduce((acc, char) => {
-        const hash = ((acc << 5) - acc) + char.charCodeAt(0)
-        return hash & hash
+      const hash = roomName.split('').reduce((acc: number, char: string) => {
+        const hashValue = ((acc << 5) - acc) + char.charCodeAt(0)
+        return hashValue & hashValue
       }, 0)
       // Convert to positive alphanumeric string
       cleanRoomName = 'ma' + Math.abs(hash).toString(36).substring(0, 20)
