@@ -103,11 +103,11 @@ export default function AppointmentPage() {
     )
   }
 
-  // Generate time slots with 30-minute intervals from 09:00 to 17:30
+  // Generate time slots with 30-minute intervals from 09:00 to 22:00
   const timeSlots = []
-  for (let hour = 9; hour <= 17; hour++) {
+  for (let hour = 9; hour <= 22; hour++) {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:00`)
-    if (hour < 17) { // Don't add :30 for 17:00 (last slot)
+    if (hour < 22) { // Don't add :30 for 22:00 (last slot)
       timeSlots.push(`${hour.toString().padStart(2, '0')}:30`)
     }
   }
