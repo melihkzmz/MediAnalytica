@@ -8,6 +8,7 @@ import { auth, db } from '@/lib/firebase'
 import { showToast } from '@/lib/utils'
 import { Calendar, Clock, FileText, User, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
+import { generateJitsiRoomName } from '@/lib/appointmentUtils'
 
 export default function AppointmentPage() {
   const router = useRouter()
@@ -45,8 +46,12 @@ export default function AppointmentPage() {
     setSubmitting(true)
 
     try {
+      // Generate unique room name for video conference
+      // We'll create a temporary ID first, then update with actual ID
+      const tempRoomName = `medi-analytica-temp-${Date.now()}`
+      
       // Save appointment to Firestore
-      await addDoc(collection(db, 'appointments'), {
+      const docRef = await addDoc(collection(db, 'appointments'), {
         userId: user.uid,
         userEmail: user.email,
         date: formData.date,
@@ -54,7 +59,15 @@ export default function AppointmentPage() {
         reason: formData.reason,
         doctorType: formData.doctorType,
         status: 'pending',
+        jitsiRoom: tempRoomName, // Will be updated when approved
         createdAt: serverTimestamp()
+      })
+      
+      // Update with actual room name using appointment ID
+      const { doc: docFn, updateDoc } = await import('firebase/firestore')
+      const actualRoomName = generateJitsiRoomName(docRef.id)
+      await updateDoc(docFn(db, 'appointments', docRef.id), {
+        jitsiRoom: actualRoomName
       })
 
       showToast('Randevu talebiniz başarıyla iletildi! Onay sonrası bilgilendirileceksiniz.', 'success')
