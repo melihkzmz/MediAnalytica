@@ -53,26 +53,19 @@ export function isAppointmentUpcoming(appointment: {
 
 /**
  * Generate unique Jitsi room name for appointment
- * Use very simple random format to avoid membersOnly errors
- * Jitsi free service sometimes triggers membersOnly for certain patterns
+ * Use completely random format - Jitsi free service may restrict patterns
+ * This generates a pure random name not tied to appointment ID
  */
 export function generateJitsiRoomName(appointmentId: string): string {
-  // Generate a simple random room name using appointment ID hash
-  // Use only lowercase letters and numbers, keep it short (max 15 chars)
-  const hash = appointmentId
-    .split('')
-    .reduce((acc, char) => {
-      const code = char.charCodeAt(0)
-      return ((acc << 5) - acc) + code
-    }, 0)
-    .toString(36) // Convert to base36 (alphanumeric)
-    .replace(/[^a-z0-9]/g, '') // Remove any non-alphanumeric
-    .toLowerCase()
-    .substring(0, 12) // Keep it short
+  // Generate completely random room name (not based on appointment ID)
+  // This avoids any pattern detection by Jitsi's free service
+  // Format: 12-15 random lowercase alphanumeric characters
+  const part1 = Math.random().toString(36).substring(2, 8) // 6 chars
+  const part2 = Math.random().toString(36).substring(2, 8) // 6 chars
+  const part3 = Math.random().toString(36).substring(2, 6) // 4 chars
   
-  // Add random suffix to ensure uniqueness
-  const randomSuffix = Math.random().toString(36).substring(2, 5)
-  return `${hash}${randomSuffix}`.substring(0, 15) // Max 15 characters
+  // Combine and ensure only lowercase alphanumeric
+  return `${part1}${part2}${part3}`.replace(/[^a-z0-9]/g, '').toLowerCase().substring(0, 15)
 }
 
 /**
