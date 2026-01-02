@@ -79,19 +79,25 @@ export async function POST(request: NextRequest) {
 
       // If room doesn't exist, create it
       if (!roomData) {
+        const createPayload = {
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Expires in 7 days
+          roomName: cleanRoomName, // Use exact room name
+          roomMode: 'normal',
+          fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName', 'meetingId', 'roomUrl']
+        }
+        
+        console.log('📤 Creating Whereby room with payload:', JSON.stringify(createPayload, null, 2))
+        
         const createResponse = await fetch('https://api.whereby.dev/v1/meetings', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
           },
-          body: JSON.stringify({
-            endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Expires in 7 days
-            roomName: cleanRoomName, // Use exact room name
-            roomMode: 'normal',
-            fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName', 'meetingId', 'roomUrl']
-          })
+          body: JSON.stringify(createPayload)
         })
+        
+        console.log('📥 Whereby API response status:', createResponse.status, createResponse.statusText)
 
         if (createResponse.ok) {
           roomData = await createResponse.json()
@@ -133,29 +139,32 @@ export async function POST(request: NextRequest) {
         } else {
           const errorText = await createResponse.text()
           console.error('❌ Whereby API create error (status:', createResponse.status, '):', errorText)
+          
+          // Try to parse error for better debugging
+          let errorDetails: any = { raw: errorText }
           try {
-            const errorJson = JSON.parse(errorText)
-            return NextResponse.json(
-              { 
-                error: 'Failed to create Whereby room',
-                details: errorJson.message || errorJson.error || errorText,
-                apiError: errorJson,
-                statusCode: createResponse.status,
-                roomName: cleanRoomName
-              },
-              { status: createResponse.status }
-            )
+            errorDetails = JSON.parse(errorText)
+            console.error('❌ Parsed error:', JSON.stringify(errorDetails, null, 2))
           } catch {
-            return NextResponse.json(
-              { 
-                error: 'Failed to create Whereby room',
-                details: errorText,
-                statusCode: createResponse.status,
-                roomName: cleanRoomName
-              },
-              { status: createResponse.status }
-            )
+            console.error('❌ Error text is not JSON:', errorText)
           }
+          
+          return NextResponse.json(
+            { 
+              error: 'Failed to create Whereby room',
+              details: errorDetails.message || errorDetails.error || errorText,
+              apiError: errorDetails,
+              statusCode: createResponse.status,
+              roomName: cleanRoomName,
+              troubleshooting: [
+                'Check if your Whereby API key has permission to create rooms',
+                'Verify the API key is valid and not expired',
+                'Check Whereby dashboard for usage limits or account restrictions',
+                'Ensure the room name format is correct (alphanumeric and hyphens only)'
+              ]
+            },
+            { status: createResponse.status }
+          )
         }
       } else {
         console.log('Using existing Whereby room:', cleanRoomName)
