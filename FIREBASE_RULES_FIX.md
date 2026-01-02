@@ -18,9 +18,18 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Kullanıcılar sadece kendi verilerine erişebilir
+    // Kullanıcılar
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // READ: 
+      // - Kullanıcılar kendi verilerini okuyabilir
+      // - Doktorlar hasta bilgilerini okuyabilir (Hastalarım sekmesi için)
+      allow read: if request.auth != null && (
+        request.auth.uid == userId ||
+        exists(/databases/$(database)/documents/doctors/$(request.auth.uid))
+      );
+      
+      // WRITE: Sadece kendi verilerini yazabilir
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
     
     // Analiz geçmişi - CREATE için özel kural
