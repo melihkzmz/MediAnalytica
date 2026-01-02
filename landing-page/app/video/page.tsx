@@ -5,20 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
-import { JitsiMeeting } from '@jitsi/react-sdk'
 import { Loader2, ArrowLeft, Video } from 'lucide-react'
 import Link from 'next/link'
 
 function VideoConferenceContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  // Clean room name - remove any special characters
-  const rawRoomName = searchParams.get('room') || ''
-  // Clean room name - remove all non-alphanumeric characters to avoid membersOnly error
-  const roomName = rawRoomName
-    .replace(/[^a-zA-Z0-9]/g, '') // Remove all non-alphanumeric characters (no hyphens)
-    .toLowerCase()
-    .substring(0, 30) // Limit length
+  const roomName = searchParams.get('room') || ''
   const appointmentId = searchParams.get('appointmentId') || ''
   const isDoctor = searchParams.get('isDoctor') === 'true'
   
@@ -27,9 +20,8 @@ function VideoConferenceContent() {
   const [appointment, setAppointment] = useState<any>(null)
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
-  // Doctor is always moderator - set immediately based on URL parameter
-  const [isModerator, setIsModerator] = useState(isDoctor)
-  const apiRef = useRef<any>(null)
+  const [roomUrl, setRoomUrl] = useState<string | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -48,44 +40,26 @@ function VideoConferenceContent() {
           const appointmentRef = doc(db, 'appointments', appointmentId)
           const appointmentDoc = await getDoc(appointmentRef)
           if (appointmentDoc.exists()) {
-            const appointmentData = appointmentDoc.data()
-            setAppointment(appointmentData)
-            
-            // Verify doctor is moderator (double-check)
-            if (isDoctor && appointmentData.doctorId === currentUser.uid) {
-              setIsModerator(true)
-            } else if (isDoctor) {
-              // Doctor joining - they're moderator
-              setIsModerator(true)
-            } else {
-              // Patient is not moderator
-              setIsModerator(false)
-            }
-          } else if (isDoctor) {
-            // If no appointment data but user is doctor, they're moderator
-            setIsModerator(true)
+            setAppointment(appointmentDoc.data())
           }
         } catch (error) {
           console.error('Error fetching appointment:', error)
-          // If error but user is doctor, still set as moderator
-          if (isDoctor) {
-            setIsModerator(true)
-          }
         }
-      } else if (isDoctor) {
-        // If no appointment ID but user is doctor, they're moderator
-        setIsModerator(true)
+      }
+
+      // Generate Daily.co room URL
+      if (roomName) {
+        const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'your-domain.daily.co'
+        // Daily.co room URL format: https://domain.daily.co/room-name
+        const url = `https://${dailyDomain}/${roomName}`
+        setRoomUrl(url)
       }
 
       setLoading(false)
     })
 
     return () => unsubscribe()
-  }, [router, appointmentId])
-
-  const handleReadyToClose = () => {
-    router.push('/dashboard')
-  }
+  }, [router, appointmentId, roomName])
 
   if (loading) {
     return (
@@ -98,7 +72,7 @@ function VideoConferenceContent() {
     )
   }
 
-  if (!roomName) {
+  if (!roomName || !roomUrl) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -144,110 +118,18 @@ function VideoConferenceContent() {
         </div>
       </div>
 
-      {/* Jitsi Meeting */}
+      {/* Daily.co Video Conference */}
       <div className="h-[calc(100vh-80px)]">
-        <JitsiMeeting
-          domain="meet.jit.si"
-          roomName={roomName}
-          configOverwrite={{
-            startWithAudioMuted: false,
-            startWithVideoMuted: false,
-            enableWelcomePage: false,
-            enableClosePage: false,
-            disableInviteFunctions: true,
-            disableThirdPartyRequests: true,
-            enableNoAudioDetection: true,
-            enableNoisyMicDetection: true,
-            prejoinPageEnabled: false,
-            // Disable pre-join page completely - join directly
-            enablePrejoinPage: false,
-            // Disable lobby/knocking completely to avoid membersOnly error
-            enableLobbyChat: false,
-            enableKnockingLobby: false, // Disable knocking - open room for everyone
-            enableInsecureRoomNameWarning: false,
-            requireDisplayName: false,
-            // Disable authentication requirements
-            enableTalkWhileMuted: false,
-            enableRemoteVideoMenu: true,
-            enableLocalVideoMenu: true,
-            // Network settings
-            enableLayerSuspension: true,
-            enableRemb: true,
-            enableTcc: true,
-            useStunTurn: true,
-            toolbarButtons: [
-              'microphone',
-              'camera',
-              'closedcaptions',
-              'desktop',
-              'fullscreen',
-              'fodeviceselection',
-              'hangup',
-              'profile',
-              'chat',
-              'settings',
-              'raisehand',
-              'videoquality',
-              'filmstrip',
-              'feedback',
-              'stats',
-              'shortcuts',
-              'tileview',
-              'videobackgroundblur',
-              'download',
-              'help',
-            ],
+        <iframe
+          ref={iframeRef}
+          src={roomUrl}
+          allow="camera; microphone; fullscreen; speaker; display-capture"
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none'
           }}
-          interfaceConfigOverwrite={{
-            DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
-            DISABLE_PRESENCE_STATUS: false,
-            DISABLE_DOMINANT_SPEAKER_INDICATOR: false,
-            DISABLE_FOCUS_INDICATOR: false,
-            DISABLE_VIDEO_BACKGROUND: false,
-            DISPLAY_WELCOME_PAGE_CONTENT: false,
-            DISPLAY_WELCOME_FOOTER: false,
-            HIDE_INVITE_MORE_HEADER: true,
-            INITIAL_TOOLBAR_TIMEOUT: 20000,
-            TOOLBAR_TIMEOUT: 4000,
-            TOOLBAR_ALWAYS_VISIBLE: false,
-            SETTINGS_SECTIONS: ['devices', 'language', 'moderator', 'profile'],
-            SHOW_JITSI_WATERMARK: false,
-            SHOW_WATERMARK_FOR_GUESTS: false,
-            SHOW_BRAND_WATERMARK: false,
-            BRAND_WATERMARK_LINK: '',
-            SHOW_POWERED_BY: false,
-            SHOW_PROMOTIONAL_CLOSE_PAGE: false,
-            SHOW_CHROME_EXTENSION_BANNER: false,
-            GENERATE_ROOMNAMES_ON_WHEEL: false,
-            APP_NAME: 'MediAnalytica',
-            NATIVE_APP_NAME: 'MediAnalytica',
-            PROVIDER_NAME: 'MediAnalytica',
-            LANG_DETECTION: true,
-            DEFAULT_BACKGROUND: '#1a1a1a',
-            DEFAULT_REMOTE_DISPLAY_NAME: 'Kullanıcı',
-            DEFAULT_LOCAL_DISPLAY_NAME: userName,
-            AUTHENTICATION_ENABLE: false,
-            VIDEO_LAYOUT_FIT: 'both',
-            CLOSE_PAGE_GUEST_HINT: false,
-            SHOW_DEEP_LINKING_IMAGE: false,
-            ENABLE_DIAL_OUT: false,
-            MOBILE_APP_PROMO: false,
-            MOBILE_DOWNLOAD_PAGE_ENABLED: false,
-            CONNECTION_INDICATOR_AUTO_HIDE_ENABLED: true,
-            CONNECTION_INDICATOR_AUTO_HIDE_TIMEOUT: 5000,
-            CONNECTION_INDICATOR_DISABLED: false,
-          }}
-          userInfo={{
-            displayName: userName,
-            email: userEmail,
-          }}
-          getIFrameRef={(iframeRef) => {
-            apiRef.current = iframeRef
-          }}
-          onReadyToClose={handleReadyToClose}
-          onApiReady={(apiObject) => {
-            apiRef.current = apiObject
-          }}
+          title="Daily.co Video Conference"
         />
       </div>
     </div>

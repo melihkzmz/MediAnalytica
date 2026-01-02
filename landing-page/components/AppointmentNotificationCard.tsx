@@ -26,6 +26,7 @@ export default function AppointmentNotificationCard({
   onDismiss
 }: AppointmentNotificationCardProps) {
   // Generate room name if not exists (for backward compatibility)
+  // Note: jitsiRoom field name kept for backward compatibility, but now used for Daily.co
   const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
   const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}&isDoctor=${isDoctor ? 'true' : 'false'}`
 

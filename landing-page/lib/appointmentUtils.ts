@@ -52,20 +52,15 @@ export function isAppointmentUpcoming(appointment: {
 }
 
 /**
- * Generate unique Jitsi room name for appointment
- * Use completely random format - Jitsi free service may restrict patterns
- * This generates a pure random name not tied to appointment ID
+ * Generate unique Daily.co room name for appointment
+ * Daily.co accepts any room name format, but we'll use a clean format
  */
 export function generateJitsiRoomName(appointmentId: string): string {
-  // Generate completely random room name (not based on appointment ID)
-  // This avoids any pattern detection by Jitsi's free service
-  // Format: 12-15 random lowercase alphanumeric characters
-  const part1 = Math.random().toString(36).substring(2, 8) // 6 chars
-  const part2 = Math.random().toString(36).substring(2, 8) // 6 chars
-  const part3 = Math.random().toString(36).substring(2, 6) // 4 chars
-  
-  // Combine and ensure only lowercase alphanumeric
-  return `${part1}${part2}${part3}`.replace(/[^a-z0-9]/g, '').toLowerCase().substring(0, 15)
+  // Daily.co accepts any room name format
+  // Use appointment ID with prefix for clarity
+  // Note: Function name kept as generateJitsiRoomName for backward compatibility
+  const cleanId = appointmentId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+  return `medi-analytica-${cleanId}`
 }
 
 /**
