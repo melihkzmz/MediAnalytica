@@ -47,32 +47,13 @@ function VideoConferenceContent() {
         }
       }
 
-      // Create or get Daily.co room URL
+      // Create Jitsi Meet URL with 8x8.vc (free, no payment required)
       if (roomName) {
-        try {
-          // Try to create room via API (or get existing)
-          const response = await fetch('/api/daily/create-room', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ roomName })
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            setRoomUrl(data.url || `https://medianalytica.daily.co/${roomName}`)
-          } else {
-            // If API fails, use direct URL (Daily.co might create on-demand)
-            const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'medianalytica.daily.co'
-            setRoomUrl(`https://${dailyDomain}/${roomName}`)
-          }
-        } catch (error) {
-          console.error('Error creating Daily.co room:', error)
-          // Fallback to direct URL
-          const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'medianalytica.daily.co'
-          setRoomUrl(`https://${dailyDomain}/${roomName}`)
-        }
+        // Use 8x8.vc instead of meet.jit.si (free, no membersOnly issues)
+        const jitsiDomain = '8x8.vc'
+        const cleanRoomName = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        const jitsiUrl = `https://${jitsiDomain}/${cleanRoomName}?userInfo.displayName=${encodeURIComponent(userName)}&userInfo.email=${encodeURIComponent(userEmail)}`
+        setRoomUrl(jitsiUrl)
       }
 
       setLoading(false)
@@ -138,7 +119,7 @@ function VideoConferenceContent() {
         </div>
       </div>
 
-      {/* Daily.co Video Conference */}
+      {/* Jitsi Meet Video Conference (8x8.vc - Free) */}
       <div className="h-[calc(100vh-80px)]">
         <iframe
           ref={iframeRef}
@@ -149,7 +130,7 @@ function VideoConferenceContent() {
             height: '100%',
             border: 'none'
           }}
-          title="Daily.co Video Conference"
+          title="Jitsi Meet Video Conference"
         />
       </div>
     </div>
