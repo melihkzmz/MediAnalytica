@@ -30,15 +30,25 @@ export async function POST(request: NextRequest) {
 
     // For custom domains, API key is REQUIRED - rooms must be created via API
     if (!apiKey) {
+      console.error('❌ WHEREBY_API_KEY is not set in environment variables')
       return NextResponse.json(
         { 
           error: 'WHEREBY_API_KEY is required for custom domains',
-          message: 'Please set WHEREBY_API_KEY environment variable. Custom Whereby domains require rooms to be created via API.',
-          domain: domain
+          message: 'Please set WHEREBY_API_KEY environment variable in Vercel. Custom Whereby domains require rooms to be created via API.',
+          domain: domain,
+          roomName: cleanRoomName,
+          instructions: [
+            '1. Go to Vercel project settings',
+            '2. Navigate to Environment Variables',
+            '3. Add WHEREBY_API_KEY with your Whereby API key',
+            '4. Redeploy the application'
+          ]
         },
         { status: 400 }
       )
     }
+    
+    console.log('🔑 WHEREBY_API_KEY found, attempting to create room:', cleanRoomName)
 
     // Create room via Whereby API (required for custom domains)
     try {
@@ -85,17 +95,25 @@ export async function POST(request: NextRequest) {
 
         if (createResponse.ok) {
           roomData = await createResponse.json()
-          console.log('Created new Whereby room:', cleanRoomName)
+          console.log('✅ Created new Whereby room:', cleanRoomName)
+          console.log('Room data:', JSON.stringify(roomData, null, 2))
+          
+          // Validate that we got the required fields
+          if (!roomData.hostRoomUrl && !roomData.viewerRoomUrl) {
+            console.error('⚠️ Whereby API response missing room URLs:', roomData)
+          }
         } else {
           const errorText = await createResponse.text()
-          console.error('Whereby API create error:', errorText)
+          console.error('❌ Whereby API create error (status:', createResponse.status, '):', errorText)
           try {
             const errorJson = JSON.parse(errorText)
             return NextResponse.json(
               { 
                 error: 'Failed to create Whereby room',
-                details: errorJson.message || errorText,
-                apiError: errorJson
+                details: errorJson.message || errorJson.error || errorText,
+                apiError: errorJson,
+                statusCode: createResponse.status,
+                roomName: cleanRoomName
               },
               { status: createResponse.status }
             )
@@ -103,7 +121,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
               { 
                 error: 'Failed to create Whereby room',
-                details: errorText
+                details: errorText,
+                statusCode: createResponse.status,
+                roomName: cleanRoomName
               },
               { status: createResponse.status }
             )
@@ -118,6 +138,13 @@ export async function POST(request: NextRequest) {
         // Both should work, but hostRoomUrl gives more control
         const joinUrl = roomData.hostRoomUrl || roomData.viewerRoomUrl || `https://${domain}/${cleanRoomName}`
         
+        console.log('✅ Whereby room ready:', {
+          roomName: roomData.roomName || cleanRoomName,
+          joinUrl: joinUrl,
+          hasHostUrl: !!roomData.hostRoomUrl,
+          hasViewerUrl: !!roomData.viewerRoomUrl
+        })
+        
         return NextResponse.json({
           success: true,
           roomName: roomData.roomName || cleanRoomName,
@@ -127,6 +154,8 @@ export async function POST(request: NextRequest) {
           viewerUrl: roomData.viewerRoomUrl,
           useAPI: true
         })
+      } else {
+        console.error('❌ roomData is null after API call')
       }
     } catch (apiError: any) {
       console.error('Whereby API call failed:', apiError)

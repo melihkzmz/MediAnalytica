@@ -69,6 +69,7 @@ function VideoConferenceContent() {
         const cleanRoomName = finalRoomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
         
         try {
+          console.log('🔄 Attempting to create Whereby room:', cleanRoomName)
           // Try to create room via Whereby API
           const response = await fetch('/api/whereby/create-room', {
             method: 'POST',
@@ -82,11 +83,15 @@ function VideoConferenceContent() {
             })
           })
 
+          console.log('📡 Whereby API response status:', response.status)
+
           if (response.ok) {
             const data = await response.json()
+            console.log('✅ Whereby API response:', data)
             // Use the exact same URL for all users
             const roomUrl = data.joinUrl || data.hostUrl || data.viewerUrl
             if (roomUrl) {
+              console.log('✅ Setting room URL:', roomUrl)
               setRoomUrl(roomUrl)
               setError(null)
               
@@ -98,25 +103,30 @@ function VideoConferenceContent() {
                   await updateDoc(appointmentRef, {
                     wherebyUrl: roomUrl
                   })
+                  console.log('✅ Stored Whereby URL in appointment')
                 } catch (updateError) {
-                  console.error('Error storing Whereby URL:', updateError)
+                  console.error('❌ Error storing Whereby URL:', updateError)
                 }
               }
             } else {
-              setError('Whereby room URL not received from API')
+              console.error('❌ No room URL in API response:', data)
+              setError('Whereby room URL not received from API. Response: ' + JSON.stringify(data))
             }
           } else {
             // API failed - show error message
             const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-            const errorMessage = errorData.message || errorData.error || 'Whereby API anahtarı eksik veya oda oluşturulamadı. Lütfen WHEREBY_API_KEY environment variable\'ını ayarlayın.'
+            console.error('❌ Whereby API error response:', errorData)
+            const errorMessage = errorData.message || errorData.error || errorData.details || 'Whereby API anahtarı eksik veya oda oluşturulamadı. Lütfen WHEREBY_API_KEY environment variable\'ını ayarlayın.'
             setError(errorMessage)
-            console.error('Whereby API error:', errorData)
+            if (errorData.instructions) {
+              console.error('Instructions:', errorData.instructions)
+            }
           }
         } catch (error: any) {
           // API call failed - show error
+          console.error('❌ Exception creating Whereby room:', error)
           const errorMessage = error.message || 'Whereby oda oluşturulurken bir hata oluştu. Lütfen WHEREBY_API_KEY environment variable\'ını kontrol edin.'
           setError(errorMessage)
-          console.error('Error creating Whereby room via API:', error)
         }
       }
 
