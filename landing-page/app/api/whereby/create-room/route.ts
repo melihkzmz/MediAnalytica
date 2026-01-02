@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 
 /**
  * Create a Whereby Video Meeting Room
@@ -24,41 +25,68 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.WHEREBY_API_KEY
     const domain = process.env.WHEREBY_DOMAIN || 'medianalytica.whereby.com'
 
-    // Clean room name for Whereby
-    // Whereby API is very strict about room names
-    // Strategy: Use a simple, short, alphanumeric-only format
-    // Remove all special characters and use only lowercase alphanumeric
-    let cleanRoomName = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
-    
-    // Remove common prefixes that might cause issues
-    cleanRoomName = cleanRoomName.replace(/^medi-?analytica-?/i, '')
-    cleanRoomName = cleanRoomName.replace(/^ma-?/i, '')
-    
-    // If still too long or complex, use a hash-based approach
-    // Create a shorter, simpler identifier from the original
-    if (cleanRoomName.length > 30 || cleanRoomName.length < 3) {
-      // Use a hash of the original room name for consistency
-      // This ensures same input = same output
-      const hash = roomName.split('').reduce((acc: number, char: string) => {
-        const hashValue = ((acc << 5) - acc) + char.charCodeAt(0)
-        return hashValue & hashValue
-      }, 0)
-      // Convert to positive alphanumeric string
-      cleanRoomName = 'ma' + Math.abs(hash).toString(36).substring(0, 20)
+    // Normalize room name according to Whereby requirements
+    // 1. Normalize: lowercase, convert Turkish characters, remove everything except a-z0-9
+    function normalizeRoomName(input: string): string {
+      // Convert Turkish characters to ASCII equivalents
+      const turkishMap: { [key: string]: string } = {
+        'ş': 's', 'Ş': 's',
+        'ğ': 'g', 'Ğ': 'g',
+        'ü': 'u', 'Ü': 'u',
+        'ı': 'i', 'İ': 'i',
+        'ö': 'o', 'Ö': 'o',
+        'ç': 'c', 'Ç': 'c'
+      }
+      
+      let normalized = input.toLowerCase()
+      
+      // Replace Turkish characters
+      for (const [turkish, ascii] of Object.entries(turkishMap)) {
+        normalized = normalized.replace(new RegExp(turkish, 'g'), ascii)
+      }
+      
+      // Remove everything except a-z0-9
+      normalized = normalized.replace(/[^a-z0-9]/g, '')
+      
+      return normalized
     }
     
-    // Final cleanup: only alphanumeric, lowercase
-    cleanRoomName = cleanRoomName.replace(/[^a-z0-9]/g, '')
+    // Hash fallback: ma + sha1(input).substring(0, 18)
+    function getHashFallback(input: string): string {
+      const hash = createHash('sha1').update(input).digest('hex')
+      return 'ma' + hash.substring(0, 18)
+    }
     
-    // Ensure minimum length (3 chars)
-    if (cleanRoomName.length < 3) {
+    // Step 1: Normalize
+    let cleanRoomName = normalizeRoomName(roomName)
+    
+    // Step 2: Prefix - if doesn't start with letter, add "ma"
+    if (!/^[a-z]/.test(cleanRoomName)) {
       cleanRoomName = 'ma' + cleanRoomName
     }
     
-    // Limit to reasonable length (max 30 chars for safety)
-    cleanRoomName = cleanRoomName.substring(0, 30)
+    // Step 3: Length check - if < 3 or > 30, use hash fallback
+    if (cleanRoomName.length < 3 || cleanRoomName.length > 30) {
+      cleanRoomName = getHashFallback(roomName)
+    }
     
-    console.log('🧹 Cleaned room name:', { original: roomName, cleaned: cleanRoomName, length: cleanRoomName.length })
+    // Step 4: Final validation - must match ^[a-z0-9]{3,30}$
+    const validPattern = /^[a-z0-9]{3,30}$/
+    if (!validPattern.test(cleanRoomName)) {
+      cleanRoomName = getHashFallback(roomName)
+    }
+    
+    // Additional check: avoid names that are only numbers
+    if (/^[0-9]+$/.test(cleanRoomName)) {
+      cleanRoomName = getHashFallback(roomName)
+    }
+    
+    console.log('🧹 Cleaned room name:', { 
+      original: roomName, 
+      cleaned: cleanRoomName, 
+      length: cleanRoomName.length,
+      valid: validPattern.test(cleanRoomName)
+    })
 
     // For custom domains, API key is REQUIRED - rooms must be created via API
     if (!apiKey) {
