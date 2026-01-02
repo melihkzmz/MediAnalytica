@@ -27,7 +27,7 @@ export default function AppointmentNotificationCard({
 }: AppointmentNotificationCardProps) {
   // Generate room name if not exists (for backward compatibility)
   const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
-  const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}`
+  const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}&isDoctor=${isDoctor ? 'true' : 'false'}`
 
   return (
     <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4 animate-slide-down">
