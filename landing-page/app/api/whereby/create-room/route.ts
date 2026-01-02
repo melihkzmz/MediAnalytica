@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
             endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Expires in 7 days
             roomName: cleanRoomName, // Use exact room name
             roomMode: 'normal',
-            fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName', 'meetingId']
+            fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName', 'meetingId', 'roomUrl']
           })
         })
 
@@ -99,8 +99,36 @@ export async function POST(request: NextRequest) {
           console.log('Room data:', JSON.stringify(roomData, null, 2))
           
           // Validate that we got the required fields
-          if (!roomData.hostRoomUrl && !roomData.viewerRoomUrl) {
+          if (!roomData.hostRoomUrl && !roomData.viewerRoomUrl && !roomData.roomUrl) {
             console.error('⚠️ Whereby API response missing room URLs:', roomData)
+            // Try to construct URL from roomName if API didn't provide URLs
+            if (roomData.roomName) {
+              roomData.roomUrl = `https://${domain}/${roomData.roomName}`
+              console.log('⚠️ Constructed room URL from roomName:', roomData.roomUrl)
+            }
+          }
+          
+          // Verify room was created by trying to get it
+          if (roomData.meetingId) {
+            try {
+              const verifyResponse = await fetch(`https://api.whereby.dev/v1/meetings/${roomData.meetingId}`, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${apiKey}`
+                }
+              })
+              if (verifyResponse.ok) {
+                const verifiedRoom = await verifyResponse.json()
+                console.log('✅ Verified room exists:', verifiedRoom.roomName)
+                // Update roomData with verified data if it has more complete info
+                if (verifiedRoom.roomUrl || verifiedRoom.hostRoomUrl || verifiedRoom.viewerRoomUrl) {
+                  roomData = { ...roomData, ...verifiedRoom }
+                }
+              }
+            } catch (verifyError) {
+              console.warn('⚠️ Could not verify room creation:', verifyError)
+            }
           }
         } else {
           const errorText = await createResponse.text()
@@ -134,15 +162,34 @@ export async function POST(request: NextRequest) {
       }
 
       if (roomData) {
-        // Use hostRoomUrl if available (same permissions for all), otherwise viewerRoomUrl
-        // Both should work, but hostRoomUrl gives more control
-        const joinUrl = roomData.hostRoomUrl || roomData.viewerRoomUrl || `https://${domain}/${cleanRoomName}`
+        // Use the roomUrl from API if available, otherwise hostRoomUrl or viewerRoomUrl
+        // For embedding, we should use the roomUrl or construct it properly
+        let joinUrl = roomData.roomUrl || roomData.hostRoomUrl || roomData.viewerRoomUrl
+        
+        // If we have a roomUrl, use it directly
+        // Otherwise, construct from domain and room name
+        if (!joinUrl) {
+          // Fallback: construct URL with embed parameter
+          joinUrl = `https://${domain}/${cleanRoomName}?embed=true`
+        } else {
+          // Ensure embed parameter is present for iframe embedding
+          try {
+            const url = new URL(joinUrl)
+            url.searchParams.set('embed', 'true')
+            joinUrl = url.toString()
+          } catch (e) {
+            // If URL parsing fails, use as-is
+            console.warn('Could not parse room URL, using as-is:', joinUrl)
+          }
+        }
         
         console.log('✅ Whereby room ready:', {
           roomName: roomData.roomName || cleanRoomName,
           joinUrl: joinUrl,
+          hasRoomUrl: !!roomData.roomUrl,
           hasHostUrl: !!roomData.hostRoomUrl,
-          hasViewerUrl: !!roomData.viewerRoomUrl
+          hasViewerUrl: !!roomData.viewerRoomUrl,
+          meetingId: roomData.meetingId
         })
         
         return NextResponse.json({
@@ -152,6 +199,7 @@ export async function POST(request: NextRequest) {
           roomId: roomData.meetingId,
           hostUrl: roomData.hostRoomUrl,
           viewerUrl: roomData.viewerRoomUrl,
+          roomUrl: roomData.roomUrl,
           useAPI: true
         })
       } else {
