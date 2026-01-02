@@ -25,41 +25,38 @@ export async function POST(request: NextRequest) {
     const domain = process.env.WHEREBY_DOMAIN || 'medianalytica.whereby.com'
 
     // Clean room name for Whereby
-    // Whereby requirements: 
-    // - Alphanumeric characters, hyphens, underscores only
-    // - 3-200 characters
-    // - Must start with alphanumeric (not hyphen or underscore)
-    // - Must end with alphanumeric (not hyphen or underscore)
-    let cleanRoomName = roomName.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase()
+    // Whereby API is very strict about room names
+    // Strategy: Use a simple, short, alphanumeric-only format
+    // Remove all special characters and use only lowercase alphanumeric
+    let cleanRoomName = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
     
-    // Remove "medi-analytica-" prefix if present (to make it shorter)
-    if (cleanRoomName.startsWith('medi-analytica-')) {
-      cleanRoomName = cleanRoomName.replace('medi-analytica-', 'ma-')
+    // Remove common prefixes that might cause issues
+    cleanRoomName = cleanRoomName.replace(/^medi-?analytica-?/i, '')
+    cleanRoomName = cleanRoomName.replace(/^ma-?/i, '')
+    
+    // If still too long or complex, use a hash-based approach
+    // Create a shorter, simpler identifier from the original
+    if (cleanRoomName.length > 30 || cleanRoomName.length < 3) {
+      // Use a hash of the original room name for consistency
+      // This ensures same input = same output
+      const hash = roomName.split('').reduce((acc, char) => {
+        const hash = ((acc << 5) - acc) + char.charCodeAt(0)
+        return hash & hash
+      }, 0)
+      // Convert to positive alphanumeric string
+      cleanRoomName = 'ma' + Math.abs(hash).toString(36).substring(0, 20)
     }
     
-    // Ensure it starts with alphanumeric (not hyphen or underscore)
-    cleanRoomName = cleanRoomName.replace(/^[-_]+/, '')
+    // Final cleanup: only alphanumeric, lowercase
+    cleanRoomName = cleanRoomName.replace(/[^a-z0-9]/g, '')
     
-    // Ensure it ends with alphanumeric (not hyphen or underscore)
-    cleanRoomName = cleanRoomName.replace(/[-_]+$/, '')
-    
-    // Ensure minimum length (Whereby requires at least 3 characters)
+    // Ensure minimum length (3 chars)
     if (cleanRoomName.length < 3) {
       cleanRoomName = 'ma' + cleanRoomName
     }
     
-    // Limit maximum length (Whereby allows up to 200, but keep it reasonable for custom domains)
-    if (cleanRoomName.length > 100) {
-      cleanRoomName = cleanRoomName.substring(0, 100)
-    }
-    
-    // Final validation: must start and end with alphanumeric
-    if (!/^[a-z0-9]/.test(cleanRoomName)) {
-      cleanRoomName = 'r' + cleanRoomName
-    }
-    if (!/[a-z0-9]$/.test(cleanRoomName)) {
-      cleanRoomName = cleanRoomName + '1'
-    }
+    // Limit to reasonable length (max 30 chars for safety)
+    cleanRoomName = cleanRoomName.substring(0, 30)
     
     console.log('🧹 Cleaned room name:', { original: roomName, cleaned: cleanRoomName, length: cleanRoomName.length })
 
@@ -114,16 +111,19 @@ export async function POST(request: NextRequest) {
 
       // If room doesn't exist, create it
       if (!roomData) {
-        // Whereby API payload - use roomName (not roomNamePrefix) for custom domains
+        // Whereby API payload
+        // Try roomName first (exact name), if that fails we can try roomNamePrefix
         const createPayload: any = {
           endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Expires in 7 days
           roomMode: 'normal',
           fields: ['hostRoomUrl', 'viewerRoomUrl', 'roomName', 'meetingId', 'roomUrl']
         }
         
-        // Use roomName (not roomNamePrefix) for better control
-        // Whereby will use this exact name for the room
+        // Use exact roomName (not roomNamePrefix) to ensure same room for same appointment
+        // Format: simple alphanumeric, lowercase, 3-30 chars
         createPayload.roomName = cleanRoomName
+        
+        console.log('📤 Using roomName:', cleanRoomName, 'Length:', cleanRoomName.length)
         
         console.log('📤 Creating Whereby room with payload:', JSON.stringify(createPayload, null, 2))
         
