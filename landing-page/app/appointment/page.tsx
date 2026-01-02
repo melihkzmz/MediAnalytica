@@ -103,10 +103,14 @@ export default function AppointmentPage() {
     )
   }
 
-  const timeSlots = [
-    '09:00', '10:00', '11:00', '12:00',
-    '13:00', '14:00', '15:00', '16:00', '17:00'
-  ]
+  // Generate time slots with 30-minute intervals from 09:00 to 17:30
+  const timeSlots = []
+  for (let hour = 9; hour <= 17; hour++) {
+    timeSlots.push(`${hour.toString().padStart(2, '0')}:00`)
+    if (hour < 17) { // Don't add :30 for 17:00 (last slot)
+      timeSlots.push(`${hour.toString().padStart(2, '0')}:30`)
+    }
+  }
 
   const doctorTypes = [
     { value: 'dermatolog', label: 'Dermatolog' },
