@@ -154,15 +154,25 @@ function VideoConferenceContent() {
           <Video className="w-16 h-16 text-red-300 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Oda Oluşturulamadı</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
-            <p className="text-sm text-yellow-800 font-semibold mb-2">Çözüm:</p>
-            <ol className="text-sm text-yellow-700 list-decimal list-inside space-y-1">
-              <li>Vercel proje ayarlarına gidin</li>
-              <li>Environment Variables bölümüne gidin</li>
-              <li><code className="bg-yellow-100 px-1 rounded">WHEREBY_API_KEY</code> ekleyin</li>
-              <li>Whereby API anahtarınızı girin</li>
-              <li>Deploy'u yeniden yapın</li>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 text-left">
+            <p className="text-sm text-yellow-800 font-semibold mb-2">Kontrol Adımları:</p>
+            <ol className="text-sm text-yellow-700 list-decimal list-inside space-y-1 mb-3">
+              <li>Vercel Dashboard → Proje → Settings → Environment Variables</li>
+              <li><code className="bg-yellow-100 px-1 rounded">WHEREBY_API_KEY</code> değişkeninin var olduğunu kontrol edin</li>
+              <li>Değişkeni düzenleyip <strong>Production, Preview, Development</strong> seçeneklerinin işaretli olduğundan emin olun</li>
+              <li>Değişken adının tam olarak <code className="bg-yellow-100 px-1 rounded">WHEREBY_API_KEY</code> olduğunu kontrol edin (büyük/küçük harf önemli)</li>
+              <li>Deploy'u yeniden yapın (Deployments → Redeploy veya yeni commit push)</li>
             </ol>
+            <div className="mt-3 pt-3 border-t border-yellow-200">
+              <a
+                href="/api/whereby/debug"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-700 underline"
+              >
+                🔍 Environment Variable'ları kontrol et (Debug Endpoint)
+              </a>
+            </div>
           </div>
           <Link
             href="/dashboard"
