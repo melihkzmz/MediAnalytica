@@ -52,34 +52,22 @@ export function isAppointmentUpcoming(appointment: {
 }
 
 /**
- * Generate unique Whereby room name for appointment
- * Whereby requirements: alphanumeric, hyphens, underscores; 3-200 chars; must start/end with alphanumeric
- * Note: Function name kept as generateJitsiRoomName for backward compatibility
+ * Generate unique Jitsi room name for appointment
+ * Jitsi Meet is flexible with room names, but we use a clean format for consistency
+ * - Alphanumeric characters only
+ * - Prefix with MediAnalytica for uniqueness
  */
 export function generateJitsiRoomName(appointmentId: string): string {
-  // Clean appointment ID
-  let cleanId = appointmentId.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase()
+  // Clean appointment ID: remove special characters, keep alphanumeric
+  const cleanId = appointmentId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
   
   // Ensure minimum length
   if (cleanId.length < 3) {
-    cleanId = 'ma' + cleanId
+    return `medianalytica${Date.now()}`
   }
   
-  // Limit maximum length (keep it reasonable)
-  if (cleanId.length > 50) {
-    cleanId = cleanId.substring(0, 50)
-  }
-  
-  // Ensure it starts and ends with alphanumeric
-  if (!/^[a-z0-9]/.test(cleanId)) {
-    cleanId = 'r' + cleanId
-  }
-  if (!/[a-z0-9]$/.test(cleanId)) {
-    cleanId = cleanId + '1'
-  }
-  
-  // Use shorter prefix for Whereby compatibility
-  return `ma-${cleanId}`
+  // Return with prefix for uniqueness
+  return `medianalytica${cleanId}`
 }
 
 /**
