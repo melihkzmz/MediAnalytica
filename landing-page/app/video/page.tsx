@@ -47,12 +47,32 @@ function VideoConferenceContent() {
         }
       }
 
-      // Generate Daily.co room URL
+      // Create or get Daily.co room URL
       if (roomName) {
-        const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'medianalytica.daily.co'
-        // Daily.co room URL format: https://domain.daily.co/room-name
-        const url = `https://${dailyDomain}/${roomName}`
-        setRoomUrl(url)
+        try {
+          // Try to create room via API (or get existing)
+          const response = await fetch('/api/daily/create-room', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ roomName })
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            setRoomUrl(data.url || `https://medianalytica.daily.co/${roomName}`)
+          } else {
+            // If API fails, use direct URL (Daily.co might create on-demand)
+            const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'medianalytica.daily.co'
+            setRoomUrl(`https://${dailyDomain}/${roomName}`)
+          }
+        } catch (error) {
+          console.error('Error creating Daily.co room:', error)
+          // Fallback to direct URL
+          const dailyDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'medianalytica.daily.co'
+          setRoomUrl(`https://${dailyDomain}/${roomName}`)
+        }
       }
 
       setLoading(false)
