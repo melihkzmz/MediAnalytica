@@ -9,12 +9,14 @@ import { showToast, validateImageFile, compressImage } from '@/lib/utils'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
-  X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download
+  X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
+  Clock, Calendar, Users, AlertCircle
 } from 'lucide-react'
 import Link from 'next/link'
 
 type DiseaseType = 'skin' | 'bone' | 'lung'
-type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile'
+type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 
+               'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -27,7 +29,9 @@ export default function DashboardPage() {
   // Initialize section from URL hash
   useEffect(() => {
     const hash = window.location.hash.replace('#', '')
-    if (hash && ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile'].includes(hash)) {
+    const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile',
+                          'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
+    if (hash && validSections.includes(hash)) {
       setCurrentSection(hash as Section)
     }
   }, [])
@@ -36,7 +40,9 @@ export default function DashboardPage() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '')
-      if (hash && ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile'].includes(hash)) {
+      const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile',
+                            'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
+      if (hash && validSections.includes(hash)) {
         setCurrentSection(hash as Section)
       }
     }
@@ -55,15 +61,39 @@ export default function DashboardPage() {
   const [loadingFavorites, setLoadingFavorites] = useState(false)
   const [loadingStats, setLoadingStats] = useState(false)
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
+  const [isDoctor, setIsDoctor] = useState(false)
+  const [doctorData, setDoctorData] = useState<any>(null)
+  const [pendingAppointments, setPendingAppointments] = useState<any[]>([])
+  const [myAppointments, setMyAppointments] = useState<any[]>([])
+  const [appointmentHistory, setAppointmentHistory] = useState<any[]>([])
+  const [myPatients, setMyPatients] = useState<any[]>([])
+  const [loadingAppointments, setLoadingAppointments] = useState(false)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.push('/login')
         return
       }
-      // Email verification check removed
       setUser(user)
+      
+      // Check if user is a doctor
+      try {
+        const { doc, getDoc } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const doctorDoc = await getDoc(doc(db, 'doctors', user.uid))
+        if (doctorDoc.exists()) {
+          setIsDoctor(true)
+          setDoctorData(doctorDoc.data())
+        } else {
+          setIsDoctor(false)
+          setDoctorData(null)
+        }
+      } catch (error) {
+        console.error('Error checking doctor status:', error)
+        setIsDoctor(false)
+      }
+      
       setLoading(false)
     })
     return () => unsubscribe()
@@ -93,6 +123,21 @@ export default function DashboardPage() {
       loadStats()
     }
   }, [user, currentSection])
+
+  // Load doctor appointment data
+  useEffect(() => {
+    if (isDoctor && user && doctorData) {
+      if (currentSection === 'pending-appointments') {
+        loadPendingAppointments()
+      } else if (currentSection === 'my-appointments') {
+        loadMyAppointments()
+      } else if (currentSection === 'appointment-history') {
+        loadAppointmentHistory()
+      } else if (currentSection === 'my-patients') {
+        loadMyPatients()
+      }
+    }
+  }, [user, isDoctor, doctorData, currentSection])
 
   // Reset form state when analyze section is activated
   useEffect(() => {
@@ -339,6 +384,294 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error removing from favorites:', error)
       showToast('Favorilerden kaldırılırken hata oluştu.', 'error')
+    }
+  }
+
+  // Doctor appointment functions
+  const loadPendingAppointments = async () => {
+    if (!user || !doctorData) return
+    setLoadingAppointments(true)
+    try {
+      const { collection, query, where, orderBy, getDocs, doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      // Map doctor specialty to appointment doctorType
+      const specialtyMap: { [key: string]: string } = {
+        'Dermatolog': 'dermatolog',
+        'Ortopedist': 'ortopedist',
+        'Göğüs Hastalıkları Uzmanı': 'gogus-hast',
+        'Göz Hastalıkları Uzmanı': 'goz-hast',
+        'Genel Cerrahi': 'genel-cerrahi',
+        'İç Hastalıkları': 'ic-hastaliklari',
+        'Nöroloji': 'noroloji',
+        'Kardiyoloji': 'kardiyoloji'
+      }
+      
+      const doctorType = specialtyMap[doctorData.specialty] || doctorData.specialty?.toLowerCase()
+      
+      // Query pending appointments matching doctor's specialty
+      const appointmentsRef = collection(db, 'appointments')
+      const q = query(
+        appointmentsRef,
+        where('status', '==', 'pending'),
+        where('doctorType', '==', doctorType),
+        orderBy('createdAt', 'desc')
+      )
+      
+      const querySnapshot = await getDocs(q)
+      const appointmentsData = await Promise.all(
+        querySnapshot.docs.map(async (appointmentDoc) => {
+          const data = appointmentDoc.data()
+          // Convert Firestore Timestamp to JavaScript Date
+          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+            data.createdAt = data.createdAt.toDate().getTime()
+          } else if (data.createdAt?.seconds) {
+            data.createdAt = data.createdAt.seconds * 1000
+          }
+          
+          // Fetch user data
+          let patientData = null
+          if (data.userId) {
+            try {
+              const userRef = doc(db, 'users', data.userId)
+              const userDoc = await getDoc(userRef)
+              if (userDoc.exists()) {
+                patientData = userDoc.data()
+              }
+            } catch (error) {
+              console.error(`Error fetching user ${data.userId}:`, error)
+            }
+          }
+          
+          return {
+            id: appointmentDoc.id,
+            ...data,
+            patient: patientData
+          }
+        })
+      )
+      
+      setPendingAppointments(appointmentsData)
+    } catch (error) {
+      console.error('Error loading pending appointments:', error)
+      showToast('Randevular yüklenirken hata oluştu.', 'error')
+    } finally {
+      setLoadingAppointments(false)
+    }
+  }
+
+  const loadMyAppointments = async () => {
+    if (!user || !doctorData) return
+    setLoadingAppointments(true)
+    try {
+      const { collection, query, where, orderBy, getDocs, doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      const today = new Date().toISOString().split('T')[0]
+      
+      // Query approved appointments assigned to this doctor, upcoming dates
+      const appointmentsRef = collection(db, 'appointments')
+      const q = query(
+        appointmentsRef,
+        where('status', '==', 'approved'),
+        where('doctorId', '==', user.uid),
+        where('date', '>=', today),
+        orderBy('date', 'asc'),
+        orderBy('time', 'asc')
+      )
+      
+      const querySnapshot = await getDocs(q)
+      const appointmentsData = await Promise.all(
+        querySnapshot.docs.map(async (appointmentDoc) => {
+          const data = appointmentDoc.data()
+          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+            data.createdAt = data.createdAt.toDate().getTime()
+          } else if (data.createdAt?.seconds) {
+            data.createdAt = data.createdAt.seconds * 1000
+          }
+          
+          let patientData = null
+          if (data.userId) {
+            try {
+              const userRef = doc(db, 'users', data.userId)
+              const userDoc = await getDoc(userRef)
+              if (userDoc.exists()) {
+                patientData = userDoc.data()
+              }
+            } catch (error) {
+              console.error(`Error fetching user ${data.userId}:`, error)
+            }
+          }
+          
+          return {
+            id: appointmentDoc.id,
+            ...data,
+            patient: patientData
+          }
+        })
+      )
+      
+      setMyAppointments(appointmentsData)
+    } catch (error) {
+      console.error('Error loading my appointments:', error)
+      showToast('Randevular yüklenirken hata oluştu.', 'error')
+    } finally {
+      setLoadingAppointments(false)
+    }
+  }
+
+  const loadAppointmentHistory = async () => {
+    if (!user || !doctorData) return
+    setLoadingAppointments(true)
+    try {
+      const { collection, query, where, orderBy, getDocs, doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      const today = new Date().toISOString().split('T')[0]
+      
+      // Query approved appointments assigned to this doctor, past dates
+      const appointmentsRef = collection(db, 'appointments')
+      const q = query(
+        appointmentsRef,
+        where('status', '==', 'approved'),
+        where('doctorId', '==', user.uid),
+        where('date', '<', today),
+        orderBy('date', 'desc'),
+        orderBy('time', 'desc')
+      )
+      
+      const querySnapshot = await getDocs(q)
+      const appointmentsData = await Promise.all(
+        querySnapshot.docs.map(async (appointmentDoc) => {
+          const data = appointmentDoc.data()
+          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+            data.createdAt = data.createdAt.toDate().getTime()
+          } else if (data.createdAt?.seconds) {
+            data.createdAt = data.createdAt.seconds * 1000
+          }
+          
+          let patientData = null
+          if (data.userId) {
+            try {
+              const userRef = doc(db, 'users', data.userId)
+              const userDoc = await getDoc(userRef)
+              if (userDoc.exists()) {
+                patientData = userDoc.data()
+              }
+            } catch (error) {
+              console.error(`Error fetching user ${data.userId}:`, error)
+            }
+          }
+          
+          return {
+            id: appointmentDoc.id,
+            ...data,
+            patient: patientData
+          }
+        })
+      )
+      
+      setAppointmentHistory(appointmentsData)
+    } catch (error) {
+      console.error('Error loading appointment history:', error)
+      showToast('Randevu geçmişi yüklenirken hata oluştu.', 'error')
+    } finally {
+      setLoadingAppointments(false)
+    }
+  }
+
+  const loadMyPatients = async () => {
+    if (!user || !doctorData) return
+    setLoadingAppointments(true)
+    try {
+      const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      // Query all approved appointments assigned to this doctor
+      const appointmentsRef = collection(db, 'appointments')
+      const q = query(
+        appointmentsRef,
+        where('status', '==', 'approved'),
+        where('doctorId', '==', user.uid)
+      )
+      
+      const querySnapshot = await getDocs(q)
+      
+      // Get unique patient IDs
+      const patientIds = new Set<string>()
+      querySnapshot.docs.forEach(doc => {
+        const data = doc.data()
+        if (data.userId) {
+          patientIds.add(data.userId)
+        }
+      })
+      
+      // Fetch patient data
+      const patientsData = await Promise.all(
+        Array.from(patientIds).map(async (patientId) => {
+          try {
+            const userRef = doc(db, 'users', patientId)
+            const userDoc = await getDoc(userRef)
+            if (userDoc.exists()) {
+              return {
+                id: patientId,
+                ...userDoc.data()
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching patient ${patientId}:`, error)
+          }
+          return null
+        })
+      )
+      
+      setMyPatients(patientsData.filter(p => p !== null))
+    } catch (error) {
+      console.error('Error loading patients:', error)
+      showToast('Hastalar yüklenirken hata oluştu.', 'error')
+    } finally {
+      setLoadingAppointments(false)
+    }
+  }
+
+  const acceptAppointment = async (appointmentId: string) => {
+    if (!user) return
+    try {
+      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      await updateDoc(doc(db, 'appointments', appointmentId), {
+        status: 'approved',
+        doctorId: user.uid,
+        updatedAt: serverTimestamp(),
+        approvedAt: serverTimestamp()
+      })
+      
+      showToast('Randevu onaylandı!', 'success')
+      loadPendingAppointments()
+      loadMyAppointments()
+    } catch (error) {
+      console.error('Error accepting appointment:', error)
+      showToast('Randevu onaylanırken hata oluştu.', 'error')
+    }
+  }
+
+  const rejectAppointment = async (appointmentId: string) => {
+    if (!user) return
+    try {
+      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      await updateDoc(doc(db, 'appointments', appointmentId), {
+        status: 'rejected',
+        updatedAt: serverTimestamp()
+      })
+      
+      showToast('Randevu reddedildi.', 'info')
+      loadPendingAppointments()
+    } catch (error) {
+      console.error('Error rejecting appointment:', error)
+      showToast('Randevu reddedilirken hata oluştu.', 'error')
     }
   }
 
@@ -948,28 +1281,54 @@ export default function DashboardPage() {
               >
                 Ana Menü
               </Link>
-              {[
-                { id: 'analyze', label: 'Analiz Yap' },
-                { id: 'history', label: 'Analiz Geçmişi' },
-                { id: 'favorites', label: 'Favoriler' },
-                { id: 'stats', label: 'İstatistikler' },
-                { id: 'appointment', label: 'Randevu Talep' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setCurrentSection(item.id as Section)
-                    window.location.hash = item.id
-                  }}
-                  className={`px-4 py-2 rounded-xl transition-colors ${
-                    currentSection === item.id
-                      ? 'bg-blue-50 text-blue-600 font-medium'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+              {isDoctor ? (
+                // Doctor tabs
+                [
+                  { id: 'pending-appointments', label: 'Bekleyen Randevularım' },
+                  { id: 'my-appointments', label: 'Randevularım' },
+                  { id: 'appointment-history', label: 'Randevu Geçmişi' },
+                  { id: 'my-patients', label: 'Hastalarım' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentSection(item.id as Section)
+                      window.location.hash = item.id
+                    }}
+                    className={`px-4 py-2 rounded-xl transition-colors ${
+                      currentSection === item.id
+                        ? 'bg-blue-50 text-blue-600 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))
+              ) : (
+                // Patient tabs
+                [
+                  { id: 'analyze', label: 'Analiz Yap' },
+                  { id: 'history', label: 'Analiz Geçmişi' },
+                  { id: 'favorites', label: 'Favoriler' },
+                  { id: 'stats', label: 'İstatistikler' },
+                  { id: 'appointment', label: 'Randevu Talep' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentSection(item.id as Section)
+                      window.location.hash = item.id
+                    }}
+                    className={`px-4 py-2 rounded-xl transition-colors ${
+                      currentSection === item.id
+                        ? 'bg-blue-50 text-blue-600 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))
+              )}
             </div>
 
             <div className="flex items-center space-x-4">
@@ -1033,29 +1392,56 @@ export default function DashboardPage() {
                 >
                   Ana Menü
                 </Link>
-                {[
-                  { id: 'analyze', label: 'Analiz Yap' },
-                  { id: 'history', label: 'Analiz Geçmişi' },
-                  { id: 'favorites', label: 'Favoriler' },
-                  { id: 'stats', label: 'İstatistikler' },
-                  { id: 'appointment', label: 'Randevu Talep' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentSection(item.id as Section)
-                      window.location.hash = item.id
-                      setMobileMenuOpen(false)
-                    }}
-                    className={`px-4 py-2 rounded-xl text-left transition-colors ${
-                      currentSection === item.id
-                        ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                {isDoctor ? (
+                  // Doctor tabs
+                  [
+                    { id: 'pending-appointments', label: 'Bekleyen Randevularım' },
+                    { id: 'my-appointments', label: 'Randevularım' },
+                    { id: 'appointment-history', label: 'Randevu Geçmişi' },
+                    { id: 'my-patients', label: 'Hastalarım' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setCurrentSection(item.id as Section)
+                        window.location.hash = item.id
+                        setMobileMenuOpen(false)
+                      }}
+                      className={`px-4 py-2 rounded-xl text-left transition-colors ${
+                        currentSection === item.id
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))
+                ) : (
+                  // Patient tabs
+                  [
+                    { id: 'analyze', label: 'Analiz Yap' },
+                    { id: 'history', label: 'Analiz Geçmişi' },
+                    { id: 'favorites', label: 'Favoriler' },
+                    { id: 'stats', label: 'İstatistikler' },
+                    { id: 'appointment', label: 'Randevu Talep' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setCurrentSection(item.id as Section)
+                        window.location.hash = item.id
+                        setMobileMenuOpen(false)
+                      }}
+                      className={`px-4 py-2 rounded-xl text-left transition-colors ${
+                        currentSection === item.id
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -1979,6 +2365,246 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Doctor Sections */}
+          {currentSection === 'pending-appointments' && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-3xl font-bold text-gray-900">Bekleyen Randevularım</h2>
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <AlertCircle className="w-5 h-5 text-yellow-500" />
+                  <span>{pendingAppointments.length} bekleyen randevu</span>
+                </div>
+              </div>
+
+              {loadingAppointments ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Randevular yükleniyor...</p>
+                </div>
+              ) : pendingAppointments.length === 0 ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Bekleyen Randevu Yok</h3>
+                  <p className="text-gray-600">Şu anda onay bekleyen randevu bulunmuyor.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {pendingAppointments.map((appointment) => (
+                    <div key={appointment.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                              <User className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-gray-900">
+                                {appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
+                              </h3>
+                              <p className="text-sm text-gray-600">{appointment.userEmail}</p>
+                            </div>
+                          </div>
+                          <div className="grid md:grid-cols-2 gap-4 mt-4">
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <Calendar className="w-4 h-4" />
+                              <span>{appointment.date}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <Clock className="w-4 h-4" />
+                              <span>{appointment.time}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <FileText className="w-4 h-4" />
+                              <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                                {appointment.doctorType || 'Uzmanlık belirtilmemiş'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <button
+                            onClick={() => acceptAppointment(appointment.id)}
+                            className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                          >
+                            <CheckCircle2 className="w-5 h-5" />
+                            <span>Onayla</span>
+                          </button>
+                          <button
+                            onClick={() => rejectAppointment(appointment.id)}
+                            className="px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
+                          >
+                            <X className="w-5 h-5" />
+                            <span>Reddet</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {currentSection === 'my-appointments' && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <h2 className="text-3xl font-bold text-gray-900">Randevularım</h2>
+
+              {loadingAppointments ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Randevular yükleniyor...</p>
+                </div>
+              ) : myAppointments.length === 0 ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Yaklaşan Randevu Yok</h3>
+                  <p className="text-gray-600">Şu anda onaylanmış yaklaşan randevunuz bulunmuyor.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {myAppointments.map((appointment) => (
+                    <div key={appointment.id} className="bg-white rounded-xl p-6 shadow-sm border border-green-200 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-500 rounded-lg flex items-center justify-center">
+                              <User className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-gray-900">
+                                {appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
+                              </h3>
+                              <p className="text-sm text-gray-600">{appointment.userEmail}</p>
+                            </div>
+                          </div>
+                          <div className="grid md:grid-cols-2 gap-4 mt-4">
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <Calendar className="w-4 h-4" />
+                              <span>{appointment.date}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <Clock className="w-4 h-4" />
+                              <span>{appointment.time}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <FileText className="w-4 h-4" />
+                              <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                Onaylandı
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {currentSection === 'appointment-history' && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <h2 className="text-3xl font-bold text-gray-900">Randevu Geçmişi</h2>
+
+              {loadingAppointments ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Randevu geçmişi yükleniyor...</p>
+                </div>
+              ) : appointmentHistory.length === 0 ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <History className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Randevu Geçmişi Yok</h3>
+                  <p className="text-gray-600">Henüz tamamlanmış randevunuz bulunmuyor.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {appointmentHistory.map((appointment) => (
+                    <div key={appointment.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
+                              <User className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-gray-900">
+                                {appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
+                              </h3>
+                              <p className="text-sm text-gray-600">{appointment.userEmail}</p>
+                            </div>
+                          </div>
+                          <div className="grid md:grid-cols-2 gap-4 mt-4">
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <Calendar className="w-4 h-4" />
+                              <span>{appointment.date}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <Clock className="w-4 h-4" />
+                              <span>{appointment.time}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-gray-600">
+                              <FileText className="w-4 h-4" />
+                              <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                                Tamamlandı
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {currentSection === 'my-patients' && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <h2 className="text-3xl font-bold text-gray-900">Hastalarım</h2>
+
+              {loadingAppointments ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Hastalar yükleniyor...</p>
+                </div>
+              ) : myPatients.length === 0 ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Hasta Yok</h3>
+                  <p className="text-gray-600">Henüz onaylanmış randevusu olan hasta bulunmuyor.</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {myPatients.map((patient: any) => (
+                    <div key={patient.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                          <User className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900">
+                            {patient.displayName || patient.email?.split('@')[0] || 'Bilinmeyen Hasta'}
+                          </h3>
+                          <p className="text-sm text-gray-600">{patient.email}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
