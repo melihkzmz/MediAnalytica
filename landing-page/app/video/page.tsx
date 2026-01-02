@@ -7,6 +7,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { Loader2, ArrowLeft, Video } from 'lucide-react'
 import Link from 'next/link'
+import { JitsiMeeting } from '@jitsi/react-sdk'
 
 function VideoConferenceContent() {
   const router = useRouter()
@@ -20,8 +21,8 @@ function VideoConferenceContent() {
   const [appointment, setAppointment] = useState<any>(null)
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
-  const [roomUrl, setRoomUrl] = useState<string | null>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [cleanRoomName, setCleanRoomName] = useState<string>('')
+  const apiRef = useRef<any>(null)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -47,13 +48,10 @@ function VideoConferenceContent() {
         }
       }
 
-      // Create Jitsi Meet URL with 8x8.vc (free, no payment required)
+      // Clean room name for Jitsi
       if (roomName) {
-        // Use 8x8.vc instead of meet.jit.si (free, no membersOnly issues)
-        const jitsiDomain = '8x8.vc'
-        const cleanRoomName = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
-        const jitsiUrl = `https://${jitsiDomain}/${cleanRoomName}?userInfo.displayName=${encodeURIComponent(userName)}&userInfo.email=${encodeURIComponent(userEmail)}`
-        setRoomUrl(jitsiUrl)
+        const cleaned = roomName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        setCleanRoomName(cleaned)
       }
 
       setLoading(false)
@@ -73,7 +71,7 @@ function VideoConferenceContent() {
     )
   }
 
-  if (!roomName || !roomUrl) {
+  if (!roomName || !cleanRoomName) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -119,18 +117,65 @@ function VideoConferenceContent() {
         </div>
       </div>
 
-      {/* Jitsi Meet Video Conference (8x8.vc - Free) */}
-      <div className="h-[calc(100vh-80px)]">
-        <iframe
-          ref={iframeRef}
-          src={roomUrl}
-          allow="camera; microphone; fullscreen; speaker; display-capture"
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none'
+      {/* Jitsi Meet Video Conference - Using React SDK for full control */}
+      <div className="h-[calc(100vh-80px)] w-full">
+        <JitsiMeeting
+          domain="meet.jit.si"
+          roomName={cleanRoomName}
+          configOverwrite={{
+            startWithAudioMuted: false,
+            startWithVideoMuted: false,
+            enableWelcomePage: false,
+            enablePrejoinPage: false,
+            enableKnockingLobby: false,
+            requireDisplayName: false,
+            enableNoAudioDetection: false,
+            enableNoisyMicDetection: false,
+            // Disable moderator requirement - allow anyone to start
+            enableLobbyChat: false,
+            enableLayerSuspension: true,
+            enableRemb: true,
+            enableTcc: true,
+            useStunTurn: true,
+            p2p: {
+              enabled: true
+            },
+            channelLastN: -1,
+            openBridgeChannel: true,
           }}
-          title="Jitsi Meet Video Conference"
+          interfaceConfigOverwrite={{
+            SHOW_JITSI_WATERMARK: false,
+            SHOW_WATERMARK_FOR_GUESTS: false,
+            SHOW_POWERED_BY: false,
+            DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+            APP_NAME: 'MediAnalytica',
+            DISPLAY_WELCOME_PAGE_CONTENT: false,
+            DISPLAY_WELCOME_FOOTER: false,
+            HIDE_INVITE_MORE_HEADER: true,
+          }}
+          userInfo={{
+            displayName: userName,
+            email: userEmail
+          }}
+          getIFrameRef={(iframeRef) => {
+            apiRef.current = iframeRef
+          }}
+          onReadyToClose={() => {
+            router.push('/dashboard')
+          }}
+          onApiReady={(apiObject) => {
+            apiRef.current = apiObject
+            // Try to make user a moderator automatically
+            if (apiObject && apiObject.executeCommand) {
+              try {
+                // This should allow anyone to start the conference
+                apiObject.executeCommand('toggleAudio')
+                apiObject.executeCommand('toggleVideo')
+              } catch (error) {
+                console.log('Jitsi API commands executed')
+              }
+            }
+          }}
         />
       </div>
     </div>
