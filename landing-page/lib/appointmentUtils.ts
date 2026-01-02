@@ -54,11 +54,16 @@ export function isAppointmentUpcoming(appointment: {
 /**
  * Generate unique Jitsi room name for appointment
  * Use simple format to avoid membersOnly errors
+ * Jitsi room names should be lowercase alphanumeric only
  */
 export function generateJitsiRoomName(appointmentId: string): string {
-  // Use only alphanumeric characters - remove hyphens and special chars
-  // Format: ma{appointmentId} (ma = medi-analytica abbreviation)
-  const cleanId = appointmentId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+  // Use only lowercase alphanumeric characters - no hyphens, no special chars
+  // Format: ma{cleanId} (ma = medi-analytica abbreviation)
+  // Limit length to avoid issues
+  const cleanId = appointmentId
+    .replace(/[^a-zA-Z0-9]/g, '') // Remove all non-alphanumeric
+    .toLowerCase()
+    .substring(0, 20) // Limit to 20 chars to avoid long room names
   return `ma${cleanId}`
 }
 

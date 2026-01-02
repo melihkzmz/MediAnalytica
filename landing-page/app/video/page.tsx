@@ -14,7 +14,11 @@ function VideoConferenceContent() {
   const searchParams = useSearchParams()
   // Clean room name - remove any special characters
   const rawRoomName = searchParams.get('room') || ''
-  const roomName = rawRoomName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase()
+  // Clean room name - remove all non-alphanumeric characters to avoid membersOnly error
+  const roomName = rawRoomName
+    .replace(/[^a-zA-Z0-9]/g, '') // Remove all non-alphanumeric characters (no hyphens)
+    .toLowerCase()
+    .substring(0, 30) // Limit length
   const appointmentId = searchParams.get('appointmentId') || ''
   const isDoctor = searchParams.get('isDoctor') === 'true'
   
@@ -157,9 +161,9 @@ function VideoConferenceContent() {
             prejoinPageEnabled: false,
             // Disable pre-join page completely - join directly
             enablePrejoinPage: false,
-            // Enable lobby/knocking for doctor-controlled rooms
-            enableLobbyChat: true,
-            enableKnockingLobby: !isDoctor, // Only patients need to knock, doctors join directly
+            // Disable lobby/knocking completely to avoid membersOnly error
+            enableLobbyChat: false,
+            enableKnockingLobby: false, // Disable knocking - open room for everyone
             enableInsecureRoomNameWarning: false,
             requireDisplayName: false,
             // Disable authentication requirements
