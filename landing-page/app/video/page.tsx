@@ -19,9 +19,7 @@ function VideoConferenceContent() {
   const [loading, setLoading] = useState(true)
   const [appointment, setAppointment] = useState<any>(null)
   const [userName, setUserName] = useState('')
-  const [userEmail, setUserEmail] = useState('')
-  const [roomUrl, setRoomUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [jitsiRoomName, setJitsiRoomName] = useState('')
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -32,12 +30,11 @@ function VideoConferenceContent() {
       }
       
       setUser(currentUser)
-      setUserName(currentUser.displayName || currentUser.email?.split('@')[0] || 'Kullanıcı')
-      setUserEmail(currentUser.email || '')
+      const displayName = currentUser.displayName || currentUser.email?.split('@')[0] || 'Kullanıcı'
+      setUserName(displayName)
 
       // Fetch appointment data if appointmentId is provided
       let finalRoomName = roomName
-      let storedWherebyUrl: string | null = null
       
       if (appointmentId) {
         try {
@@ -50,100 +47,27 @@ function VideoConferenceContent() {
             if (appointmentData.jitsiRoom) {
               finalRoomName = appointmentData.jitsiRoom
             }
-            // Check if Whereby URL is already stored (created when appointment was made)
-            if (appointmentData.wherebyUrl) {
-              storedWherebyUrl = appointmentData.wherebyUrl
-            }
           }
         } catch (error) {
           console.error('Error fetching appointment:', error)
         }
       }
 
-      // Use stored Whereby URL if available (ensures same room for all users)
-      if (storedWherebyUrl) {
-        setRoomUrl(storedWherebyUrl)
-      } else if (finalRoomName) {
-        // Create Whereby room via API or direct URL
-        // Use the room name from appointment data to ensure both doctor and patient join the same room
-        const cleanRoomName = finalRoomName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()
+      // Generate Jitsi room name
+      // Jitsi is flexible with room names, but we'll use a clean format
+      if (finalRoomName) {
+        // Clean room name for Jitsi: alphanumeric only, no spaces
+        const cleanRoomName = finalRoomName
+          .replace(/[^a-zA-Z0-9]/g, '')
+          .toLowerCase()
         
-        try {
-          console.log('🔄 Attempting to create Whereby room:', cleanRoomName)
-          // Try to create room via Whereby API
-          const response = await fetch('/api/whereby/create-room', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              roomName: cleanRoomName,
-              userName: userName,
-              userEmail: userEmail
-            })
-          })
-
-          console.log('📡 Whereby API response status:', response.status)
-
-          if (response.ok) {
-            const data = await response.json()
-            console.log('✅ Whereby API response:', data)
-            // Use the exact same URL for all users
-            const roomUrl = data.joinUrl || data.hostUrl || data.viewerUrl
-            if (roomUrl) {
-              console.log('✅ Setting room URL:', roomUrl)
-              setRoomUrl(roomUrl)
-              setError(null)
-              
-              // Store the Whereby URL in appointment for future use
-              if (appointmentId && roomUrl) {
-                try {
-                  const { updateDoc } = await import('firebase/firestore')
-                  const appointmentRef = doc(db, 'appointments', appointmentId)
-                  await updateDoc(appointmentRef, {
-                    wherebyUrl: roomUrl
-                  })
-                  console.log('✅ Stored Whereby URL in appointment')
-                } catch (updateError) {
-                  console.error('❌ Error storing Whereby URL:', updateError)
-                }
-              }
-            } else {
-              console.error('❌ No room URL in API response:', data)
-              setError('Whereby room URL not received from API. Response: ' + JSON.stringify(data))
-            }
-          } else {
-            // API failed - show error message
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-            console.error('❌ Whereby API error response:', errorData)
-            console.error('❌ Full error details:', JSON.stringify(errorData, null, 2))
-            
-            // Build detailed error message
-            let errorMessage = errorData.message || errorData.error || 'Whereby API hatası'
-            if (errorData.details) {
-              errorMessage += `: ${errorData.details}`
-            }
-            if (errorData.apiError && errorData.apiError.message) {
-              errorMessage += ` (${errorData.apiError.message})`
-            }
-            
-            // Add troubleshooting info if available
-            if (errorData.troubleshooting && Array.isArray(errorData.troubleshooting)) {
-              errorMessage += '\n\nÇözüm önerileri:\n' + errorData.troubleshooting.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n')
-            }
-            
-            setError(errorMessage)
-            
-            if (errorData.instructions) {
-              console.error('Instructions:', errorData.instructions)
-            }
-          }
-        } catch (error: any) {
-          // API call failed - show error
-          console.error('❌ Exception creating Whereby room:', error)
-          const errorMessage = error.message || 'Whereby oda oluşturulurken bir hata oluştu. Lütfen WHEREBY_API_KEY environment variable\'ını kontrol edin.'
-          setError(errorMessage)
-        }
+        // Ensure it's not empty and has minimum length
+        const jitsiRoom = cleanRoomName.length >= 3 
+          ? `MediAnalytica${cleanRoomName}`
+          : `MediAnalytica${Date.now()}`
+        
+        setJitsiRoomName(jitsiRoom)
+        console.log('✅ Jitsi room name:', jitsiRoom)
       }
 
       setLoading(false)
@@ -163,51 +87,13 @@ function VideoConferenceContent() {
     )
   }
 
-  if (error) {
-    // Parse error message to show details better
-    const errorLines = error.split('\n')
-    const mainError = errorLines[0]
-    const troubleshooting = errorLines.slice(1).filter(line => line.trim())
-    
+  if (!roomName && !jitsiRoomName) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center max-w-2xl mx-auto px-4">
-          <Video className="w-16 h-16 text-red-300 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Oda Oluşturulamadı</h2>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-left">
-            <p className="text-sm text-red-800 font-semibold mb-2">Hata Detayı:</p>
-            <p className="text-sm text-red-700 whitespace-pre-wrap">{mainError}</p>
-            {troubleshooting.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-red-200">
-                <p className="text-sm text-red-800 font-semibold mb-2">Çözüm Önerileri:</p>
-                <ul className="text-sm text-red-700 list-disc list-inside space-y-1">
-                  {troubleshooting.map((item, index) => (
-                    <li key={index}>{item.replace(/^\d+\.\s*/, '')}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 text-left">
-            <p className="text-sm text-yellow-800 font-semibold mb-2">Kontrol Adımları:</p>
-            <ol className="text-sm text-yellow-700 list-decimal list-inside space-y-1 mb-3">
-              <li>Vercel Dashboard → Proje → Settings → Environment Variables</li>
-              <li><code className="bg-yellow-100 px-1 rounded">WHEREBY_API_KEY</code> değişkeninin var olduğunu kontrol edin</li>
-              <li>Değişkeni düzenleyip <strong>Production, Preview, Development</strong> seçeneklerinin işaretli olduğundan emin olun</li>
-              <li>Değişken adının tam olarak <code className="bg-yellow-100 px-1 rounded">WHEREBY_API_KEY</code> olduğunu kontrol edin (büyük/küçük harf önemli)</li>
-              <li>Deploy'u yeniden yapın (Deployments → Redeploy veya yeni commit push)</li>
-            </ol>
-            <div className="mt-3 pt-3 border-t border-yellow-200">
-              <a
-                href="/api/whereby/debug"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-blue-600 hover:text-blue-700 underline"
-              >
-                🔍 Environment Variable'ları kontrol et (Debug Endpoint)
-              </a>
-            </div>
-          </div>
+        <div className="text-center">
+          <Video className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Geçersiz Oda</h2>
+          <p className="text-gray-600 mb-6">Randevu odası bulunamadı.</p>
           <Link
             href="/dashboard"
             className="inline-flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
@@ -220,16 +106,27 @@ function VideoConferenceContent() {
     )
   }
 
-  if (!roomName || !roomUrl) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Oda yükleniyor...</p>
-        </div>
-      </div>
-    )
-  }
+  // Build Jitsi Meet URL with configuration
+  // meet.jit.si is free and doesn't require any API key
+  const jitsiConfig = new URLSearchParams({
+    'userInfo.displayName': userName,
+    'config.prejoinPageEnabled': 'false',
+    'config.startWithAudioMuted': 'false',
+    'config.startWithVideoMuted': 'false',
+    'config.disableDeepLinking': 'true',
+    'interfaceConfig.SHOW_JITSI_WATERMARK': 'false',
+    'interfaceConfig.SHOW_WATERMARK_FOR_GUESTS': 'false',
+    'interfaceConfig.DEFAULT_BACKGROUND': '#1a1a1a',
+    'interfaceConfig.TOOLBAR_BUTTONS': JSON.stringify([
+      'microphone', 'camera', 'closedcaptions', 'desktop', 'fullscreen',
+      'fodeviceselection', 'hangup', 'chat', 'recording',
+      'livestreaming', 'etherpad', 'settings', 'raisehand',
+      'videoquality', 'filmstrip', 'feedback', 'stats', 'shortcuts',
+      'tileview', 'download', 'help', 'mute-everyone'
+    ])
+  })
+
+  const jitsiUrl = `https://meet.jit.si/${jitsiRoomName}#${jitsiConfig.toString()}`
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -252,25 +149,30 @@ function VideoConferenceContent() {
               )}
             </div>
           </div>
-          <div className="text-gray-400 text-sm">
-            Oda: {roomName}
+          <div className="flex items-center space-x-4">
+            <div className="text-gray-400 text-sm">
+              {isDoctor ? '👨‍⚕️ Doktor' : '👤 Hasta'}
+            </div>
+            <div className="text-gray-500 text-xs">
+              Oda: {jitsiRoomName}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Whereby Video Conference */}
+      {/* Jitsi Meet Video Conference */}
       <div className="h-[calc(100vh-80px)] w-full">
         <iframe
           ref={iframeRef}
-          src={roomUrl}
-          allow="camera; microphone; fullscreen; speaker; display-capture; autoplay"
+          src={jitsiUrl}
+          allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
           allowFullScreen
           style={{
             width: '100%',
             height: '100%',
             border: 'none'
           }}
-          title="Whereby Video Conference"
+          title="Jitsi Meet Video Conference"
         />
       </div>
     </div>
