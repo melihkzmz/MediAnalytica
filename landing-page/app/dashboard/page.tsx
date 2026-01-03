@@ -20,6 +20,27 @@ type DiseaseType = 'skin' | 'bone' | 'lung'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 
                'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
 
+// Helper function to map skin disease abbreviations to full Turkish names
+const getSkinDiseaseName = (className: string): string => {
+  const skinDiseaseMap: { [key: string]: string } = {
+    'akiec': 'Aktinik Keratoz',
+    'bcc': 'Bazal Hücreli Karsinom',
+    'bkl': 'İyi Huylu Keratoz',
+    'mel': 'Melanom',
+    'nv': 'Melanositik Nevüs (Ben)'
+  }
+  return skinDiseaseMap[className.toLowerCase()] || className
+}
+
+// Helper function to format disease class name based on disease type
+const formatDiseaseClassName = (className: string, diseaseType: string | null | undefined): string => {
+  if (!className) return 'Bilinmiyor'
+  if (diseaseType === 'skin') {
+    return getSkinDiseaseName(className)
+  }
+  return className
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -661,17 +682,17 @@ export default function DashboardPage() {
     try {
       const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
-      
-      // Query all approved appointments assigned to this doctor
+
+      // Query all approved and completed appointments assigned to this doctor
       const appointmentsRef = collection(db, 'appointments')
       const q = query(
         appointmentsRef,
-        where('status', '==', 'approved'),
-        where('doctorId', '==', user.uid)
+        where('doctorId', '==', user.uid),
+        where('status', 'in', ['approved', 'completed'])
       )
-      
+
       const querySnapshot = await getDocs(q)
-      
+
       // Get unique patient IDs
       const patientIds = new Set<string>()
       querySnapshot.docs.forEach(doc => {
@@ -1802,7 +1823,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-600 mb-1">Tahmin Edilen Hastalık</p>
-                        <h4 className="text-2xl font-bold text-gray-900">{analysisResult.prediction}</h4>
+                        <h4 className="text-2xl font-bold text-gray-900">{formatDiseaseClassName(analysisResult.prediction, selectedDisease)}</h4>
                       </div>
                     </div>
                     <div className="bg-white rounded-xl p-6 shadow-sm">
@@ -2066,7 +2087,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-xs font-medium text-gray-500 mb-1">Tahmin Edilen</p>
                           <h3 className="text-lg font-bold text-gray-900 line-clamp-1">
-                            {analysis.topPrediction || 'Bilinmiyor'}
+                            {formatDiseaseClassName(analysis.topPrediction, analysis.diseaseType)}
                           </h3>
                         </div>
 
@@ -2078,7 +2099,7 @@ export default function DashboardPage() {
                               {analysis.results.slice(0, 2).map((result: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between">
                                   <span className="text-xs text-gray-600 truncate flex-1 mr-2">
-                                    {result.class || 'Bilinmiyor'}
+                                    {formatDiseaseClassName(result.class, analysis.diseaseType)}
                                   </span>
                                   <div className="flex items-center space-x-2">
                                     <div className="w-16 bg-gray-200 rounded-full h-1.5">
@@ -2223,7 +2244,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-xs font-medium text-gray-500 mb-1">Tahmin Edilen</p>
                           <h3 className="text-lg font-bold text-gray-900 line-clamp-1">
-                            {favorite.analysis?.topPrediction || 'Bilinmiyor'}
+                            {formatDiseaseClassName(favorite.analysis?.topPrediction, favorite.analysis?.diseaseType)}
                           </h3>
                         </div>
 
@@ -2235,7 +2256,7 @@ export default function DashboardPage() {
                               {favorite.analysis.results.slice(0, 2).map((result: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between">
                                   <span className="text-xs text-gray-600 truncate flex-1 mr-2">
-                                    {result.class || 'Bilinmiyor'}
+                                    {formatDiseaseClassName(result.class, favorite.analysis?.diseaseType)}
                                   </span>
                                   <div className="flex items-center space-x-2">
                                     <div className="w-16 bg-gray-200 rounded-full h-1.5">
@@ -2491,7 +2512,7 @@ export default function DashboardPage() {
                     <div>
                       <p className="font-semibold text-gray-900 mb-1">Randevu Süreci</p>
                       <p className="text-sm text-gray-600">
-                        Randevu talebiniz alındıktan sonra, en kısa sürede size dönüş yapılacak ve randevu onaylandığında e-posta ile bilgilendirileceksiniz.
+                        Randevu talebiniz alındıktan sonra, en kısa sürede size dönüş yapılacak.
                       </p>
                     </div>
                   </div>

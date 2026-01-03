@@ -16,6 +16,27 @@ import Link from 'next/link'
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment'
 
+// Helper function to map skin disease abbreviations to full Turkish names
+const getSkinDiseaseName = (className: string): string => {
+  const skinDiseaseMap: { [key: string]: string } = {
+    'akiec': 'Aktinik Keratoz',
+    'bcc': 'Bazal Hücreli Karsinom',
+    'bkl': 'İyi Huylu Keratoz',
+    'mel': 'Melanom',
+    'nv': 'Melanositik Nevüs (Ben)'
+  }
+  return skinDiseaseMap[className.toLowerCase()] || className
+}
+
+// Helper function to format disease class name based on disease type
+const formatDiseaseClassName = (className: string, diseaseType: string | null): string => {
+  if (!className) return 'Bilinmiyor'
+  if (diseaseType === 'skin') {
+    return getSkinDiseaseName(className)
+  }
+  return className
+}
+
 export default function AnalyzePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -750,7 +771,7 @@ export default function AnalyzePage() {
                   <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-xl p-6">
                     <div className="flex items-center space-x-3 mb-3">
                       <CheckCircle2 className="w-6 h-6 text-green-600" />
-                      <span className="text-xl font-bold text-gray-900">Tahmin: {analysisResult.prediction}</span>
+                      <span className="text-xl font-bold text-gray-900">Tahmin: {formatDiseaseClassName(analysisResult.prediction, selectedDisease)}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="flex-1 bg-white rounded-lg p-3">
@@ -786,7 +807,7 @@ export default function AnalyzePage() {
                                 {index + 1}
                               </div>
                               <div>
-                                <p className="font-semibold text-gray-900">{item.class || item.className}</p>
+                                <p className="font-semibold text-gray-900">{formatDiseaseClassName(item.class || item.className, selectedDisease)}</p>
                                 {item.description && (
                                   <p className="text-sm text-gray-600">{item.description}</p>
                                 )}
