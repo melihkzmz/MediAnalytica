@@ -763,26 +763,24 @@ export default function DashboardPage() {
   const joinAppointment = async (appointmentId: string) => {
     if (!user) return
     try {
-      const token = await user.getIdToken()
-      const apiUrl = config.apiUrl || 'http://localhost:5001'
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
       
-      const response = await fetch(`${apiUrl}/api/appointments/${appointmentId}/join`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        // Open Jitsi Meet in a new window
-        window.open(data.jitsiUrl, '_blank', 'width=1280,height=720')
-        showToast('Görüntülü görüşme açılıyor...', 'success')
-      } else {
-        showToast(data.error || 'Görüntülü görüşmeye katılırken hata oluştu.', 'error')
+      const appointmentRef = doc(db, 'appointments', appointmentId)
+      const appointmentDoc = await getDoc(appointmentRef)
+      
+      if (!appointmentDoc.exists()) {
+        showToast('Randevu bulunamadı.', 'error')
+        return
       }
+      
+      const appointmentData = appointmentDoc.data()
+      const jitsiRoom = appointmentData.jitsiRoom || `medianalytica-${appointmentId}`
+      const jitsiUrl = `https://meet.jit.si/${jitsiRoom}`
+      
+      // Open Jitsi Meet in a new window
+      window.open(jitsiUrl, '_blank', 'width=1280,height=720')
+      showToast('Görüntülü görüşme açılıyor...', 'success')
     } catch (error) {
       console.error('Error joining appointment:', error)
       showToast('Görüntülü görüşmeye katılırken hata oluştu.', 'error')
@@ -792,33 +790,43 @@ export default function DashboardPage() {
   const completeAppointment = async (appointmentId: string) => {
     if (!user) return
     try {
-      const token = await user.getIdToken()
-      const apiUrl = config.apiUrl || 'http://localhost:5001'
-      
       // Optional: Ask for completion note
       const note = prompt('Tamamlanma notu (opsiyonel):')
       if (note === null) return // User cancelled
 
-      const response = await fetch(`${apiUrl}/api/doctors/appointments/${appointmentId}/complete`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          note: note || ''
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        showToast('Randevu tamamlandı olarak işaretlendi!', 'success')
-        loadMyAppointments()
-        loadAppointmentHistory()
-      } else {
-        showToast(data.error || 'Randevu tamamlanırken hata oluştu.', 'error')
+      const { doc, updateDoc, serverTimestamp, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      const appointmentRef = doc(db, 'appointments', appointmentId)
+      const appointmentDoc = await getDoc(appointmentRef)
+      
+      if (!appointmentDoc.exists()) {
+        showToast('Randevu bulunamadı.', 'error')
+        return
       }
+      
+      const appointmentData = appointmentDoc.data()
+      
+      // Check if appointment is approved (only approved appointments can be completed)
+      if (appointmentData.status !== 'approved') {
+        showToast('Sadece onaylanmış randevular tamamlanabilir.', 'error')
+        return
+      }
+      
+      const updateData: any = {
+        status: 'completed',
+        updatedAt: serverTimestamp()
+      }
+      
+      if (note) {
+        updateData.completionNote = note
+      }
+      
+      await updateDoc(appointmentRef, updateData)
+      
+      showToast('Randevu tamamlandı olarak işaretlendi!', 'success')
+      loadMyAppointments()
+      loadAppointmentHistory()
     } catch (error) {
       console.error('Error completing appointment:', error)
       showToast('Randevu tamamlanırken hata oluştu.', 'error')
