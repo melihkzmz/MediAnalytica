@@ -527,14 +527,22 @@ export default function LoginPage() {
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
                         Uzmanlık Alanı <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={specialty}
                         onChange={(e) => setSpecialty(e.target.value)}
                         required
                         className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none transition-all bg-gray-50 focus:bg-white"
-                        placeholder="Örn: Kardiyoloji, Dermatoloji, Ortopedi"
-                      />
+                      >
+                        <option value="">Uzmanlık seçiniz</option>
+                        <option value="dermatolog">Dermatolog</option>
+                        <option value="ortopedist">Ortopedist</option>
+                        <option value="gogus-hast">Göğüs Hastalıkları Uzmanı</option>
+                        <option value="goz-hast">Göz Hastalıkları Uzmanı</option>
+                        <option value="genel-cerrahi">Genel Cerrahi</option>
+                        <option value="ic-hastaliklari">İç Hastalıkları</option>
+                        <option value="noroloji">Nöroloji</option>
+                        <option value="kardiyoloji">Kardiyoloji</option>
+                      </select>
                     </div>
 
                     {/* Phone */}
