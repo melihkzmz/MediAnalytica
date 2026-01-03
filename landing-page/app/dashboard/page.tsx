@@ -1872,7 +1872,7 @@ export default function DashboardPage() {
                                 {index + 1}
                               </div>
                               <div>
-                                <p className="font-bold text-lg text-gray-900 mb-1">{item.class || item.className}</p>
+                                <p className="font-bold text-lg text-gray-900 mb-1">{formatDiseaseClassName(item.class || item.className, selectedDisease)}</p>
                                 {item.description && (
                                   <p className="text-sm text-gray-600">{item.description}</p>
                                 )}
