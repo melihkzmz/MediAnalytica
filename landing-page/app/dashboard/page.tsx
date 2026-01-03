@@ -749,6 +749,7 @@ export default function DashboardPage() {
       
       await updateDoc(doc(db, 'appointments', appointmentId), {
         status: 'rejected',
+        doctorId: user.uid,
         updatedAt: serverTimestamp()
       })
       
