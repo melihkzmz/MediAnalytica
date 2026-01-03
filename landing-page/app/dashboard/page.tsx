@@ -2096,18 +2096,6 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         )}
-
-                        {/* View Button */}
-                        <button
-                          onClick={() => {
-                            setCurrentSection('analyze')
-                            window.location.hash = 'analyze'
-                          }}
-                          className="w-full mt-4 bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 text-blue-600 py-2.5 rounded-xl font-semibold transition-all border border-blue-200 hover:border-blue-300 flex items-center justify-center space-x-2"
-                        >
-                          <FileText className="w-4 h-4" />
-                          <span>Detayları Gör</span>
-                        </button>
                       </div>
                     </div>
                   ))}
