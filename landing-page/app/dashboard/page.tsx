@@ -10,7 +10,7 @@ import {
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
-  Clock, Calendar, Users, AlertCircle
+  Clock, Calendar, Users, AlertCircle, CheckCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
@@ -441,9 +441,9 @@ export default function DashboardPage() {
         
         showToast('Favorilere eklendi!', 'success')
         loadFavorites()
-      } catch (error) {
+    } catch (error) {
         console.error('Error adding to favorites:', error)
-        showToast('Favorilere eklenirken hata oluştu.', 'error')
+      showToast('Favorilere eklenirken hata oluştu.', 'error')
       }
     }
   }
@@ -457,8 +457,8 @@ export default function DashboardPage() {
       // Remove from favorites collection
       await deleteDoc(doc(db, 'favorites', favoriteId))
       
-      showToast('Favorilerden kaldırıldı!', 'success')
-      loadFavorites()
+        showToast('Favorilerden kaldırıldı!', 'success')
+        loadFavorites()
     } catch (error) {
       console.error('Error removing from favorites:', error)
       showToast('Favorilerden kaldırılırken hata oluştu.', 'error')
@@ -605,15 +605,12 @@ export default function DashboardPage() {
       const { collection, query, where, orderBy, getDocs, doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
       
-      const today = new Date().toISOString().split('T')[0]
-      
-      // Query approved appointments assigned to this doctor, past dates
+      // Query completed and rejected appointments assigned to this doctor
       const appointmentsRef = collection(db, 'appointments')
       const q = query(
         appointmentsRef,
-        where('status', '==', 'approved'),
+        where('status', 'in', ['completed', 'rejected']),
         where('doctorId', '==', user.uid),
-        where('date', '<', today),
         orderBy('date', 'desc'),
         orderBy('time', 'desc')
       )
@@ -760,6 +757,71 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error rejecting appointment:', error)
       showToast('Randevu reddedilirken hata oluştu.', 'error')
+    }
+  }
+
+  const joinAppointment = async (appointmentId: string) => {
+    if (!user) return
+    try {
+      const token = await user.getIdToken()
+      const apiUrl = config.apiUrl || 'http://localhost:5001'
+      
+      const response = await fetch(`${apiUrl}/api/appointments/${appointmentId}/join`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        // Open Jitsi Meet in a new window
+        window.open(data.jitsiUrl, '_blank', 'width=1280,height=720')
+        showToast('Görüntülü görüşme açılıyor...', 'success')
+      } else {
+        showToast(data.error || 'Görüntülü görüşmeye katılırken hata oluştu.', 'error')
+      }
+    } catch (error) {
+      console.error('Error joining appointment:', error)
+      showToast('Görüntülü görüşmeye katılırken hata oluştu.', 'error')
+    }
+  }
+
+  const completeAppointment = async (appointmentId: string) => {
+    if (!user) return
+    try {
+      const token = await user.getIdToken()
+      const apiUrl = config.apiUrl || 'http://localhost:5001'
+      
+      // Optional: Ask for completion note
+      const note = prompt('Tamamlanma notu (opsiyonel):')
+      if (note === null) return // User cancelled
+
+      const response = await fetch(`${apiUrl}/api/doctors/appointments/${appointmentId}/complete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          note: note || ''
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        showToast('Randevu tamamlandı olarak işaretlendi!', 'success')
+        loadMyAppointments()
+        loadAppointmentHistory()
+      } else {
+        showToast(data.error || 'Randevu tamamlanırken hata oluştu.', 'error')
+      }
+    } catch (error) {
+      console.error('Error completing appointment:', error)
+      showToast('Randevu tamamlanırken hata oluştu.', 'error')
     }
   }
 
@@ -1149,12 +1211,12 @@ export default function DashboardPage() {
         }
       } else {
         // Localhost fallback (for development)
-        const apiPorts: { [key: string]: string } = {
-          'bone': '5002',
-          'skin': '5003',
+      const apiPorts: { [key: string]: string } = {
+        'bone': '5002',
+        'skin': '5003',
           'lung': '5004',
           'eye': '5005'
-        }
+      }
         apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
         console.warn('[API] Using localhost (HF Space not configured):', apiUrl)
         console.warn('[API] Reason - useHuggingFaceSpace:', config.useHuggingFaceSpace, 'hfSpaceUrl:', config.hfSpaceUrl)
@@ -1216,8 +1278,8 @@ export default function DashboardPage() {
             prediction: result.prediction.class || result.prediction.className || 'Bilinmiyor',
             confidence: result.prediction.confidence || 0,
             top_3: result.top_3 || [],
-            gradcam: result.gradcam || null,
-            fullData: result
+          gradcam: result.gradcam || null,
+          fullData: result
           }
         } else {
           // Priority 3: prediction is a string (new HF Space format)
@@ -1286,17 +1348,17 @@ export default function DashboardPage() {
       const analysisData = {
         userId: user.uid,
         userEmail: user.email,
-        diseaseType: diseaseType,
-        results: results.top_3 && results.top_3.length > 0 
-          ? results.top_3.map((item: any) => ({
-              class: item.class || item.className,
-              confidence: item.confidence || item.probability
-            }))
-          : [{
-              class: results.prediction,
-              confidence: results.confidence
-            }],
-        topPrediction: results.prediction,
+          diseaseType: diseaseType,
+          results: results.top_3 && results.top_3.length > 0 
+            ? results.top_3.map((item: any) => ({
+                class: item.class || item.className,
+                confidence: item.confidence || item.probability
+              }))
+            : [{
+                class: results.prediction,
+                confidence: results.confidence
+              }],
+          topPrediction: results.prediction,
         topConfidence: results.confidence,
         imageUrl: imageUrl,
         gradcamUrl: results.gradcam || null,
@@ -1395,26 +1457,26 @@ export default function DashboardPage() {
               ) : (
                 // Patient tabs
                 [
-                  { id: 'analyze', label: 'Analiz Yap' },
-                  { id: 'history', label: 'Analiz Geçmişi' },
-                  { id: 'favorites', label: 'Favoriler' },
-                  { id: 'stats', label: 'İstatistikler' },
-                  { id: 'appointment', label: 'Randevu Talep' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentSection(item.id as Section)
-                      window.location.hash = item.id
-                    }}
-                    className={`px-4 py-2 rounded-xl transition-colors ${
-                      currentSection === item.id
-                        ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
+                { id: 'analyze', label: 'Analiz Yap' },
+                { id: 'history', label: 'Analiz Geçmişi' },
+                { id: 'favorites', label: 'Favoriler' },
+                { id: 'stats', label: 'İstatistikler' },
+                { id: 'appointment', label: 'Randevu Talep' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setCurrentSection(item.id as Section)
+                    window.location.hash = item.id
+                  }}
+                  className={`px-4 py-2 rounded-xl transition-colors ${
+                    currentSection === item.id
+                      ? 'bg-blue-50 text-blue-600 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {item.label}
+                </button>
                 ))
               )}
             </div>
@@ -1507,27 +1569,27 @@ export default function DashboardPage() {
                 ) : (
                   // Patient tabs
                   [
-                    { id: 'analyze', label: 'Analiz Yap' },
-                    { id: 'history', label: 'Analiz Geçmişi' },
-                    { id: 'favorites', label: 'Favoriler' },
-                    { id: 'stats', label: 'İstatistikler' },
-                    { id: 'appointment', label: 'Randevu Talep' },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentSection(item.id as Section)
-                        window.location.hash = item.id
-                        setMobileMenuOpen(false)
-                      }}
-                      className={`px-4 py-2 rounded-xl text-left transition-colors ${
-                        currentSection === item.id
-                          ? 'bg-blue-50 text-blue-600 font-medium'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
+                  { id: 'analyze', label: 'Analiz Yap' },
+                  { id: 'history', label: 'Analiz Geçmişi' },
+                  { id: 'favorites', label: 'Favoriler' },
+                  { id: 'stats', label: 'İstatistikler' },
+                  { id: 'appointment', label: 'Randevu Talep' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentSection(item.id as Section)
+                      window.location.hash = item.id
+                      setMobileMenuOpen(false)
+                    }}
+                    className={`px-4 py-2 rounded-xl text-left transition-colors ${
+                      currentSection === item.id
+                        ? 'bg-blue-50 text-blue-600 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
                   ))
                 )}
               </div>
@@ -1842,17 +1904,17 @@ export default function DashboardPage() {
                     {currentAnalysisId && (() => {
                       const { isFavorite } = isAnalysisFavorite(currentAnalysisId)
                       return (
-                        <button
+                      <button
                           onClick={() => toggleFavorite(currentAnalysisId)}
                           className={`flex-1 py-4 rounded-2xl font-bold transition-all flex items-center justify-center space-x-2 border-2 hover:shadow-lg transform hover:scale-[1.02] ${
                             isFavorite
                               ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white border-red-600 hover:border-red-700'
                               : 'bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 text-red-600 border-red-200 hover:border-red-300'
                           }`}
-                        >
+                      >
                           <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
                           <span>{isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}</span>
-                        </button>
+                      </button>
                       )
                     })()}
                     <button
@@ -1936,7 +1998,7 @@ export default function DashboardPage() {
                           {(() => {
                             const { isFavorite } = isAnalysisFavorite(analysis.id)
                             return (
-                              <button
+                          <button
                                 onClick={() => toggleFavorite(analysis.id)}
                                 title={isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
                                 className={`absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all shadow-lg opacity-0 group-hover:opacity-100 ${
@@ -1944,9 +2006,9 @@ export default function DashboardPage() {
                                     ? 'text-red-500 hover:text-red-600 hover:bg-white'
                                     : 'text-gray-400 hover:text-red-500 hover:bg-white'
                                 }`}
-                              >
+                          >
                                 <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
-                              </button>
+                          </button>
                             )
                           })()}
                         </div>
@@ -1983,9 +2045,9 @@ export default function DashboardPage() {
                                 return 'Tarih yok'
                               }
                               return date.toLocaleDateString('tr-TR', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric'
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
                               })
                             })() : 'Tarih yok'}
                           </span>
@@ -2152,8 +2214,8 @@ export default function DashboardPage() {
                                   return 'Tarih yok'
                                 }
                                 return date.toLocaleDateString('tr-TR', {
-                                  day: 'numeric',
-                                  month: 'short'
+                                day: 'numeric',
+                                month: 'short'
                                 })
                               })()}
                             </span>
@@ -2604,6 +2666,22 @@ export default function DashboardPage() {
                               </span>
                             </div>
                           </div>
+                          <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                            <button
+                              onClick={() => joinAppointment(appointment.id)}
+                              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                            >
+                              <Video className="w-5 h-5" />
+                              <span>Görüntülü Görüşmeye Katıl</span>
+                            </button>
+                            <button
+                              onClick={() => completeAppointment(appointment.id)}
+                              className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                            >
+                              <CheckCircle className="w-5 h-5" />
+                              <span>Tamamlandı Olarak İşaretle</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2659,8 +2737,12 @@ export default function DashboardPage() {
                               <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-                                Tamamlandı
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                appointment.status === 'completed' 
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                                {appointment.status === 'completed' ? 'Tamamlandı' : 'Reddedildi'}
                               </span>
                             </div>
                           </div>
