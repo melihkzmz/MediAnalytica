@@ -2699,13 +2699,6 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 mt-4">
                             <button
-                              onClick={() => joinAppointment(appointment.id)}
-                              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
-                            >
-                              <Video className="w-5 h-5" />
-                              <span>Görüntülü Görüşmeye Katıl</span>
-                            </button>
-                            <button
                               onClick={() => completeAppointment(appointment.id)}
                               className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
                             >
