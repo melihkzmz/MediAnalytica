@@ -693,25 +693,38 @@ export default function DashboardPage() {
 
       const querySnapshot = await getDocs(q)
 
-      // Get unique patient IDs
-      const patientIds = new Set<string>()
+      // Group appointments by patient ID and collect statistics
+      const patientAppointmentsMap = new Map<string, any[]>()
       querySnapshot.docs.forEach(doc => {
         const data = doc.data()
         if (data.userId) {
-          patientIds.add(data.userId)
+          if (!patientAppointmentsMap.has(data.userId)) {
+            patientAppointmentsMap.set(data.userId, [])
+          }
+          patientAppointmentsMap.get(data.userId)!.push(data)
         }
       })
       
-      // Fetch patient data
+      // Fetch patient data with appointment statistics
       const patientsData = await Promise.all(
-        Array.from(patientIds).map(async (patientId) => {
+        Array.from(patientAppointmentsMap.entries()).map(async ([patientId, appointments]) => {
           try {
             const userRef = doc(db, 'users', patientId)
             const userDoc = await getDoc(userRef)
             if (userDoc.exists()) {
+              // Get appointment statistics
+              const totalAppointments = appointments.length
+              const lastAppointment = appointments
+                .map(apt => apt.date)
+                .filter(date => date)
+                .sort()
+                .reverse()[0] || null
+              
               return {
                 id: patientId,
-                ...userDoc.data()
+                ...userDoc.data(),
+                totalAppointments,
+                lastAppointment
               }
             }
           } catch (error) {
@@ -2792,7 +2805,7 @@ export default function DashboardPage() {
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {myPatients.map((patient: any) => (
                     <div key={patient.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 mb-4">
                         <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
                           <User className="w-6 h-6 text-white" />
                         </div>
@@ -2802,6 +2815,20 @@ export default function DashboardPage() {
                           </h3>
                           <p className="text-sm text-gray-600">{patient.email}</p>
                         </div>
+                      </div>
+                      <div className="space-y-2 pt-4 border-t border-gray-100">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Toplam Randevu:</span>
+                          <span className="text-sm font-semibold text-gray-900">{patient.totalAppointments || 0}</span>
+                        </div>
+                        {patient.lastAppointment && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">Son Randevu:</span>
+                            <span className="text-sm font-medium text-gray-700">
+                              {new Date(patient.lastAppointment).toLocaleDateString('tr-TR')}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
