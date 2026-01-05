@@ -21,7 +21,9 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       // Users can read/update their own user document
-      allow read, write: if isOwner(userId);
+      // Doctors can read user documents (needed for "my patients" section)
+      allow read: if isOwner(userId) || isDoctor();
+      allow write: if isOwner(userId);
     }
     
     // Doctors Collection
@@ -45,31 +47,49 @@ service cloud.firestore {
                        request.resource.data.status == 'pending';
       
       // Update rules: 
-      // 1. Doctors can approve/reject pending appointments (sets doctorId, status, approvedAt)
-      // 2. Doctors can complete approved appointments assigned to them
-      allow update: if isAuthenticated() && isDoctor() && (
-        // Case 1: Updating pending appointment (approve/reject) - must set doctorId to current user
+      // 1. Patients can update jitsiRoom field on their own pending appointments (right after creation)
+      // 2. Doctors can approve/reject pending appointments (sets doctorId, status, approvedAt)
+      // 3. Doctors can complete approved appointments assigned to them
+      allow update: if isAuthenticated() && (
+        // Case 1: Patients can update jitsiRoom on their own pending appointments
         (resource.data.status == 'pending' && 
+         resource.data.userId == request.auth.uid &&
+         request.resource.data.status == 'pending' &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType) ||
+        // Case 2: Doctors can approve/reject pending appointments (sets doctorId, status, approvedAt)
+        (isDoctor() && 
+         resource.data.status == 'pending' && 
          request.resource.data.status in ['approved', 'rejected'] &&
-         request.resource.data.doctorId == request.auth.uid) ||
-        // Case 2: Updating approved appointment to completed (must be assigned to current doctor)
-        (resource.data.status == 'approved' && 
+         request.resource.data.doctorId == request.auth.uid &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType) ||
+        // Case 3: Doctors can complete approved appointments assigned to them
+        (isDoctor() && 
+         resource.data.status == 'approved' && 
          resource.data.doctorId == request.auth.uid &&
-         request.resource.data.status == 'completed')
-      ) && (
-        // Protect immutable fields
-        request.resource.data.userId == resource.data.userId &&
-        request.resource.data.userEmail == resource.data.userEmail &&
-        request.resource.data.date == resource.data.date &&
-        request.resource.data.time == resource.data.time &&
-        request.resource.data.reason == resource.data.reason &&
-        request.resource.data.doctorType == resource.data.doctorType
+         request.resource.data.status == 'completed' &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType)
       );
     }
     
     // Analyses Collection
     match /analyses/{analysisId} {
-      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
     }
     
     // Favorites Collection
