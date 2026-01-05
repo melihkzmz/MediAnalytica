@@ -1127,9 +1127,10 @@ def approve_reject_appointment(appointment_id):
             'updatedAt': firestore.SERVER_TIMESTAMP
         }
         
-        # Onaylandıysa approvedAt timestamp'i ekle
+        # Onaylandıysa approvedAt timestamp'i ve doctorId ekle
         if action == 'approve':
             update_data['approvedAt'] = firestore.SERVER_TIMESTAMP
+            update_data['doctorId'] = uid  # Doktor ID'sini ekle (hastalarım bölümü için gerekli)
         
         if note:
             update_data['doctorNote'] = note
