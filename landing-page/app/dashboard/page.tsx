@@ -32,11 +32,27 @@ const getSkinDiseaseName = (className: string): string => {
   return skinDiseaseMap[className.toLowerCase()] || className
 }
 
+// Brain tumor labels: matches EfficientNetB3 4-class model (glioma, meningioma, no_tumor, pituitary).
+const getBrainDiseaseName = (className: string): string => {
+  const key = className.toLowerCase().replace(/-/g, '_')
+  const brainMap: { [key: string]: string } = {
+    glioma: 'Glioma',
+    meningioma: 'Meningioma',
+    no_tumor: 'Tümör Yok',
+    notumor: 'Tümör Yok',
+    pituitary: 'Hipofiz Tümörü'
+  }
+  return brainMap[key] || className
+}
+
 // Helper function to format disease class name based on disease type
 const formatDiseaseClassName = (className: string, diseaseType: string | null | undefined): string => {
   if (!className) return 'Bilinmiyor'
   if (diseaseType === 'skin') {
     return getSkinDiseaseName(className)
+  }
+  if (diseaseType === 'brain') {
+    return getBrainDiseaseName(className)
   }
   return className
 }

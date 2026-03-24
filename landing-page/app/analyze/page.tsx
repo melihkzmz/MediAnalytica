@@ -28,11 +28,27 @@ const getSkinDiseaseName = (className: string): string => {
   return skinDiseaseMap[className.toLowerCase()] || className
 }
 
+// Brain tumor labels: matches 4-class EfficientNetB3 model (glioma, meningioma, no_tumor, pituitary).
+const getBrainDiseaseName = (className: string): string => {
+  const key = className.toLowerCase().replace(/-/g, '_')
+  const brainMap: { [key: string]: string } = {
+    glioma: 'Glioma',
+    meningioma: 'Meningioma',
+    no_tumor: 'Tümör Yok',
+    notumor: 'Tümör Yok',
+    pituitary: 'Hipofiz Tümörü'
+  }
+  return brainMap[key] || className
+}
+
 // Helper function to format disease class name based on disease type
-const formatDiseaseClassName = (className: string, diseaseType: string | null): string => {
+const formatDiseaseClassName = (className: string, diseaseType: string | null | undefined): string => {
   if (!className) return 'Bilinmiyor'
   if (diseaseType === 'skin') {
     return getSkinDiseaseName(className)
+  }
+  if (diseaseType === 'brain') {
+    return getBrainDiseaseName(className)
   }
   return className
 }
@@ -924,7 +940,7 @@ export default function AnalyzePage() {
                             </span>
                           </div>
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                            Tahmin: {analysis.topPrediction || 'Bilinmiyor'}
+                            Tahmin: {formatDiseaseClassName(analysis.topPrediction || '', analysis.diseaseType)}
                           </h3>
                           {analysis.imageUrl && (
                             <img src={analysis.imageUrl} alt="Analysis" className="w-32 h-32 object-cover rounded-lg" />
@@ -982,7 +998,10 @@ export default function AnalyzePage() {
                             </span>
                           </div>
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                            {favorite.analysis?.topPrediction || 'Bilinmiyor'}
+                            {formatDiseaseClassName(
+                              favorite.analysis?.topPrediction || '',
+                              favorite.analysis?.diseaseType
+                            )}
                           </h3>
                         </div>
                         <button

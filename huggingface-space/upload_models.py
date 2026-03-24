@@ -36,9 +36,9 @@ MODELS_TO_UPLOAD = {
         'description': 'EfficientNetB3 model for eye disease detection (4 classes, OCT)'
     },
     'brain': {
-        'local_path': '../Skin-Disease-Classifier/models/brain_3class_densenet121_macro_f1_savedmodel',
+        'local_path': '../Skin-Disease-Classifier/models/brain_resplit_4class_efficientnetb3_macro_f1_savedmodel',
         'repo_name': f'{REPO_PREFIX}-brain-model',
-        'description': 'DenseNet121 model for brain disease detection (3 classes)'
+        'description': 'EfficientNetB3 model for brain tumor classification (4 classes: glioma, meningioma, no_tumor, pituitary)'
     }
 }
 

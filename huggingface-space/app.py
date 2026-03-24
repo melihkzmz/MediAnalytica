@@ -113,16 +113,19 @@ MODELS = {
     },
     'brain': {
         'hf_repo': f'{HF_USERNAME}/{REPO_PREFIX}-brain-model',
-        'path': 'models/brain_3class_densenet121_macro_f1_savedmodel',
-        'path_alt': 'models/brain_3class_densenet121_macro_f1.keras',
-        'img_size': (384, 384),
-        'classes': ['no-tumor', 'lgg', 'hgg'],
+        'path': 'models/brain_resplit_4class_efficientnetb3_macro_f1_savedmodel',
+        'path_alt': 'models/brain_resplit_4class_efficientnetb3_macro_f1.keras',
+        # Class order must match training (ImageDataGenerator folder sort: glioma, meningioma, no_tumor, pituitary).
+        'img_size': (300, 300),
+        'classes': ['glioma', 'meningioma', 'no_tumor', 'pituitary'],
         'classes_tr': {
-            'no-tumor': 'Tumor Yok',
-            'lgg': 'Dusuk Dereceli Gliom',
-            'hgg': 'Yuksek Dereceli Gliom'
+            'glioma': 'Glioma',
+            'meningioma': 'Meningioma',
+            'no_tumor': 'Tumor Yok',
+            'pituitary': 'Hipofiz Tumoru'
         },
-        'preprocess': 'densenet',
+        'preprocess': 'efficientnet',
+        'uncertainty_threshold': 0.60,
         'model': None
     }
 }
@@ -204,7 +207,18 @@ def preprocess_image(image, disease_type):
     config = MODELS[disease_type]
     img_size = config['img_size']
     preprocess_type = config['preprocess']
-    
+
+    if preprocess_type == 'brain_zscore':
+        # Brain model is trained with grayscale + per-image z-score normalization.
+        img = image.convert('L').resize(img_size)
+        img_array = np.array(img).astype(np.float32)
+        mean = float(np.mean(img_array))
+        std = float(np.std(img_array))
+        img_array = (img_array - mean) / (std + 1e-8)
+        img_array = np.stack([img_array, img_array, img_array], axis=-1)
+        img_array = np.expand_dims(img_array, axis=0)
+        return img_array
+
     # Resize
     image = image.resize(img_size)
     img_array = np.array(image)
@@ -440,7 +454,7 @@ def predict(disease_type):
     
     try:
         # Load and preprocess image
-        image = Image.open(io.BytesIO(file.read())).convert('RGB')
+        image = Image.open(io.BytesIO(file.read()))
         processed_image = preprocess_image(image, disease_type)
         
         # Predict
@@ -480,14 +494,20 @@ def predict(disease_type):
             })
         
         results.sort(key=lambda x: x['confidence'], reverse=True)
+        top_conf = results[0]["confidence"]
+        threshold = config.get('uncertainty_threshold')
+        is_uncertain = bool(threshold is not None and top_conf < float(threshold))
         
         return jsonify({
             "success": True,
             "disease_type": disease_type,
             "prediction": results[0]["class"],
             "prediction_tr": results[0]["class_tr"],
-            "confidence": results[0]["confidence"],
+            "confidence": top_conf,
             "confidence_percentage": results[0]["percentage"],
+            "uncertain": is_uncertain,
+            "uncertainty_threshold": threshold,
+            "message": "Uncertain input" if is_uncertain else None,
             "top_3": results[:3],
             "all_predictions": results
         })
