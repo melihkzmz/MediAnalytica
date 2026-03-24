@@ -31,9 +31,14 @@ MODELS_TO_UPLOAD = {
         'description': 'DenseNet121 model for lung disease detection (3 classes: COVID-19, Non-COVID, Normal)'
     },
     'eye': {
-        'local_path': '../Skin-Disease-Classifier/models/eye_disease_model.keras',
+        'local_path': '../Skin-Disease-Classifier/models/eye_new_oct_4class_efficientnetb3_macro_f1_savedmodel',
         'repo_name': f'{REPO_PREFIX}-eye-model',
-        'description': 'EfficientNetB3 model for eye disease detection (9 classes)'
+        'description': 'EfficientNetB3 model for eye disease detection (4 classes, OCT)'
+    },
+    'brain': {
+        'local_path': '../Skin-Disease-Classifier/models/brain_3class_densenet121_macro_f1_savedmodel',
+        'repo_name': f'{REPO_PREFIX}-brain-model',
+        'description': 'DenseNet121 model for brain disease detection (3 classes)'
     }
 }
 

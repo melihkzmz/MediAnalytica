@@ -3,7 +3,7 @@
 """
 MediAnalytica - Combined Disease Detection API
 Hugging Face Spaces Deployment
-Supports: Skin, Bone, Lung, Eye Disease Detection
+Supports: Skin, Bone, Lung, Eye, Brain Disease Detection
 """
 
 import os
@@ -98,23 +98,31 @@ MODELS = {
     },
     'eye': {
         'hf_repo': f'{HF_USERNAME}/{REPO_PREFIX}-eye-model',
-        'path': 'models/eye_disease_model.keras',
-        'path_alt': 'models/eye_disease_model_5class_improved.keras',
-        'img_size': (224, 224),
-        'classes': ['Diabetic_Retinopathy', 'Disc_Edema', 'Glaucoma', 'Macular_Scar', 
-                   'Myopia', 'Normal', 'Pterygium', 'Retinal_Detachment', 'Retinitis_Pigmentosa'],
+        'path': 'models/eye_new_oct_4class_efficientnetb3_macro_f1_savedmodel',
+        'path_alt': 'models/eye_disease_model.keras',
+        'img_size': (300, 300),
+        'classes': ['CNV', 'DME', 'DRUSEN', 'NORMAL'],
         'classes_tr': {
-            'Diabetic_Retinopathy': 'Diyabetik Retinopati',
-            'Disc_Edema': 'Disk Ödemi',
-            'Glaucoma': 'Glokom',
-            'Macular_Scar': 'Maküla Skarı',
-            'Myopia': 'Miyopi',
-            'Normal': 'Normal',
-            'Pterygium': 'Pterijyum',
-            'Retinal_Detachment': 'Retina Dekolmanı',
-            'Retinitis_Pigmentosa': 'Retinitis Pigmentosa'
+            'CNV': 'Koroidal Neovaskularizasyon',
+            'DME': 'Diyabetik Makula Odemi',
+            'DRUSEN': 'Drusen',
+            'NORMAL': 'Normal'
         },
-        'preprocess': 'simple',
+        'preprocess': 'efficientnet',
+        'model': None
+    },
+    'brain': {
+        'hf_repo': f'{HF_USERNAME}/{REPO_PREFIX}-brain-model',
+        'path': 'models/brain_3class_densenet121_macro_f1_savedmodel',
+        'path_alt': 'models/brain_3class_densenet121_macro_f1.keras',
+        'img_size': (384, 384),
+        'classes': ['no-tumor', 'lgg', 'hgg'],
+        'classes_tr': {
+            'no-tumor': 'Tumor Yok',
+            'lgg': 'Dusuk Dereceli Gliom',
+            'hgg': 'Yuksek Dereceli Gliom'
+        },
+        'preprocess': 'densenet',
         'model': None
     }
 }
@@ -222,6 +230,10 @@ def preprocess_image(image, disease_type):
         img_array = img_array.astype(np.float32)
         img_array = np.expand_dims(img_array, axis=0)
         img_array = efficientnet_preprocess(img_array)
+    elif preprocess_type == 'densenet':
+        img_array = img_array.astype(np.float32)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = densenet_preprocess(img_array)
     else:  # simple - for eye
         img_array = img_array.astype(np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
@@ -378,7 +390,7 @@ def home():
         "endpoints": {
             "GET /": "API status",
             "GET /health": "Health check",
-            "POST /predict/<disease_type>": "Predict disease (skin, bone, lung, eye)",
+            "POST /predict/<disease_type>": "Predict disease (skin, bone, lung, eye, brain)",
             "GET /classes/<disease_type>": "Get class names"
         }
     })
@@ -451,9 +463,14 @@ def predict(disease_type):
         # Format results
         classes = config['classes']
         classes_tr = config['classes_tr']
+        num_outputs = int(predictions.shape[1]) if len(predictions.shape) > 1 else len(classes)
+        labels = list(classes)
+        if len(labels) != num_outputs:
+            print(f"[WARNING] {disease_type}: class count mismatch (labels={len(labels)}, outputs={num_outputs}). Using fallback labels.")
+            labels = [f"class_{i}" for i in range(num_outputs)]
         
         results = []
-        for i, class_name in enumerate(classes):
+        for i, class_name in enumerate(labels):
             conf = float(predictions[0][i])
             results.append({
                 "class": class_name,
