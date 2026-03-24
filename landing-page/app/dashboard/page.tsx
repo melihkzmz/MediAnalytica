@@ -16,7 +16,7 @@ import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
 import { isAppointmentTime } from '@/lib/appointmentUtils'
 
-type DiseaseType = 'skin' | 'bone' | 'lung'
+type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 
                'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
 
@@ -908,7 +908,9 @@ export default function DashboardPage() {
       const diseaseLabels: { [key: string]: string } = {
         'skin': 'Deri',
         'bone': 'Kemik',
-        'lung': 'Akciğer'
+        'lung': 'Akciğer',
+        'eye': 'Göz',
+        'brain': 'Beyin'
       }
 
       const diseaseLabel = diseaseLabels[selectedDisease] || selectedDisease
@@ -1257,8 +1259,9 @@ export default function DashboardPage() {
       const apiPorts: { [key: string]: string } = {
         'bone': '5002',
         'skin': '5003',
-          'lung': '5004',
-          'eye': '5005'
+        'lung': '5004',
+        'eye': '5005',
+        'brain': '5006'
       }
         apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
         console.warn('[API] Using localhost (HF Space not configured):', apiUrl)
@@ -1283,9 +1286,10 @@ export default function DashboardPage() {
               'bone': '5002',
               'skin': '5003',
               'lung': '5004',
-              'eye': '5005'
+              'eye': '5005',
+              'brain': '5006'
             }
-            throw new Error(`Backend API servisi çalışmıyor. Lütfen ${apiPorts[selectedDisease]} portunda çalışan ${selectedDisease === 'bone' ? 'kemik' : selectedDisease === 'skin' ? 'deri' : selectedDisease === 'lung' ? 'akciğer' : 'göz'} hastalıkları API servisini başlatın. Veya Hugging Face Space kullanmak için NEXT_PUBLIC_USE_HF_SPACE ve NEXT_PUBLIC_HF_SPACE_URL environment variable'larını ayarlayın.`)
+            throw new Error(`Backend API servisi çalışmıyor. Lütfen ${apiPorts[selectedDisease]} portunda çalışan ${selectedDisease === 'bone' ? 'kemik' : selectedDisease === 'skin' ? 'deri' : selectedDisease === 'lung' ? 'akciğer' : selectedDisease === 'eye' ? 'göz' : 'beyin'} hastalıkları API servisini başlatın. Veya Hugging Face Space kullanmak için NEXT_PUBLIC_USE_HF_SPACE ve NEXT_PUBLIC_HF_SPACE_URL environment variable'larını ayarlayın.`)
           }
         }
         throw fetchError
@@ -1451,6 +1455,8 @@ export default function DashboardPage() {
     { value: 'skin', label: 'Deri Hastalıkları', icon: '✨' },
     { value: 'bone', label: 'Kemik Hastalıkları', icon: '🦴' },
     { value: 'lung', label: 'Akciğer Hastalıkları', icon: '🫁' },
+    { value: 'eye', label: 'Göz Hastalıkları', icon: '👁️' },
+    { value: 'brain', label: 'Beyin Hastalıkları', icon: '🧠' },
   ]
 
   return (
@@ -1701,7 +1707,7 @@ export default function DashboardPage() {
                   </span>
                 </h1>
                 <p className="text-base text-gray-600 max-w-2xl mx-auto">
-                  Deri, kemik ve akciğer hastalıklarını tespit eden gelişmiş yapay zeka teknolojisi ile sağlığınızı koruyun.
+                  Deri, kemik, akciğer, göz ve beyin hastalıklarını tespit eden gelişmiş yapay zeka teknolojisi ile sağlığınızı koruyun.
                 </p>
               </div>
               
@@ -1714,7 +1720,7 @@ export default function DashboardPage() {
                   </label>
                 </div>
                 <div className="flex justify-center">
-                  <div className="grid grid-cols-3 gap-4 max-w-2xl w-full">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 max-w-4xl w-full">
                     {diseaseOptions.map((option) => (
                       <button
                         key={option.value}
@@ -2065,11 +2071,15 @@ export default function DashboardPage() {
                             analysis.diseaseType === 'skin' ? 'bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700' :
                             analysis.diseaseType === 'bone' ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700' :
                             analysis.diseaseType === 'lung' ? 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700' :
+                            analysis.diseaseType === 'eye' ? 'bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700' :
+                            analysis.diseaseType === 'brain' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700' :
                             'bg-gray-100 text-gray-700'
                           }`}>
                             {analysis.diseaseType === 'skin' ? '✨ Deri' :
                              analysis.diseaseType === 'bone' ? '🦴 Kemik' :
-                             analysis.diseaseType === 'lung' ? '🫁 Akciğer' : analysis.diseaseType}
+                             analysis.diseaseType === 'lung' ? '🫁 Akciğer' :
+                             analysis.diseaseType === 'eye' ? '👁️ Göz' :
+                             analysis.diseaseType === 'brain' ? '🧠 Beyin' : analysis.diseaseType}
                           </span>
                           <span className="text-xs text-gray-500 font-medium">
                             {analysis.createdAt ? (() => {
@@ -2220,11 +2230,15 @@ export default function DashboardPage() {
                             favorite.analysis?.diseaseType === 'skin' ? 'bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700' :
                             favorite.analysis?.diseaseType === 'bone' ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700' :
                             favorite.analysis?.diseaseType === 'lung' ? 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700' :
+                            favorite.analysis?.diseaseType === 'eye' ? 'bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700' :
+                            favorite.analysis?.diseaseType === 'brain' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700' :
                             'bg-gray-100 text-gray-700'
                           }`}>
                             {favorite.analysis?.diseaseType === 'skin' ? '✨ Deri' :
                              favorite.analysis?.diseaseType === 'bone' ? '🦴 Kemik' :
-                             favorite.analysis?.diseaseType === 'lung' ? '🫁 Akciğer' : favorite.analysis?.diseaseType || 'Bilinmiyor'}
+                             favorite.analysis?.diseaseType === 'lung' ? '🫁 Akciğer' :
+                             favorite.analysis?.diseaseType === 'eye' ? '👁️ Göz' :
+                             favorite.analysis?.diseaseType === 'brain' ? '🧠 Beyin' : favorite.analysis?.diseaseType || 'Bilinmiyor'}
                           </span>
                           {favorite.analysis?.createdAt && (
                             <span className="text-xs text-gray-500 font-medium">
@@ -2407,6 +2421,38 @@ export default function DashboardPage() {
                         {stats.totalAnalyses ? `${((stats.diseaseCounts?.lung || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
                       </div>
                     </div>
+
+                    {/* Eye Analyses */}
+                    <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-6 shadow-lg border-2 border-teal-200 hover:shadow-xl transition-all transform hover:scale-105 group">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                          <span className="text-2xl">👁️</span>
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-600 mb-1">Göz Analizleri</div>
+                      <div className="text-4xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                        {stats.diseaseCounts?.eye || 0}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.eye || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
+                      </div>
+                    </div>
+
+                    {/* Brain Analyses */}
+                    <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-2xl p-6 shadow-lg border-2 border-purple-200 hover:shadow-xl transition-all transform hover:scale-105 group">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-fuchsia-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                          <span className="text-2xl">🧠</span>
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-600 mb-1">Beyin Analizleri</div>
+                      <div className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
+                        {stats.diseaseCounts?.brain || 0}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.brain || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
+                      </div>
+                    </div>
                   </div>
 
 
@@ -2425,7 +2471,9 @@ export default function DashboardPage() {
                             <div className="text-3xl font-bold">
                               {stats.mostAnalyzed === 'skin' ? '✨ Deri Hastalıkları' :
                                stats.mostAnalyzed === 'bone' ? '🦴 Kemik Hastalıkları' :
-                               stats.mostAnalyzed === 'lung' ? '🫁 Akciğer Hastalıkları' : stats.mostAnalyzed}
+                               stats.mostAnalyzed === 'lung' ? '🫁 Akciğer Hastalıkları' :
+                               stats.mostAnalyzed === 'eye' ? '👁️ Göz Hastalıkları' :
+                               stats.mostAnalyzed === 'brain' ? '🧠 Beyin Hastalıkları' : stats.mostAnalyzed}
                             </div>
                           </div>
                         </div>
