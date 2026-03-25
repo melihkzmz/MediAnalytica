@@ -10,15 +10,52 @@ import {
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
-  Clock, Calendar, Users, AlertCircle
+  Clock, Calendar, Users, AlertCircle, CheckCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
 import { isAppointmentTime } from '@/lib/appointmentUtils'
 
-type DiseaseType = 'skin' | 'bone' | 'lung'
+type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 
                'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
+
+// Helper function to map skin disease abbreviations to full Turkish names
+const getSkinDiseaseName = (className: string): string => {
+  const skinDiseaseMap: { [key: string]: string } = {
+    'akiec': 'Aktinik Keratoz',
+    'bcc': 'Bazal Hücreli Karsinom',
+    'bkl': 'İyi Huylu Keratoz',
+    'mel': 'Melanom',
+    'nv': 'Melanositik Nevüs (Ben)'
+  }
+  return skinDiseaseMap[className.toLowerCase()] || className
+}
+
+// Brain tumor labels: matches EfficientNetB3 4-class model (glioma, meningioma, no_tumor, pituitary).
+const getBrainDiseaseName = (className: string): string => {
+  const key = className.toLowerCase().replace(/-/g, '_')
+  const brainMap: { [key: string]: string } = {
+    glioma: 'Glioma',
+    meningioma: 'Meningioma',
+    no_tumor: 'Tümör Yok',
+    notumor: 'Tümör Yok',
+    pituitary: 'Hipofiz Tümörü'
+  }
+  return brainMap[key] || className
+}
+
+// Helper function to format disease class name based on disease type
+const formatDiseaseClassName = (className: string, diseaseType: string | null | undefined): string => {
+  if (!className) return 'Bilinmiyor'
+  if (diseaseType === 'skin') {
+    return getSkinDiseaseName(className)
+  }
+  if (diseaseType === 'brain') {
+    return getBrainDiseaseName(className)
+  }
+  return className
+}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -441,9 +478,9 @@ export default function DashboardPage() {
         
         showToast('Favorilere eklendi!', 'success')
         loadFavorites()
-      } catch (error) {
+    } catch (error) {
         console.error('Error adding to favorites:', error)
-        showToast('Favorilere eklenirken hata oluştu.', 'error')
+      showToast('Favorilere eklenirken hata oluştu.', 'error')
       }
     }
   }
@@ -457,8 +494,8 @@ export default function DashboardPage() {
       // Remove from favorites collection
       await deleteDoc(doc(db, 'favorites', favoriteId))
       
-      showToast('Favorilerden kaldırıldı!', 'success')
-      loadFavorites()
+        showToast('Favorilerden kaldırıldı!', 'success')
+        loadFavorites()
     } catch (error) {
       console.error('Error removing from favorites:', error)
       showToast('Favorilerden kaldırılırken hata oluştu.', 'error')
@@ -605,15 +642,12 @@ export default function DashboardPage() {
       const { collection, query, where, orderBy, getDocs, doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
       
-      const today = new Date().toISOString().split('T')[0]
-      
-      // Query approved appointments assigned to this doctor, past dates
+      // Query completed and rejected appointments assigned to this doctor
       const appointmentsRef = collection(db, 'appointments')
       const q = query(
         appointmentsRef,
-        where('status', '==', 'approved'),
+        where('status', 'in', ['completed', 'rejected']),
         where('doctorId', '==', user.uid),
-        where('date', '<', today),
         orderBy('date', 'desc'),
         orderBy('time', 'desc')
       )
@@ -664,36 +698,49 @@ export default function DashboardPage() {
     try {
       const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
-      
-      // Query all approved appointments assigned to this doctor
+
+      // Query all approved and completed appointments assigned to this doctor
       const appointmentsRef = collection(db, 'appointments')
       const q = query(
         appointmentsRef,
-        where('status', '==', 'approved'),
-        where('doctorId', '==', user.uid)
+        where('doctorId', '==', user.uid),
+        where('status', 'in', ['approved', 'completed'])
       )
-      
+
       const querySnapshot = await getDocs(q)
-      
-      // Get unique patient IDs
-      const patientIds = new Set<string>()
+
+      // Group appointments by patient ID and collect statistics
+      const patientAppointmentsMap = new Map<string, any[]>()
       querySnapshot.docs.forEach(doc => {
         const data = doc.data()
         if (data.userId) {
-          patientIds.add(data.userId)
+          if (!patientAppointmentsMap.has(data.userId)) {
+            patientAppointmentsMap.set(data.userId, [])
+          }
+          patientAppointmentsMap.get(data.userId)!.push(data)
         }
       })
       
-      // Fetch patient data
+      // Fetch patient data with appointment statistics
       const patientsData = await Promise.all(
-        Array.from(patientIds).map(async (patientId) => {
+        Array.from(patientAppointmentsMap.entries()).map(async ([patientId, appointments]) => {
           try {
             const userRef = doc(db, 'users', patientId)
             const userDoc = await getDoc(userRef)
             if (userDoc.exists()) {
+              // Get appointment statistics
+              const totalAppointments = appointments.length
+              const lastAppointment = appointments
+                .map(apt => apt.date)
+                .filter(date => date)
+                .sort()
+                .reverse()[0] || null
+              
               return {
                 id: patientId,
-                ...userDoc.data()
+                ...userDoc.data(),
+                totalAppointments,
+                lastAppointment
               }
             }
           } catch (error) {
@@ -752,6 +799,7 @@ export default function DashboardPage() {
       
       await updateDoc(doc(db, 'appointments', appointmentId), {
         status: 'rejected',
+        doctorId: user.uid,
         updatedAt: serverTimestamp()
       })
       
@@ -760,6 +808,79 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error rejecting appointment:', error)
       showToast('Randevu reddedilirken hata oluştu.', 'error')
+    }
+  }
+
+  const joinAppointment = async (appointmentId: string) => {
+    if (!user) return
+    try {
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      const appointmentRef = doc(db, 'appointments', appointmentId)
+      const appointmentDoc = await getDoc(appointmentRef)
+      
+      if (!appointmentDoc.exists()) {
+        showToast('Randevu bulunamadı.', 'error')
+        return
+      }
+      
+      const appointmentData = appointmentDoc.data()
+      const jitsiRoom = appointmentData.jitsiRoom || `medianalytica-${appointmentId}`
+      const jitsiUrl = `https://meet.jit.si/${jitsiRoom}`
+      
+      // Open Jitsi Meet in a new window
+      window.open(jitsiUrl, '_blank', 'width=1280,height=720')
+      showToast('Görüntülü görüşme açılıyor...', 'success')
+    } catch (error) {
+      console.error('Error joining appointment:', error)
+      showToast('Görüntülü görüşmeye katılırken hata oluştu.', 'error')
+    }
+  }
+
+  const completeAppointment = async (appointmentId: string) => {
+    if (!user) return
+    try {
+      // Optional: Ask for completion note
+      const note = prompt('Tamamlanma notu (opsiyonel):')
+      if (note === null) return // User cancelled
+
+      const { doc, updateDoc, serverTimestamp, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      
+      const appointmentRef = doc(db, 'appointments', appointmentId)
+      const appointmentDoc = await getDoc(appointmentRef)
+      
+      if (!appointmentDoc.exists()) {
+        showToast('Randevu bulunamadı.', 'error')
+        return
+      }
+      
+      const appointmentData = appointmentDoc.data()
+      
+      // Check if appointment is approved (only approved appointments can be completed)
+      if (appointmentData.status !== 'approved') {
+        showToast('Sadece onaylanmış randevular tamamlanabilir.', 'error')
+        return
+      }
+      
+      const updateData: any = {
+        status: 'completed',
+        updatedAt: serverTimestamp()
+      }
+      
+      if (note) {
+        updateData.completionNote = note
+      }
+      
+      await updateDoc(appointmentRef, updateData)
+      
+      showToast('Randevu tamamlandı olarak işaretlendi!', 'success')
+      loadMyAppointments()
+      loadAppointmentHistory()
+    } catch (error) {
+      console.error('Error completing appointment:', error)
+      showToast('Randevu tamamlanırken hata oluştu.', 'error')
     }
   }
 
@@ -803,7 +924,9 @@ export default function DashboardPage() {
       const diseaseLabels: { [key: string]: string } = {
         'skin': 'Deri',
         'bone': 'Kemik',
-        'lung': 'Akciğer'
+        'lung': 'Akciğer',
+        'eye': 'Göz',
+        'brain': 'Beyin'
       }
 
       const diseaseLabel = diseaseLabels[selectedDisease] || selectedDisease
@@ -1149,12 +1272,13 @@ export default function DashboardPage() {
         }
       } else {
         // Localhost fallback (for development)
-        const apiPorts: { [key: string]: string } = {
-          'bone': '5002',
-          'skin': '5003',
-          'lung': '5004',
-          'eye': '5005'
-        }
+      const apiPorts: { [key: string]: string } = {
+        'bone': '5002',
+        'skin': '5003',
+        'lung': '5004',
+        'eye': '5005',
+        'brain': '5006'
+      }
         apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
         console.warn('[API] Using localhost (HF Space not configured):', apiUrl)
         console.warn('[API] Reason - useHuggingFaceSpace:', config.useHuggingFaceSpace, 'hfSpaceUrl:', config.hfSpaceUrl)
@@ -1178,9 +1302,10 @@ export default function DashboardPage() {
               'bone': '5002',
               'skin': '5003',
               'lung': '5004',
-              'eye': '5005'
+              'eye': '5005',
+              'brain': '5006'
             }
-            throw new Error(`Backend API servisi çalışmıyor. Lütfen ${apiPorts[selectedDisease]} portunda çalışan ${selectedDisease === 'bone' ? 'kemik' : selectedDisease === 'skin' ? 'deri' : selectedDisease === 'lung' ? 'akciğer' : 'göz'} hastalıkları API servisini başlatın. Veya Hugging Face Space kullanmak için NEXT_PUBLIC_USE_HF_SPACE ve NEXT_PUBLIC_HF_SPACE_URL environment variable'larını ayarlayın.`)
+            throw new Error(`Backend API servisi çalışmıyor. Lütfen ${apiPorts[selectedDisease]} portunda çalışan ${selectedDisease === 'bone' ? 'kemik' : selectedDisease === 'skin' ? 'deri' : selectedDisease === 'lung' ? 'akciğer' : selectedDisease === 'eye' ? 'göz' : 'beyin'} hastalıkları API servisini başlatın. Veya Hugging Face Space kullanmak için NEXT_PUBLIC_USE_HF_SPACE ve NEXT_PUBLIC_HF_SPACE_URL environment variable'larını ayarlayın.`)
           }
         }
         throw fetchError
@@ -1216,8 +1341,8 @@ export default function DashboardPage() {
             prediction: result.prediction.class || result.prediction.className || 'Bilinmiyor',
             confidence: result.prediction.confidence || 0,
             top_3: result.top_3 || [],
-            gradcam: result.gradcam || null,
-            fullData: result
+          gradcam: result.gradcam || null,
+          fullData: result
           }
         } else {
           // Priority 3: prediction is a string (new HF Space format)
@@ -1286,17 +1411,17 @@ export default function DashboardPage() {
       const analysisData = {
         userId: user.uid,
         userEmail: user.email,
-        diseaseType: diseaseType,
-        results: results.top_3 && results.top_3.length > 0 
-          ? results.top_3.map((item: any) => ({
-              class: item.class || item.className,
-              confidence: item.confidence || item.probability
-            }))
-          : [{
-              class: results.prediction,
-              confidence: results.confidence
-            }],
-        topPrediction: results.prediction,
+          diseaseType: diseaseType,
+          results: results.top_3 && results.top_3.length > 0 
+            ? results.top_3.map((item: any) => ({
+                class: item.class || item.className,
+                confidence: item.confidence || item.probability
+              }))
+            : [{
+                class: results.prediction,
+                confidence: results.confidence
+              }],
+          topPrediction: results.prediction,
         topConfidence: results.confidence,
         imageUrl: imageUrl,
         gradcamUrl: results.gradcam || null,
@@ -1346,6 +1471,8 @@ export default function DashboardPage() {
     { value: 'skin', label: 'Deri Hastalıkları', icon: '✨' },
     { value: 'bone', label: 'Kemik Hastalıkları', icon: '🦴' },
     { value: 'lung', label: 'Akciğer Hastalıkları', icon: '🫁' },
+    { value: 'eye', label: 'Göz Hastalıkları', icon: '👁️' },
+    { value: 'brain', label: 'Beyin Hastalıkları', icon: '🧠' },
   ]
 
   return (
@@ -1395,26 +1522,26 @@ export default function DashboardPage() {
               ) : (
                 // Patient tabs
                 [
-                  { id: 'analyze', label: 'Analiz Yap' },
-                  { id: 'history', label: 'Analiz Geçmişi' },
-                  { id: 'favorites', label: 'Favoriler' },
-                  { id: 'stats', label: 'İstatistikler' },
-                  { id: 'appointment', label: 'Randevu Talep' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentSection(item.id as Section)
-                      window.location.hash = item.id
-                    }}
-                    className={`px-4 py-2 rounded-xl transition-colors ${
-                      currentSection === item.id
-                        ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
+                { id: 'analyze', label: 'Analiz Yap' },
+                { id: 'history', label: 'Analiz Geçmişi' },
+                { id: 'favorites', label: 'Favoriler' },
+                { id: 'stats', label: 'İstatistikler' },
+                { id: 'appointment', label: 'Randevu Talep' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setCurrentSection(item.id as Section)
+                    window.location.hash = item.id
+                  }}
+                  className={`px-4 py-2 rounded-xl transition-colors ${
+                    currentSection === item.id
+                      ? 'bg-blue-50 text-blue-600 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {item.label}
+                </button>
                 ))
               )}
             </div>
@@ -1507,27 +1634,27 @@ export default function DashboardPage() {
                 ) : (
                   // Patient tabs
                   [
-                    { id: 'analyze', label: 'Analiz Yap' },
-                    { id: 'history', label: 'Analiz Geçmişi' },
-                    { id: 'favorites', label: 'Favoriler' },
-                    { id: 'stats', label: 'İstatistikler' },
-                    { id: 'appointment', label: 'Randevu Talep' },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentSection(item.id as Section)
-                        window.location.hash = item.id
-                        setMobileMenuOpen(false)
-                      }}
-                      className={`px-4 py-2 rounded-xl text-left transition-colors ${
-                        currentSection === item.id
-                          ? 'bg-blue-50 text-blue-600 font-medium'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
+                  { id: 'analyze', label: 'Analiz Yap' },
+                  { id: 'history', label: 'Analiz Geçmişi' },
+                  { id: 'favorites', label: 'Favoriler' },
+                  { id: 'stats', label: 'İstatistikler' },
+                  { id: 'appointment', label: 'Randevu Talep' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentSection(item.id as Section)
+                      window.location.hash = item.id
+                      setMobileMenuOpen(false)
+                    }}
+                    className={`px-4 py-2 rounded-xl text-left transition-colors ${
+                      currentSection === item.id
+                        ? 'bg-blue-50 text-blue-600 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
                   ))
                 )}
               </div>
@@ -1596,7 +1723,7 @@ export default function DashboardPage() {
                   </span>
                 </h1>
                 <p className="text-base text-gray-600 max-w-2xl mx-auto">
-                  Deri, kemik ve akciğer hastalıklarını tespit eden gelişmiş yapay zeka teknolojisi ile sağlığınızı koruyun.
+                  Deri, kemik, akciğer, göz ve beyin hastalıklarını tespit eden gelişmiş yapay zeka teknolojisi ile sağlığınızı koruyun.
                 </p>
               </div>
               
@@ -1609,7 +1736,7 @@ export default function DashboardPage() {
                   </label>
                 </div>
                 <div className="flex justify-center">
-                  <div className="grid grid-cols-3 gap-4 max-w-2xl w-full">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 max-w-4xl w-full">
                     {diseaseOptions.map((option) => (
                       <button
                         key={option.value}
@@ -1731,7 +1858,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-600 mb-1">Tahmin Edilen Hastalık</p>
-                        <h4 className="text-2xl font-bold text-gray-900">{analysisResult.prediction}</h4>
+                        <h4 className="text-2xl font-bold text-gray-900">{formatDiseaseClassName(analysisResult.prediction, selectedDisease)}</h4>
                       </div>
                     </div>
                     <div className="bg-white rounded-xl p-6 shadow-sm">
@@ -1780,7 +1907,7 @@ export default function DashboardPage() {
                                 {index + 1}
                               </div>
                               <div>
-                                <p className="font-bold text-lg text-gray-900 mb-1">{item.class || item.className}</p>
+                                <p className="font-bold text-lg text-gray-900 mb-1">{formatDiseaseClassName(item.class || item.className, selectedDisease)}</p>
                                 {item.description && (
                                   <p className="text-sm text-gray-600">{item.description}</p>
                                 )}
@@ -1842,17 +1969,17 @@ export default function DashboardPage() {
                     {currentAnalysisId && (() => {
                       const { isFavorite } = isAnalysisFavorite(currentAnalysisId)
                       return (
-                        <button
+                      <button
                           onClick={() => toggleFavorite(currentAnalysisId)}
                           className={`flex-1 py-4 rounded-2xl font-bold transition-all flex items-center justify-center space-x-2 border-2 hover:shadow-lg transform hover:scale-[1.02] ${
                             isFavorite
                               ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white border-red-600 hover:border-red-700'
                               : 'bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 text-red-600 border-red-200 hover:border-red-300'
                           }`}
-                        >
+                      >
                           <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
                           <span>{isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}</span>
-                        </button>
+                      </button>
                       )
                     })()}
                     <button
@@ -1936,7 +2063,7 @@ export default function DashboardPage() {
                           {(() => {
                             const { isFavorite } = isAnalysisFavorite(analysis.id)
                             return (
-                              <button
+                          <button
                                 onClick={() => toggleFavorite(analysis.id)}
                                 title={isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
                                 className={`absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all shadow-lg opacity-0 group-hover:opacity-100 ${
@@ -1944,9 +2071,9 @@ export default function DashboardPage() {
                                     ? 'text-red-500 hover:text-red-600 hover:bg-white'
                                     : 'text-gray-400 hover:text-red-500 hover:bg-white'
                                 }`}
-                              >
+                          >
                                 <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
-                              </button>
+                          </button>
                             )
                           })()}
                         </div>
@@ -1960,11 +2087,15 @@ export default function DashboardPage() {
                             analysis.diseaseType === 'skin' ? 'bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700' :
                             analysis.diseaseType === 'bone' ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700' :
                             analysis.diseaseType === 'lung' ? 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700' :
+                            analysis.diseaseType === 'eye' ? 'bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700' :
+                            analysis.diseaseType === 'brain' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700' :
                             'bg-gray-100 text-gray-700'
                           }`}>
                             {analysis.diseaseType === 'skin' ? '✨ Deri' :
                              analysis.diseaseType === 'bone' ? '🦴 Kemik' :
-                             analysis.diseaseType === 'lung' ? '🫁 Akciğer' : analysis.diseaseType}
+                             analysis.diseaseType === 'lung' ? '🫁 Akciğer' :
+                             analysis.diseaseType === 'eye' ? '👁️ Göz' :
+                             analysis.diseaseType === 'brain' ? '🧠 Beyin' : analysis.diseaseType}
                           </span>
                           <span className="text-xs text-gray-500 font-medium">
                             {analysis.createdAt ? (() => {
@@ -1983,9 +2114,9 @@ export default function DashboardPage() {
                                 return 'Tarih yok'
                               }
                               return date.toLocaleDateString('tr-TR', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric'
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
                               })
                             })() : 'Tarih yok'}
                           </span>
@@ -1995,7 +2126,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-xs font-medium text-gray-500 mb-1">Tahmin Edilen</p>
                           <h3 className="text-lg font-bold text-gray-900 line-clamp-1">
-                            {analysis.topPrediction || 'Bilinmiyor'}
+                            {formatDiseaseClassName(analysis.topPrediction, analysis.diseaseType)}
                           </h3>
                         </div>
 
@@ -2007,7 +2138,7 @@ export default function DashboardPage() {
                               {analysis.results.slice(0, 2).map((result: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between">
                                   <span className="text-xs text-gray-600 truncate flex-1 mr-2">
-                                    {result.class || 'Bilinmiyor'}
+                                    {formatDiseaseClassName(result.class, analysis.diseaseType)}
                                   </span>
                                   <div className="flex items-center space-x-2">
                                     <div className="w-16 bg-gray-200 rounded-full h-1.5">
@@ -2025,18 +2156,6 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         )}
-
-                        {/* View Button */}
-                        <button
-                          onClick={() => {
-                            setCurrentSection('analyze')
-                            window.location.hash = 'analyze'
-                          }}
-                          className="w-full mt-4 bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 text-blue-600 py-2.5 rounded-xl font-semibold transition-all border border-blue-200 hover:border-blue-300 flex items-center justify-center space-x-2"
-                        >
-                          <FileText className="w-4 h-4" />
-                          <span>Detayları Gör</span>
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -2127,11 +2246,15 @@ export default function DashboardPage() {
                             favorite.analysis?.diseaseType === 'skin' ? 'bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700' :
                             favorite.analysis?.diseaseType === 'bone' ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700' :
                             favorite.analysis?.diseaseType === 'lung' ? 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700' :
+                            favorite.analysis?.diseaseType === 'eye' ? 'bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700' :
+                            favorite.analysis?.diseaseType === 'brain' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700' :
                             'bg-gray-100 text-gray-700'
                           }`}>
                             {favorite.analysis?.diseaseType === 'skin' ? '✨ Deri' :
                              favorite.analysis?.diseaseType === 'bone' ? '🦴 Kemik' :
-                             favorite.analysis?.diseaseType === 'lung' ? '🫁 Akciğer' : favorite.analysis?.diseaseType || 'Bilinmiyor'}
+                             favorite.analysis?.diseaseType === 'lung' ? '🫁 Akciğer' :
+                             favorite.analysis?.diseaseType === 'eye' ? '👁️ Göz' :
+                             favorite.analysis?.diseaseType === 'brain' ? '🧠 Beyin' : favorite.analysis?.diseaseType || 'Bilinmiyor'}
                           </span>
                           {favorite.analysis?.createdAt && (
                             <span className="text-xs text-gray-500 font-medium">
@@ -2152,8 +2275,8 @@ export default function DashboardPage() {
                                   return 'Tarih yok'
                                 }
                                 return date.toLocaleDateString('tr-TR', {
-                                  day: 'numeric',
-                                  month: 'short'
+                                day: 'numeric',
+                                month: 'short'
                                 })
                               })()}
                             </span>
@@ -2164,7 +2287,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-xs font-medium text-gray-500 mb-1">Tahmin Edilen</p>
                           <h3 className="text-lg font-bold text-gray-900 line-clamp-1">
-                            {favorite.analysis?.topPrediction || 'Bilinmiyor'}
+                            {formatDiseaseClassName(favorite.analysis?.topPrediction, favorite.analysis?.diseaseType)}
                           </h3>
                         </div>
 
@@ -2176,7 +2299,7 @@ export default function DashboardPage() {
                               {favorite.analysis.results.slice(0, 2).map((result: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between">
                                   <span className="text-xs text-gray-600 truncate flex-1 mr-2">
-                                    {result.class || 'Bilinmiyor'}
+                                    {formatDiseaseClassName(result.class, favorite.analysis?.diseaseType)}
                                   </span>
                                   <div className="flex items-center space-x-2">
                                     <div className="w-16 bg-gray-200 rounded-full h-1.5">
@@ -2314,6 +2437,38 @@ export default function DashboardPage() {
                         {stats.totalAnalyses ? `${((stats.diseaseCounts?.lung || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
                       </div>
                     </div>
+
+                    {/* Eye Analyses */}
+                    <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-6 shadow-lg border-2 border-teal-200 hover:shadow-xl transition-all transform hover:scale-105 group">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                          <span className="text-2xl">👁️</span>
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-600 mb-1">Göz Analizleri</div>
+                      <div className="text-4xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                        {stats.diseaseCounts?.eye || 0}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.eye || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
+                      </div>
+                    </div>
+
+                    {/* Brain Analyses */}
+                    <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-2xl p-6 shadow-lg border-2 border-purple-200 hover:shadow-xl transition-all transform hover:scale-105 group">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-fuchsia-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                          <span className="text-2xl">🧠</span>
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-gray-600 mb-1">Beyin Analizleri</div>
+                      <div className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
+                        {stats.diseaseCounts?.brain || 0}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.brain || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
+                      </div>
+                    </div>
                   </div>
 
 
@@ -2332,7 +2487,9 @@ export default function DashboardPage() {
                             <div className="text-3xl font-bold">
                               {stats.mostAnalyzed === 'skin' ? '✨ Deri Hastalıkları' :
                                stats.mostAnalyzed === 'bone' ? '🦴 Kemik Hastalıkları' :
-                               stats.mostAnalyzed === 'lung' ? '🫁 Akciğer Hastalıkları' : stats.mostAnalyzed}
+                               stats.mostAnalyzed === 'lung' ? '🫁 Akciğer Hastalıkları' :
+                               stats.mostAnalyzed === 'eye' ? '👁️ Göz Hastalıkları' :
+                               stats.mostAnalyzed === 'brain' ? '🧠 Beyin Hastalıkları' : stats.mostAnalyzed}
                             </div>
                           </div>
                         </div>
@@ -2432,7 +2589,7 @@ export default function DashboardPage() {
                     <div>
                       <p className="font-semibold text-gray-900 mb-1">Randevu Süreci</p>
                       <p className="text-sm text-gray-600">
-                        Randevu talebiniz alındıktan sonra, en kısa sürede size dönüş yapılacak ve randevu onaylandığında e-posta ile bilgilendirileceksiniz.
+                        Randevu talebiniz alındıktan sonra, en kısa sürede size dönüş yapılacak.
                       </p>
                     </div>
                   </div>
@@ -2604,6 +2761,15 @@ export default function DashboardPage() {
                               </span>
                             </div>
                           </div>
+                          <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                            <button
+                              onClick={() => completeAppointment(appointment.id)}
+                              className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                            >
+                              <CheckCircle className="w-5 h-5" />
+                              <span>Tamamlandı Olarak İşaretle</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2659,8 +2825,12 @@ export default function DashboardPage() {
                               <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-                                Tamamlandı
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                appointment.status === 'completed' 
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                                {appointment.status === 'completed' ? 'Tamamlandı' : 'Reddedildi'}
                               </span>
                             </div>
                           </div>
@@ -2692,7 +2862,7 @@ export default function DashboardPage() {
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {myPatients.map((patient: any) => (
                     <div key={patient.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 mb-4">
                         <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
                           <User className="w-6 h-6 text-white" />
                         </div>
@@ -2702,6 +2872,20 @@ export default function DashboardPage() {
                           </h3>
                           <p className="text-sm text-gray-600">{patient.email}</p>
                         </div>
+                      </div>
+                      <div className="space-y-2 pt-4 border-t border-gray-100">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Toplam Randevu:</span>
+                          <span className="text-sm font-semibold text-gray-900">{patient.totalAppointments || 0}</span>
+                        </div>
+                        {patient.lastAppointment && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">Son Randevu:</span>
+                            <span className="text-sm font-medium text-gray-700">
+                              {new Date(patient.lastAppointment).toLocaleDateString('tr-TR')}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

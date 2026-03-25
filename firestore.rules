@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is the owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function to check if user is a doctor (has doctor document)
+    function isDoctor() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/doctors/$(request.auth.uid));
+    }
+    
+    // Users Collection
+    match /users/{userId} {
+      // Users can read/update their own user document
+      // Doctors can read user documents (needed for "my patients" section)
+      allow read: if isOwner(userId) || isDoctor();
+      allow write: if isOwner(userId);
+    }
+    
+    // Doctors Collection
+    match /doctors/{doctorId} {
+      // Doctors can read/update their own doctor document
+      allow read, write: if isOwner(doctorId);
+    }
+    
+    // Appointments Collection
+    match /appointments/{appointmentId} {
+      // Read rules: Patients can read their own appointments, doctors can read all appointments
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.doctorId == request.auth.uid ||
+        isDoctor()
+      );
+      
+      // Create rules: Patients can create appointments (status must be 'pending')
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.status == 'pending';
+      
+      // Update rules: 
+      // 1. Patients can update jitsiRoom field on their own pending appointments (right after creation)
+      // 2. Doctors can approve/reject pending appointments (sets doctorId, status, approvedAt)
+      // 3. Doctors can complete approved appointments assigned to them
+      allow update: if isAuthenticated() && (
+        // Case 1: Patients can update jitsiRoom on their own pending appointments
+        (resource.data.status == 'pending' && 
+         resource.data.userId == request.auth.uid &&
+         request.resource.data.status == 'pending' &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType) ||
+        // Case 2: Doctors can approve/reject pending appointments (sets doctorId, status, approvedAt)
+        (isDoctor() && 
+         resource.data.status == 'pending' && 
+         request.resource.data.status in ['approved', 'rejected'] &&
+         request.resource.data.doctorId == request.auth.uid &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType) ||
+        // Case 3: Doctors can complete approved appointments assigned to them
+        (isDoctor() && 
+         resource.data.status == 'approved' && 
+         resource.data.doctorId == request.auth.uid &&
+         request.resource.data.status == 'completed' &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType)
+      );
+    }
+    
+    // Analyses Collection
+    match /analyses/{analysisId} {
+      allow read, update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Favorites Collection
+    match /favorites/{favoriteId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                       resource.data.userId == request.auth.uid;
+    }
+    
+    // Shared Analyses Collection
+    match /shared_analyses/{shareId} {
+      allow read: if true; // Public read (for shared links)
+      allow create: if isAuthenticated();
+    }
+  }
+}

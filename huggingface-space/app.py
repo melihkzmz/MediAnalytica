@@ -3,7 +3,7 @@
 """
 MediAnalytica - Combined Disease Detection API
 Hugging Face Spaces Deployment
-Supports: Skin, Bone, Lung, Eye Disease Detection
+Supports: Skin, Bone, Lung, Eye, Brain Disease Detection
 """
 
 import os
@@ -98,23 +98,34 @@ MODELS = {
     },
     'eye': {
         'hf_repo': f'{HF_USERNAME}/{REPO_PREFIX}-eye-model',
-        'path': 'models/eye_disease_model.keras',
-        'path_alt': 'models/eye_disease_model_5class_improved.keras',
-        'img_size': (224, 224),
-        'classes': ['Diabetic_Retinopathy', 'Disc_Edema', 'Glaucoma', 'Macular_Scar', 
-                   'Myopia', 'Normal', 'Pterygium', 'Retinal_Detachment', 'Retinitis_Pigmentosa'],
+        'path': 'models/eye_new_oct_4class_efficientnetb3_macro_f1_savedmodel',
+        'path_alt': 'models/eye_disease_model.keras',
+        'img_size': (300, 300),
+        'classes': ['CNV', 'DME', 'DRUSEN', 'NORMAL'],
         'classes_tr': {
-            'Diabetic_Retinopathy': 'Diyabetik Retinopati',
-            'Disc_Edema': 'Disk Ödemi',
-            'Glaucoma': 'Glokom',
-            'Macular_Scar': 'Maküla Skarı',
-            'Myopia': 'Miyopi',
-            'Normal': 'Normal',
-            'Pterygium': 'Pterijyum',
-            'Retinal_Detachment': 'Retina Dekolmanı',
-            'Retinitis_Pigmentosa': 'Retinitis Pigmentosa'
+            'CNV': 'Koroidal Neovaskularizasyon',
+            'DME': 'Diyabetik Makula Odemi',
+            'DRUSEN': 'Drusen',
+            'NORMAL': 'Normal'
         },
-        'preprocess': 'simple',
+        'preprocess': 'efficientnet',
+        'model': None
+    },
+    'brain': {
+        'hf_repo': f'{HF_USERNAME}/{REPO_PREFIX}-brain-model',
+        'path': 'models/brain_resplit_4class_efficientnetb3_macro_f1_savedmodel',
+        'path_alt': 'models/brain_resplit_4class_efficientnetb3_macro_f1.keras',
+        # Class order must match training (ImageDataGenerator folder sort: glioma, meningioma, no_tumor, pituitary).
+        'img_size': (300, 300),
+        'classes': ['glioma', 'meningioma', 'no_tumor', 'pituitary'],
+        'classes_tr': {
+            'glioma': 'Glioma',
+            'meningioma': 'Meningioma',
+            'no_tumor': 'Tumor Yok',
+            'pituitary': 'Hipofiz Tumoru'
+        },
+        'preprocess': 'efficientnet',
+        'uncertainty_threshold': 0.60,
         'model': None
     }
 }
@@ -196,7 +207,18 @@ def preprocess_image(image, disease_type):
     config = MODELS[disease_type]
     img_size = config['img_size']
     preprocess_type = config['preprocess']
-    
+
+    if preprocess_type == 'brain_zscore':
+        # Brain model is trained with grayscale + per-image z-score normalization.
+        img = image.convert('L').resize(img_size)
+        img_array = np.array(img).astype(np.float32)
+        mean = float(np.mean(img_array))
+        std = float(np.std(img_array))
+        img_array = (img_array - mean) / (std + 1e-8)
+        img_array = np.stack([img_array, img_array, img_array], axis=-1)
+        img_array = np.expand_dims(img_array, axis=0)
+        return img_array
+
     # Resize
     image = image.resize(img_size)
     img_array = np.array(image)
@@ -222,6 +244,10 @@ def preprocess_image(image, disease_type):
         img_array = img_array.astype(np.float32)
         img_array = np.expand_dims(img_array, axis=0)
         img_array = efficientnet_preprocess(img_array)
+    elif preprocess_type == 'densenet':
+        img_array = img_array.astype(np.float32)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = densenet_preprocess(img_array)
     else:  # simple - for eye
         img_array = img_array.astype(np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
@@ -378,7 +404,7 @@ def home():
         "endpoints": {
             "GET /": "API status",
             "GET /health": "Health check",
-            "POST /predict/<disease_type>": "Predict disease (skin, bone, lung, eye)",
+            "POST /predict/<disease_type>": "Predict disease (skin, bone, lung, eye, brain)",
             "GET /classes/<disease_type>": "Get class names"
         }
     })
@@ -428,7 +454,7 @@ def predict(disease_type):
     
     try:
         # Load and preprocess image
-        image = Image.open(io.BytesIO(file.read())).convert('RGB')
+        image = Image.open(io.BytesIO(file.read()))
         processed_image = preprocess_image(image, disease_type)
         
         # Predict
@@ -451,9 +477,14 @@ def predict(disease_type):
         # Format results
         classes = config['classes']
         classes_tr = config['classes_tr']
+        num_outputs = int(predictions.shape[1]) if len(predictions.shape) > 1 else len(classes)
+        labels = list(classes)
+        if len(labels) != num_outputs:
+            print(f"[WARNING] {disease_type}: class count mismatch (labels={len(labels)}, outputs={num_outputs}). Using fallback labels.")
+            labels = [f"class_{i}" for i in range(num_outputs)]
         
         results = []
-        for i, class_name in enumerate(classes):
+        for i, class_name in enumerate(labels):
             conf = float(predictions[0][i])
             results.append({
                 "class": class_name,
@@ -463,14 +494,20 @@ def predict(disease_type):
             })
         
         results.sort(key=lambda x: x['confidence'], reverse=True)
+        top_conf = results[0]["confidence"]
+        threshold = config.get('uncertainty_threshold')
+        is_uncertain = bool(threshold is not None and top_conf < float(threshold))
         
         return jsonify({
             "success": True,
             "disease_type": disease_type,
             "prediction": results[0]["class"],
             "prediction_tr": results[0]["class_tr"],
-            "confidence": results[0]["confidence"],
+            "confidence": top_conf,
             "confidence_percentage": results[0]["percentage"],
+            "uncertain": is_uncertain,
+            "uncertainty_threshold": threshold,
+            "message": "Uncertain input" if is_uncertain else None,
             "top_3": results[:3],
             "all_predictions": results
         })

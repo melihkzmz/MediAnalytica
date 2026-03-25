@@ -13,8 +13,45 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye'
+type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment'
+
+// Helper function to map skin disease abbreviations to full Turkish names
+const getSkinDiseaseName = (className: string): string => {
+  const skinDiseaseMap: { [key: string]: string } = {
+    'akiec': 'Aktinik Keratoz',
+    'bcc': 'Bazal Hücreli Karsinom',
+    'bkl': 'İyi Huylu Keratoz',
+    'mel': 'Melanom',
+    'nv': 'Melanositik Nevüs (Ben)'
+  }
+  return skinDiseaseMap[className.toLowerCase()] || className
+}
+
+// Brain tumor labels: matches 4-class EfficientNetB3 model (glioma, meningioma, no_tumor, pituitary).
+const getBrainDiseaseName = (className: string): string => {
+  const key = className.toLowerCase().replace(/-/g, '_')
+  const brainMap: { [key: string]: string } = {
+    glioma: 'Glioma',
+    meningioma: 'Meningioma',
+    no_tumor: 'Tümör Yok',
+    notumor: 'Tümör Yok',
+    pituitary: 'Hipofiz Tümörü'
+  }
+  return brainMap[key] || className
+}
+
+// Helper function to format disease class name based on disease type
+const formatDiseaseClassName = (className: string, diseaseType: string | null | undefined): string => {
+  if (!className) return 'Bilinmiyor'
+  if (diseaseType === 'skin') {
+    return getSkinDiseaseName(className)
+  }
+  if (diseaseType === 'brain') {
+    return getBrainDiseaseName(className)
+  }
+  return className
+}
 
 export default function AnalyzePage() {
   const router = useRouter()
@@ -379,7 +416,8 @@ export default function AnalyzePage() {
           'bone': '5002',
           'skin': '5003',
           'lung': '5004',
-          'eye': '5005'
+          'eye': '5005',
+          'brain': '5006'
         }
         apiUrl = `http://localhost:${apiPorts[selectedDisease]}/predict`
       }
@@ -548,6 +586,7 @@ export default function AnalyzePage() {
     { value: 'bone', label: 'Kemik Hastalıkları', icon: '🦴' },
     { value: 'lung', label: 'Akciğer Hastalıkları', icon: '🫁' },
     { value: 'eye', label: 'Göz Hastalıkları', icon: '👁️' },
+    { value: 'brain', label: 'Beyin Hastalıkları', icon: '🧠' },
   ]
 
   return (
@@ -668,7 +707,7 @@ export default function AnalyzePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-4">
                   Hastalık Türü Seçin
                 </label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   {diseaseOptions.map((option) => (
                     <button
                       key={option.value}
@@ -750,7 +789,7 @@ export default function AnalyzePage() {
                   <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-xl p-6">
                     <div className="flex items-center space-x-3 mb-3">
                       <CheckCircle2 className="w-6 h-6 text-green-600" />
-                      <span className="text-xl font-bold text-gray-900">Tahmin: {analysisResult.prediction}</span>
+                      <span className="text-xl font-bold text-gray-900">Tahmin: {formatDiseaseClassName(analysisResult.prediction, selectedDisease)}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="flex-1 bg-white rounded-lg p-3">
@@ -786,7 +825,7 @@ export default function AnalyzePage() {
                                 {index + 1}
                               </div>
                               <div>
-                                <p className="font-semibold text-gray-900">{item.class || item.className}</p>
+                                <p className="font-semibold text-gray-900">{formatDiseaseClassName(item.class || item.className, selectedDisease)}</p>
                                 {item.description && (
                                   <p className="text-sm text-gray-600">{item.description}</p>
                                 )}
@@ -877,7 +916,8 @@ export default function AnalyzePage() {
                               {analysis.diseaseType === 'skin' ? '✨ Deri' :
                                analysis.diseaseType === 'bone' ? '🦴 Kemik' :
                                analysis.diseaseType === 'lung' ? '🫁 Akciğer' :
-                               analysis.diseaseType === 'eye' ? '👁️ Göz' : analysis.diseaseType}
+                               analysis.diseaseType === 'eye' ? '👁️ Göz' :
+                               analysis.diseaseType === 'brain' ? '🧠 Beyin' : analysis.diseaseType}
                             </span>
                             <span className="text-sm text-gray-500">
                               {analysis.createdAt ? (() => {
@@ -900,7 +940,7 @@ export default function AnalyzePage() {
                             </span>
                           </div>
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                            Tahmin: {analysis.topPrediction || 'Bilinmiyor'}
+                            Tahmin: {formatDiseaseClassName(analysis.topPrediction || '', analysis.diseaseType)}
                           </h3>
                           {analysis.imageUrl && (
                             <img src={analysis.imageUrl} alt="Analysis" className="w-32 h-32 object-cover rounded-lg" />
@@ -953,11 +993,15 @@ export default function AnalyzePage() {
                               {favorite.analysis?.diseaseType === 'skin' ? '✨ Deri' :
                                favorite.analysis?.diseaseType === 'bone' ? '🦴 Kemik' :
                                favorite.analysis?.diseaseType === 'lung' ? '🫁 Akciğer' :
-                               favorite.analysis?.diseaseType === 'eye' ? '👁️ Göz' : favorite.analysis?.diseaseType}
+                               favorite.analysis?.diseaseType === 'eye' ? '👁️ Göz' :
+                               favorite.analysis?.diseaseType === 'brain' ? '🧠 Beyin' : favorite.analysis?.diseaseType}
                             </span>
                           </div>
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                            {favorite.analysis?.topPrediction || 'Bilinmiyor'}
+                            {formatDiseaseClassName(
+                              favorite.analysis?.topPrediction || '',
+                              favorite.analysis?.diseaseType
+                            )}
                           </h3>
                         </div>
                         <button
@@ -999,6 +1043,14 @@ export default function AnalyzePage() {
                     <div className="text-sm text-gray-600 mb-2">Akciğer Analizleri</div>
                     <div className="text-3xl font-bold text-orange-600">{stats.diseaseCounts?.lung || 0}</div>
                   </div>
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div className="text-sm text-gray-600 mb-2">Göz Analizleri</div>
+                    <div className="text-3xl font-bold text-cyan-600">{stats.diseaseCounts?.eye || 0}</div>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div className="text-sm text-gray-600 mb-2">Beyin Analizleri</div>
+                    <div className="text-3xl font-bold text-pink-600">{stats.diseaseCounts?.brain || 0}</div>
+                  </div>
                   {stats.mostAnalyzed && (
                     <div className="bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl p-6 text-white col-span-full">
                       <div className="text-sm opacity-90 mb-2">En Çok Analiz Edilen</div>
@@ -1006,7 +1058,8 @@ export default function AnalyzePage() {
                         {stats.mostAnalyzed === 'skin' ? '✨ Deri Hastalıkları' :
                          stats.mostAnalyzed === 'bone' ? '🦴 Kemik Hastalıkları' :
                          stats.mostAnalyzed === 'lung' ? '🫁 Akciğer Hastalıkları' :
-                         stats.mostAnalyzed === 'eye' ? '👁️ Göz Hastalıkları' : stats.mostAnalyzed}
+                         stats.mostAnalyzed === 'eye' ? '👁️ Göz Hastalıkları' :
+                         stats.mostAnalyzed === 'brain' ? '🧠 Beyin Hastalıkları' : stats.mostAnalyzed}
                       </div>
                     </div>
                   )}

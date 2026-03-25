@@ -22,7 +22,7 @@ export async function POST(
     }
 
     // Validate disease type
-    const validDiseases = ['skin', 'bone', 'lung', 'eye']
+    const validDiseases = ['skin', 'bone', 'lung', 'eye', 'brain']
     if (!validDiseases.includes(diseaseType)) {
       return NextResponse.json(
         { error: `Invalid disease type. Must be one of: ${validDiseases.join(', ')}` },
