@@ -3,9 +3,12 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { Microscope, ArrowLeft, User, Mail, Lock, Phone, GraduationCap, Stethoscope, FileText, Upload, Camera, CreditCard, Building2, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
+    const { login } = useAuth();
     const router = useRouter();
     const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
     const [role, setRole] = useState<'hasta' | 'doktor'>('hasta');
@@ -20,43 +23,40 @@ export default function LoginPage() {
         e.preventDefault();
 
         if (view === 'forgot') {
-            alert('Şifre sıfırlama bağlantısı e-posta adresinize başarıyla gönderildi.');
+            toast.success('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
             setView('login');
         } else if (view === 'login') {
-            // Seçilen role göre yalnızca o role ait kayıt listesini kontrol et
             const storeKey = role === 'hasta' ? 'registeredPatients' : 'registeredDoctors';
             const users = JSON.parse(localStorage.getItem(storeKey) || '[]');
             const user = users.find((u: { email: string; password: string; role: string }) => u.email === loginEmail && u.password === loginPassword);
             if (user) {
-                localStorage.setItem("isAuthenticated", "true");
-                localStorage.setItem("currentUser", JSON.stringify(user));
-                router.push(user.role === 'doktor' ? '/doctor-dashboard' : '/dashboard');
+                toast.success('Giriş başarılı! Yönlendiriliyorsunuz...');
+                login(user);
             } else {
-                alert(`Bu e-posta/şifre kombinasyonu ${role === 'hasta' ? 'hasta' : 'doktor'} hesaplarında bulunamadı. Hesabınız yoksa lütfen kayıt olun.`);
+                toast.error(`${role === 'hasta' ? 'Hasta' : 'Doktor'} hesabı bulunamadı. Lütfen bilgilerinizi kontrol edin.`);
             }
         } else if (view === 'register') {
             const storeKey = role === 'hasta' ? 'registeredPatients' : 'registeredDoctors';
             const users = JSON.parse(localStorage.getItem(storeKey) || '[]');
             const exists = users.find((u: { email: string }) => u.email === registerEmail);
             if (exists) {
-                alert('Bu e-posta adresi bu hesap türünde zaten kayıtlı.');
+                toast.error('Bu e-posta adresi zaten kayıtlı.');
                 return;
             }
             if (registerPassword.length < 5) {
-                alert('Şifreniz en az 5 karakter olmalıdır.');
+                toast.warning('Şifreniz en az 5 karakter olmalıdır.');
                 return;
             }
             if (registerName.trim() === '') {
-                alert('Lütfen adınızı ve soyadınızı girin.');
+                toast.warning('Lütfen adınızı ve soyadınızı girin.');
                 return;
             }
             const newUser = { name: registerName, email: registerEmail, password: registerPassword, role };
             users.push(newUser);
             localStorage.setItem(storeKey, JSON.stringify(users));
 
-            localStorage.setItem("isAuthenticated", "true");
-            localStorage.setItem("currentUser", JSON.stringify(newUser));
-            router.push(newUser.role === 'doktor' ? '/doctor-dashboard' : '/dashboard');
+            toast.success('Kaydınız başarıyla tamamlandı!');
+            login(newUser);
         }
     }
 

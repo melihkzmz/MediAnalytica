@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearch } from "@/contexts/SearchContext";
 import { getUserKeys } from "@/lib/userStorage";
+import { AnalysisItem } from '@/types';
 import {
     Activity,
     ChevronRight,
@@ -14,14 +15,6 @@ import {
     X
 } from 'lucide-react';
 
-interface AnalysisItem {
-    id: number;
-    createdAt: string;
-    category: string;
-    result: string;
-    confidence: number;
-    isFavorite: boolean;
-}
 
 export default function YildizliAnalizler() {
 

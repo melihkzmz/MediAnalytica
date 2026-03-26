@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   description: 'Deri, kemik ve akciğer hastalıklarını tespit eden gelişmiş yapay zeka teknolojisi ile sağlığınızı koruyun.',
 }
 
+import { AuthProvider } from '@/contexts/AuthContext'
+import Providers from '@/components/Providers'
+
 export default function RootLayout({
   children,
 }: {
@@ -14,7 +17,11 @@ export default function RootLayout({
   return (
     <html lang="tr" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        {children}
+        <Providers>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </Providers>
       </body>
     </html>
   )

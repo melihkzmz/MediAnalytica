@@ -1,61 +1,46 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Stethoscope, Calendar, User, Video } from 'lucide-react';
-import { ALL_APPOINTMENTS_KEY } from '@/lib/userStorage';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { Appointment } from '@/types';
 
-interface DoctorAppointment {
-    id: number;
-    patientEmail: string;
-    patientName: string;
-    doctor: string;
-    branch: string;
-    title: string;
-    dateMonth: string;
-    dateDay: string;
-    time: string;
-    location: string;
-    status: 'pending' | 'approved' | 'rejected' | 'cancelled';
-    timestamp: number;
-}
 
 export default function DoctorAppointmentsPage() {
-    const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
+    const doctorName = user?.name || 'Doktor';
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
-    useEffect(() => {
-        const loadAppointments = () => {
-            const userJson = localStorage.getItem('currentUser');
-            let dName = 'Doktor';
-            if (userJson) {
-                dName = JSON.parse(userJson).name;
-            }
+    // Query: Doktor Randevuları
+    const { data: appointments = [], isLoading: loading } = useQuery({
+        queryKey: ['doctorAppointments', doctorName],
+        queryFn: () => api.getDoctorAppointments(doctorName),
+        enabled: !!user,
+    });
 
-            const allApps: DoctorAppointment[] = JSON.parse(localStorage.getItem(ALL_APPOINTMENTS_KEY) || '[]');
-            const myApps = allApps.filter(a => a.doctor === dName || a.doctor.includes(dName));
-            setAppointments(myApps.sort((a, b) => b.timestamp - a.timestamp));
-            setLoading(false);
-        };
-
-        const timeout = setTimeout(() => {
-            loadAppointments();
-        }, 0);
-        return () => clearTimeout(timeout);
-    }, []);
+    // Mutation: Durum Güncelleme
+    const statusMutation = useMutation({
+        mutationFn: api.updateAppointmentStatus,
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['doctorAppointments'] });
+            if (variables.status === 'approved') toast.success("Randevu onaylandı.");
+            if (variables.status === 'rejected') toast.error("Randevu reddedildi.");
+        },
+        onError: () => {
+            toast.error("İşlem sırasında bir hata oluştu.");
+        }
+    });
 
     const updateStatus = (id: number, newStatus: 'approved' | 'rejected') => {
-        // Need to update the shared storage
-        const allApps: DoctorAppointment[] = JSON.parse(localStorage.getItem(ALL_APPOINTMENTS_KEY) || '[]');
-        const updatedAll = allApps.map(a => a.id === id ? { ...a, status: newStatus } : a);
-        localStorage.setItem(ALL_APPOINTMENTS_KEY, JSON.stringify(updatedAll));
-
-        // Update local state
-        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a));
+        statusMutation.mutate({ id, status: newStatus });
     };
 
     const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter);
 
-    const statusBadge = (status: DoctorAppointment['status']) => {
+    const statusBadge = (status: Appointment['status']) => {
         if (status === 'pending') return <span className="text-[10px] font-black bg-amber-100 text-amber-600 px-3 py-1 rounded-full uppercase tracking-widest">⏳ Bekliyor</span>;
         if (status === 'approved') return <span className="text-[10px] font-black bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full uppercase tracking-widest">✓ Onaylandı</span>;
         if (status === 'rejected') return <span className="text-[10px] font-black bg-red-100 text-red-500 px-3 py-1 rounded-full uppercase tracking-widest">✗ Reddedildi</span>;

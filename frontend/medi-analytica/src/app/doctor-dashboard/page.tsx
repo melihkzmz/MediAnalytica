@@ -1,57 +1,28 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Calendar, Users, CheckCircle2, Clock, ArrowRight, XCircle } from 'lucide-react';
 import Link from 'next/link';
-import { ALL_APPOINTMENTS_KEY } from '@/lib/userStorage';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { Appointment } from '@/types';
 
-interface DoctorAppointment {
-    id: number;
-    patientEmail: string;
-    patientName: string;
-    doctor: string;
-    branch: string;
-    title: string;
-    dateMonth: string;
-    dateDay: string;
-    time: string;
-    location: string;
-    status: 'pending' | 'approved' | 'rejected' | 'cancelled';
-    timestamp: number;
-}
 
 export default function DoctorOverviewPage() {
-    const [doctorName, setDoctorName] = useState('Doktor');
-    const [pendingCount, setPendingCount] = useState(0);
-    const [approvedCount, setApprovedCount] = useState(0);
-    const [rejectedCount, setRejectedCount] = useState(0);
-    const [totalCount, setTotalCount] = useState(0);
+    const { user } = useAuth();
+    const doctorName = user?.name || 'Doktor';
 
-    useEffect(() => {
-        const loadOverviewData = () => {
-            const userJson = localStorage.getItem('currentUser');
-            let dName = 'Doktor';
-            if (userJson) {
-                const user = JSON.parse(userJson);
-                dName = user.name;
-                setDoctorName(dName);
-            }
+    // Query: Doktor Randevuları
+    const { data: myApps = [] } = useQuery({
+        queryKey: ['doctorAppointments', doctorName],
+        queryFn: () => api.getDoctorAppointments(doctorName),
+        enabled: !!user,
+    });
 
-            const allApps: DoctorAppointment[] = JSON.parse(localStorage.getItem(ALL_APPOINTMENTS_KEY) || '[]');
-
-            // Filter by current doctor's name
-            const myApps = allApps.filter(a => a.doctor === dName || a.doctor.includes(dName));
-
-            setPendingCount(myApps.filter(a => a.status === 'pending').length);
-            setApprovedCount(myApps.filter(a => a.status === 'approved').length);
-            setRejectedCount(myApps.filter(a => a.status === 'rejected').length);
-            setTotalCount(myApps.length);
-        };
-
-        const timeout = setTimeout(() => {
-            loadOverviewData();
-        }, 0);
-        return () => clearTimeout(timeout);
-    }, []);
+    const pendingCount = myApps.filter(a => a.status === 'pending').length;
+    const approvedCount = myApps.filter(a => a.status === 'approved').length;
+    const rejectedCount = myApps.filter(a => a.status === 'rejected').length;
+    const totalCount = myApps.length;
 
     return (
         <div className="p-6 md:p-12 max-w-5xl mx-auto w-full space-y-10">

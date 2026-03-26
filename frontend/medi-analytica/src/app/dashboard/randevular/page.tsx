@@ -1,6 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 import {
     CalendarCheck,
@@ -19,29 +23,12 @@ import {
     Loader2
 } from 'lucide-react';
 import { ALL_APPOINTMENTS_KEY } from '@/lib/userStorage';
+import { Appointment, User as Doctor } from '@/types';
 
-interface Appointment {
-    id: number;
-    patientEmail: string;
-    patientName: string;
-    doctor: string;
-    branch: string;
-    title: string;
-    dateMonth: string;
-    dateDay: string;
-    time: string;
-    location: string;
-    status: 'approved' | 'pending' | 'cancelled';
-    timestamp: number;
-}
-
-interface Doctor {
-    name: string;
-    email: string;
-    role: string;
-}
 
 export default function RandevularPage() {
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
 
     // Modallar
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -54,11 +41,54 @@ export default function RandevularPage() {
     const [selectedDate, setSelectedDate] = useState("");
     const [selectedTime, setSelectedTime] = useState("");
     const [isSubmitted, setIsSubmitted] = useState(false);
-    const [registeredDoctors, setRegisteredDoctors] = useState<Doctor[]>([]);
+
+    // Query: Doktorlar
+    const { data: registeredDoctors = [] } = useQuery({
+        queryKey: ['doctors'],
+        queryFn: api.getRegisteredDoctors,
+    });
+
+    // Query: Randevular
+    const { data: appointments = [], isLoading: loading } = useQuery({
+        queryKey: ['appointments', user?.email],
+        queryFn: () => api.getAppointments(user?.email || 'guest'),
+        enabled: !!user,
+    });
+
+    // Mutation: Randevu Oluşturma
+    const createMutation = useMutation({
+        mutationFn: api.createAppointment,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            setIsBookingModalOpen(false);
+            setIsSubmitted(false);
+            toast.success("Randevunuz başarıyla oluşturuldu.");
+            // Formu temizle
+            setSelectedAnalysis("");
+            setSelectedDoctor("");
+            setSelectedDate("");
+            setSelectedTime("");
+        },
+        onError: () => {
+            toast.error("Randevu oluşturulurken bir hata oluştu.");
+        }
+    });
+
+    // Mutation: Randevu Silme / İptal (Burada silme olarak simüle ediyoruz)
+    const deleteMutation = useMutation({
+        mutationFn: api.deleteAppointment,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            toast.success("Randevu başarıyla iptal edildi.");
+        },
+        onError: () => {
+            toast.error("Randevu iptal edilirken bir hata oluştu.");
+        }
+    });
 
     // Günün tarihi ve Mesai Mantığı
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD
+    const todayStr = now.toLocaleDateString('en-CA');
     const todayTimestampStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
 
     // Şu anki saat ve dakika (Format: HH:MM)
@@ -71,7 +101,7 @@ export default function RandevularPage() {
     const isWorkingHours = currentHourNum >= 9 && currentHourNum < 17;
     const minDateObj = new Date(now);
     if (!isWorkingHours) {
-        minDateObj.setDate(minDateObj.getDate() + 1); // En yakın yarını seçtir
+        minDateObj.setDate(minDateObj.getDate() + 1);
     }
     const dynamicMinDate = minDateObj.toLocaleDateString('en-CA');
 
@@ -80,75 +110,16 @@ export default function RandevularPage() {
     const dynamicMinTime = (isSelectedDateToday && currentTimeStr > "09:00") ? currentTimeStr : "09:00";
     const maxTime = "17:00";
 
-    // Mevcut Randevular
-    const [appointments, setAppointments] = useState<Appointment[]>([]);
-
-    useEffect(() => {
-        const loadInitialData = () => {
-            const allApps = JSON.parse(localStorage.getItem(ALL_APPOINTMENTS_KEY) || '[]');
-            const userJson = localStorage.getItem('currentUser');
-            const patientEmail = userJson ? JSON.parse(userJson).email : 'guest';
-            const myApps = allApps.filter((a: Appointment) => a.patientEmail === patientEmail);
-
-            // Kayıtlı doktorları yükle
-            const docs = JSON.parse(localStorage.getItem('registeredDoctors') || '[]');
-            setRegisteredDoctors(docs);
-            if (myApps.length > 0) {
-                setAppointments(myApps);
-            } else {
-                // İlk demo
-                const tDate = new Date();
-                const monthNames = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"];
-                setAppointments([
-                    {
-                        id: 999,
-                        patientEmail: patientEmail,
-                        patientName: userJson ? JSON.parse(userJson).name : 'Kullanıcı',
-                        doctor: "Prof. Dr. Ertuğrul",
-                        branch: "Ortopedi",
-                        title: "Kemik Taraması Analizi",
-                        dateMonth: monthNames[tDate.getMonth()],
-                        dateDay: tDate.getDate().toString().padStart(2, '0'),
-                        time: "10:00",
-                        location: "Online Görüşme",
-                        status: "approved",
-                        timestamp: tDate.getTime(), // Bugün
-                    }
-                ]);
-            }
-        };
-
-        const timeout = setTimeout(() => {
-            loadInitialData();
-        }, 0);
-        return () => clearTimeout(timeout);
-    }, []);
-
-    const saveToLocalStorage = (apps: Appointment[]) => {
-        // Write to shared pool so doctors can see all appointments
-        const allApps = JSON.parse(localStorage.getItem(ALL_APPOINTMENTS_KEY) || '[]');
-        const userJson = localStorage.getItem('currentUser');
-        const patientEmail = userJson ? JSON.parse(userJson).email : 'guest';
-        // Remove existing entries from this patient then add updated ones
-        const others = allApps.filter((a: Appointment) => a.patientEmail !== patientEmail);
-        const merged = [...others, ...apps];
-        localStorage.setItem(ALL_APPOINTMENTS_KEY, JSON.stringify(merged));
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Ekstra Güvenlik: Saat aralığı dışında seçimi engelleme
         if (selectedTime < dynamicMinTime || selectedTime > maxTime) {
-            alert(`Lütfen ${dynamicMinTime} ile ${maxTime} mesai saatleri aralığında geçerli bir saat seçiniz.`);
+            toast.warning(`Lütfen ${dynamicMinTime} ile ${maxTime} mesai saatleri aralığında geçerli bir saat seçiniz.`);
             return;
         }
 
         setIsSubmitted(true);
         setTimeout(() => {
-            setIsSubmitted(false);
-            setIsBookingModalOpen(false);
-
             const dt = new Date(selectedDate);
             const monthNames = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"];
 
@@ -158,8 +129,8 @@ export default function RandevularPage() {
 
             const newApp: Appointment = {
                 id: Date.now(),
-                patientEmail: (() => { const u = localStorage.getItem('currentUser'); return u ? JSON.parse(u).email : 'guest'; })(),
-                patientName: (() => { const u = localStorage.getItem('currentUser'); return u ? JSON.parse(u).name : 'Kullanıcı'; })(),
+                patientEmail: user?.email || 'guest',
+                patientName: user?.name || 'Kullanıcı',
                 doctor: dName,
                 branch: dBranch,
                 title: selectedAnalysis,
@@ -171,29 +142,13 @@ export default function RandevularPage() {
                 timestamp: dt.getTime(),
             };
 
-            setAppointments(prev => {
-                const newApps: Appointment[] = [newApp, ...prev].sort((a, b) => b.timestamp - a.timestamp);
-                saveToLocalStorage(newApps);
-                return newApps;
-            });
-
-            // Formu temizle
-            setSelectedAnalysis("");
-            setSelectedDoctor("");
-            setSelectedDate("");
-            setSelectedTime("");
+            createMutation.mutate(newApp);
         }, 1500);
     };
 
     const cancelAppointment = (id: number) => {
         if (confirm("Bu randevuyu iptal etmek istediğinize emin misiniz?")) {
-            setAppointments(prev => {
-                const updated = prev.map(app =>
-                    app.id === id ? { ...app, status: 'cancelled' as const } : app
-                );
-                saveToLocalStorage(updated as Appointment[]);
-                return updated as Appointment[];
-            });
+            deleteMutation.mutate(id);
         }
     };
 

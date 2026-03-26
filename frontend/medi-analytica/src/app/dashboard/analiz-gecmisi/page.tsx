@@ -4,7 +4,10 @@ import React, { useState, useEffect } from 'react';
 
 import Link from 'next/link';
 import { useSearch } from "@/contexts/SearchContext";
-import { getUserKeys } from "@/lib/userStorage";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { toast } from 'sonner';
+import { AnalysisItem } from '@/types';
 import {
     Activity,
     ChevronRight,
@@ -14,21 +17,32 @@ import {
     X
 } from 'lucide-react';
 
-interface AnalysisItem {
-    id: number;
-    createdAt: string;
-    category: string;
-    result: string;
-    confidence: number;
-    isFavorite: boolean;
-}
 
 export default function AnalizGecmisi() {
 
-    const [history, setHistory] = useState<AnalysisItem[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
     const [selectedAnalysis, setSelectedAnalysis] = useState<AnalysisItem | null>(null);
     const { searchQuery } = useSearch();
+
+    // React Query ile veriyi çek
+    const { data: history = [], isLoading } = useQuery({
+        queryKey: ['analysisHistory'],
+        queryFn: api.getAnalysisHistory,
+    });
+
+    // Yıldızlama işlemi için mutation
+    const toggleMutation = useMutation({
+        mutationFn: api.toggleFavorite,
+        onSuccess: (data, id) => {
+            queryClient.invalidateQueries({ queryKey: ['analysisHistory'] });
+            const item = data.find(i => i.id === id);
+            if (item?.isFavorite) {
+                toast.success("Favorilere eklendi");
+            } else {
+                toast.info("Favorilerden çıkarıldı");
+            }
+        },
+    });
 
     const filteredHistory = history.filter(item => {
         if (!searchQuery) return true;
@@ -39,66 +53,9 @@ export default function AnalizGecmisi() {
         );
     });
 
-    const toggleFavorite = async (id: number) => {
-        setHistory(prev => {
-            const newHistory = prev.map(item =>
-                item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
-            );
-            // Durum güncellendiğinde tüm sisteme yansıması için localStorage'a yazıyoruz
-            const { historyKey } = getUserKeys();
-            localStorage.setItem(historyKey, JSON.stringify(newHistory));
-            return newHistory;
-        });
+    const toggleFavorite = (id: number) => {
+        toggleMutation.mutate(id);
     };
-
-    useEffect(() => {
-        // Eğer önceden localStorage'da veri varsa onu al, yoksa mockData yükle
-        const loadHistory = () => {
-            const { historyKey } = getUserKeys();
-            const storedData = localStorage.getItem(historyKey);
-
-            if (storedData) {
-                setHistory(JSON.parse(storedData));
-                setLoading(false);
-            } else {
-                const mockData: AnalysisItem[] = [
-                    {
-                        id: 99,
-                        createdAt: new Date().toISOString(),
-                        category: 'Akciğer BT',
-                        result: 'Temiz / Herhangi bir lezyon yok',
-                        confidence: 95,
-                        isFavorite: false,
-                    },
-                    {
-                        id: 102,
-                        createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-                        category: "Beyin MR",
-                        result: "Normal Anatomik Yapı",
-                        confidence: 98,
-                        isFavorite: true,
-                    },
-                    {
-                        id: 103,
-                        createdAt: "2026-03-10T09:15:00Z",
-                        category: "Göğüs X-Ray",
-                        result: "Plevral Efüzyon (Mevcut)",
-                        confidence: 92,
-                        isFavorite: true,
-                    }
-                ];
-                localStorage.setItem(historyKey, JSON.stringify(mockData));
-                setHistory(mockData);
-                setLoading(false);
-            }
-        };
-
-        // requestAnimationFrame kullanarak senkron render döngüsünü kırıyoruz
-        const timeout = setTimeout(() => {
-            loadHistory();
-        }, 0);
-        return () => clearTimeout(timeout);
-    }, []);
     return (
         <div className="flex flex-col bg-slate-50 font-sans selection:bg-blue-500 selection:text-white">
 
@@ -121,7 +78,7 @@ export default function AnalizGecmisi() {
                     </header>
 
                     {/* YÜKLENİYOR DURUMU */}
-                    {loading ? (
+                    {isLoading ? (
                         <div className="flex flex-col items-center justify-center p-20 bg-white rounded-[40px] border border-slate-200 shadow-[0_4px_40px_-15px_rgba(0,0,0,0.05)] min-h-[400px]">
                             <div className="relative w-16 h-16">
                                 <div className="absolute inset-0 rounded-full border-4 border-slate-100"></div>

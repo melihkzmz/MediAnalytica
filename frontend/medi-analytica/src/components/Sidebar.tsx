@@ -2,9 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, History, Star, Calendar, Menu, Settings } from 'lucide-react';
+import { LayoutDashboard, BarChart2, History, Star, Calendar, Menu, Settings, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Sidebar() {
+    const { user, logout } = useAuth();
     const pathname = usePathname();
     const [isOpen, setIsOpen] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -14,6 +16,21 @@ export default function Sidebar() {
         return true;
     });
     const [mounted, setMounted] = useState(false);
+
+    if (!user) return null;
+
+    const isDoctor = user.role === 'doktor';
+
+    const menuItems = isDoctor ? [
+        { name: 'Genel Bakış', href: '/doctor-dashboard', icon: <LayoutDashboard size={23} /> },
+        { name: 'Randevular', href: '/doctor-dashboard/randevular', icon: <Calendar size={23} /> },
+    ] : [
+        { name: 'Genel Bakış', href: '/dashboard', icon: <LayoutDashboard size={23} /> },
+        { name: 'Analiz Et', href: '/dashboard/analiz-et', icon: <BarChart2 size={23} /> },
+        { name: 'Analiz Geçmişi', href: '/dashboard/analiz-gecmisi', icon: <History size={23} /> },
+        { name: 'Yıldızlı Analizler', href: '/dashboard/yildizli-analiz', icon: <Star size={23} /> },
+        { name: 'Randevular', href: '/dashboard/randevular', icon: <Calendar size={23} /> },
+    ];
 
     useEffect(() => {
         const handleOpenStatus = () => {
@@ -54,7 +71,7 @@ export default function Sidebar() {
 
             {/* Flying Logo When Closed */}
             {!isOpen && (
-                <Link href="/" className="fixed top-0 left-[72px] h-[64px] flex items-center z-[70] animate-in fade-in slide-in-from-left-4 duration-300 pl-6 md:pl-8 hover:opacity-80 transition-opacity">
+                <Link href={isDoctor ? "/doctor-dashboard" : "/"} className="fixed top-0 left-[72px] h-[64px] flex items-center z-[70] animate-in fade-in slide-in-from-left-4 duration-300 pl-6 md:pl-8 hover:opacity-80 transition-opacity">
                     <div className="flex items-center gap-2.5">
                         <h1 className="text-[18px] font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-400 leading-none pb-0.5">
                             MediAnalytica
@@ -75,7 +92,7 @@ export default function Sidebar() {
                         <Menu size={!isOpen ? 20 : 22} strokeWidth={!isOpen ? 2.5 : 2} />
                     </button>
                     {isOpen && (
-                        <Link href="/" className="ml-3 flex items-center overflow-hidden hover:opacity-80 transition-opacity">
+                        <Link href={isDoctor ? "/doctor-dashboard" : "/"} className="ml-3 flex items-center overflow-hidden hover:opacity-80 transition-opacity">
                             <h1 className="text-[18px] font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-400 leading-none pb-0.5 whitespace-nowrap overflow-hidden">
                                 MediAnalytica
                             </h1>
@@ -85,13 +102,7 @@ export default function Sidebar() {
 
                 {/* Menü */}
                 <nav className="flex-1 px-3 py-6 space-y-3 overflow-y-auto">
-                    {[
-                        { name: 'Genel Bakış', href: '/dashboard', icon: <LayoutDashboard size={23} /> },
-                        { name: 'Analiz Et', href: '/dashboard/analiz-et', icon: <BarChart2 size={23} /> },
-                        { name: 'Analiz Geçmişi', href: '/dashboard/analiz-gecmisi', icon: <History size={23} /> },
-                        { name: 'Yıldızlı Analizler', href: '/dashboard/yildizli-analiz', icon: <Star size={23} /> },
-                        { name: 'Randevular', href: '/dashboard/randevular', icon: <Calendar size={23} /> },
-                    ].map((item) => {
+                    {menuItems.map((item) => {
                         const isActive = pathname === item.href;
                         return (
                             <Link
@@ -110,19 +121,28 @@ export default function Sidebar() {
                     })}
                 </nav>
 
-                {/* Alt Kısım: Ayarlar */}
+                {/* Alt Kısım: Ayarlar veya Çıkış */}
                 <div className="p-3 mt-auto border-t border-slate-800 transition-colors">
-                    <Link
-                        href="/dashboard/ayarlar"
-                        className={`flex items-center rounded-2xl transition-all ${isOpen ? 'px-4 py-3.5' : 'justify-center py-3.5 mx-1'} 
-                            ${pathname === '/dashboard/ayarlar'
-                                ? 'bg-indigo-600 text-white shadow-md'
-                                : 'text-slate-400 hover:bg-slate-800/80 hover:text-white'}
-                        `}
-                    >
-                        <Settings size={23} />
-                        {isOpen && <span className="ml-3.5 text-[15px] font-semibold tracking-wide">Ayarlar</span>}
-                    </Link>
+                    {isDoctor ? (
+                        <button
+                            onClick={logout}
+                            className={`flex items-center transition-colors rounded-2xl w-full ${isOpen ? 'px-4 py-3.5' : 'justify-center py-3.5 mx-1'} text-slate-400 hover:text-red-400 hover:bg-slate-800/50`}>
+                            <LogOut size={23} />
+                            {isOpen && <span className="ml-3.5 text-[15px] font-semibold tracking-wide">Çıkış Yap</span>}
+                        </button>
+                    ) : (
+                        <Link
+                            href="/dashboard/ayarlar"
+                            className={`flex items-center rounded-2xl transition-all ${isOpen ? 'px-4 py-3.5' : 'justify-center py-3.5 mx-1'} 
+                                ${pathname === '/dashboard/ayarlar'
+                                    ? 'bg-indigo-600 text-white shadow-md'
+                                    : 'text-slate-400 hover:bg-slate-800/80 hover:text-white'}
+                            `}
+                        >
+                            <Settings size={23} />
+                            {isOpen && <span className="ml-3.5 text-[15px] font-semibold tracking-wide">Ayarlar</span>}
+                        </Link>
+                    )}
                 </div>
             </aside>
         </>

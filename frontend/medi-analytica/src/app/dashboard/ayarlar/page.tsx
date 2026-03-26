@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import Image from 'next/image';
 import {
     User,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function SettingsPage() {
+    const { user, logout, updateUser } = useAuth();
     const [activeTab, setActiveTab] = useState('profile');
     const [isSaved, setIsSaved] = useState(false);
     // Form State'leri
@@ -42,18 +45,16 @@ export default function SettingsPage() {
     const [newPassConfirm, setNewPassConfirm] = useState('');
 
     const loadUserData = () => {
-        const userJson = localStorage.getItem('currentUser');
-        if (userJson) {
-            const userData = JSON.parse(userJson);
-            setName(userData.name || '');
-            setEmail(userData.email || '');
-            setOriginalEmail(userData.email || '');
-            setPhone(userData.phone || '');
-            setGender(userData.gender || '');
-            setBirthDate(userData.birthDate || '');
-            setRole(userData.role === 'doktor' ? 'Doktor' : 'Standart Üye');
-            setProfileImage(userData.profileImage || '');
-            setActualPassword(userData.password || '');
+        if (user) {
+            setName(user.name || '');
+            setEmail(user.email || '');
+            setOriginalEmail(user.email || '');
+            setPhone(user.phone || '');
+            setGender(user.gender || '');
+            setBirthDate(user.birthDate || '');
+            setRole(user.role === 'doktor' ? 'Doktor' : 'Standart Üye');
+            setProfileImage(user.profileImage || '');
+            setActualPassword(user.password || '');
             setPasswordConfirm('');
             setCurrentPassChange('');
             setNewPass('');
@@ -88,16 +89,14 @@ export default function SettingsPage() {
     const handleSave = () => {
         // Email değişikliği güvenliği
         if (showPasswordConfirm && passwordConfirm !== actualPassword) {
-            alert("E-posta adresini değiştirmek için mevcut parolanızı doğru girmelisiniz.");
+            toast.error("E-posta adresini değiştirmek için mevcut parolanızı doğru girmelisiniz.");
             return;
         }
 
-        const userJson = localStorage.getItem('currentUser');
-        if (!userJson) return;
+        if (!user) return;
 
-        const userData = JSON.parse(userJson);
         const updatedUser = {
-            ...userData,
+            ...user,
             name,
             email,
             phone,
@@ -110,35 +109,35 @@ export default function SettingsPage() {
         // 4. Şifre Değiştirme Kontrolü
         if (currentPassChange || newPass || newPassConfirm) {
             if (currentPassChange !== actualPassword) {
-                alert("Mevcut parolanızı yanlış girdiniz.");
+                toast.error("Mevcut parolanızı yanlış girdiniz.");
                 return;
             }
             if (newPass !== newPassConfirm) {
-                alert("Yeni parolalar birbiriyle uyuşmuyor.");
+                toast.error("Yeni parolalar birbiriyle uyuşmuyor.");
                 return;
             }
             if (newPass.length < 6) {
-                alert("Yeni parola en az 6 karakter olmalıdır.");
+                toast.warning("Yeni parola en az 6 karakter olmalıdır.");
                 return;
             }
             updatedUser.password = newPass;
             setActualPassword(newPass);
         }
 
-        // 1. currentUser Güncelle
-        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+        // 1. Context ve currentUser Güncelle
+        updateUser(updatedUser);
 
         // 2. Kayıtlı kullanıcı listesini güncelle
-        const storeKey = userData.role === 'doktor' ? 'registeredDoctors' : 'registeredPatients';
+        const storeKey = user.role === 'doktor' ? 'registeredDoctors' : 'registeredPatients';
         const users = JSON.parse(localStorage.getItem(storeKey) || '[]');
-        const updatedUsers = users.map((u: { email: string;[key: string]: unknown }) => u.email === originalEmail ? updatedUser : u);
+        const updatedUsers = users.map((u: any) => u.email === originalEmail ? updatedUser : u);
         localStorage.setItem(storeKey, JSON.stringify(updatedUsers));
 
-        // 3. Başarı state'i ve Event tetikleme
+        // 3. Basarı toast ve state güncelle
+        toast.success("Ayarlarınız başarıyla kaydedildi.");
         setOriginalEmail(email);
         setPasswordConfirm('');
         setIsSaved(true);
-        window.dispatchEvent(new Event('userUpdated'));
 
         setTimeout(() => setIsSaved(false), 3000);
     };
@@ -181,11 +180,7 @@ export default function SettingsPage() {
                         {/* Çıkış Yap Butonu */}
                         <div className="mt-4 pt-4 border-t border-slate-100">
                             <button
-                                onClick={() => {
-                                    localStorage.removeItem('isAuthenticated');
-                                    localStorage.removeItem('currentUser');
-                                    window.location.href = '/';
-                                }}
+                                onClick={logout}
                                 className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-bold text-sm text-red-500 hover:bg-red-50"
                             >
                                 <LogOut size={20} />
