@@ -28,8 +28,71 @@ service cloud.firestore {
     
     // Doctors Collection
     match /doctors/{doctorId} {
-      // Doctors can read/update their own doctor document
-      allow read, write: if isOwner(doctorId);
+      // Owner full access; any signed-in user may read approved profiles (doctor directory for chat / discovery)
+      allow read: if isAuthenticated() && (
+        isOwner(doctorId) ||
+        resource.data.status == 'approved'
+      );
+      allow write: if isOwner(doctorId);
+    }
+
+    // Chat: patient requests a conversation; doctor approves or rejects
+    match /chatRequests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toDoctorUserId == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.fromUserId == request.auth.uid &&
+        request.resource.data.toDoctorUserId is string &&
+        request.resource.data.fromUserId != request.resource.data.toDoctorUserId &&
+        request.resource.data.status == 'pending' &&
+        exists(/databases/$(database)/documents/doctors/$(request.resource.data.toDoctorUserId)) &&
+        (!('introMessage' in request.resource.data) ||
+          (request.resource.data.introMessage is string && request.resource.data.introMessage.size() <= 500));
+      allow update: if isAuthenticated() &&
+        isDoctor() &&
+        resource.data.toDoctorUserId == request.auth.uid &&
+        resource.data.status == 'pending' &&
+        request.resource.data.fromUserId == resource.data.fromUserId &&
+        request.resource.data.toDoctorUserId == resource.data.toDoctorUserId &&
+        request.resource.data.status in ['approved', 'rejected'] &&
+        (request.resource.data.status == 'rejected' ||
+          (request.resource.data.status == 'approved' &&
+            request.resource.data.conversationId is string));
+    }
+
+    match /conversations/{conversationId} {
+      allow read: if isAuthenticated() &&
+        request.auth.uid in resource.data.participantIds;
+      // Doctor creates after approving a chat request; participantIds order [patientId, doctorId]
+      allow create: if isAuthenticated() &&
+        isDoctor() &&
+        request.resource.data.doctorId == request.auth.uid &&
+        request.resource.data.patientId is string &&
+        request.resource.data.participantIds is list &&
+        request.resource.data.participantIds.size() == 2 &&
+        request.resource.data.participantIds[0] == request.resource.data.patientId &&
+        request.resource.data.participantIds[1] == request.resource.data.doctorId;
+      allow update: if isAuthenticated() &&
+        request.auth.uid in resource.data.participantIds;
+    }
+
+    match /conversations/{conversationId}/messages/{messageId} {
+      allow read: if isAuthenticated() &&
+        request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+      allow create: if isAuthenticated() &&
+        request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() > 0 &&
+        request.resource.data.text.size() <= 4000;
+      allow update, delete: if false;
+    }
+
+    match /presence/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
     }
     
     // Appointments Collection

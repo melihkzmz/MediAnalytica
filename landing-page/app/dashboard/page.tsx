@@ -11,14 +11,15 @@ import {
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
-  Clock, Calendar, Users, AlertCircle, CheckCircle
+  Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare
 } from 'lucide-react'
 import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
+import MessagesSection from '@/components/MessagesSection'
 import { isAppointmentTime } from '@/lib/appointmentUtils'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
-type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 
+type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
                'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
 
 // Helper function to map skin disease abbreviations to full Turkish names
@@ -69,7 +70,7 @@ export default function DashboardPage() {
   // Initialize section from URL hash
   useEffect(() => {
     const hash = window.location.hash.replace('#', '')
-    const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile',
+    const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
                           'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
     if (hash && validSections.includes(hash)) {
       setCurrentSection(hash as Section)
@@ -80,7 +81,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '')
-      const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile',
+      const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
                             'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
       if (hash && validSections.includes(hash)) {
         setCurrentSection(hash as Section)
@@ -141,6 +142,51 @@ export default function DashboardPage() {
     })
     return () => unsubscribe()
   }, [router])
+
+  // MVP presence: heartbeat so other users can see Çevrimiçi / son görülme
+  useEffect(() => {
+    if (!user?.uid) return
+    let cancelled = false
+    const uid = user.uid
+    const tick = async () => {
+      if (cancelled) return
+      try {
+        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        await setDoc(
+          doc(db, 'presence', uid),
+          { lastSeen: serverTimestamp(), state: 'online' },
+          { merge: true }
+        )
+      } catch (e) {
+        console.error('presence update', e)
+      }
+    }
+    tick()
+    const interval = setInterval(tick, 45000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVis)
+      void (async () => {
+        try {
+          const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+          const { db } = await import('@/lib/firebase')
+          await setDoc(
+            doc(db, 'presence', uid),
+            { state: 'offline', lastSeen: serverTimestamp() },
+            { merge: true }
+          )
+        } catch {
+          /* tab close */
+        }
+      })()
+    }
+  }, [user?.uid])
 
   useEffect(() => {
     if (user && currentSection === 'history') {
@@ -1518,6 +1564,7 @@ export default function DashboardPage() {
                   { id: 'my-appointments', label: 'Randevularım' },
                   { id: 'appointment-history', label: 'Randevu Geçmişi' },
                   { id: 'my-patients', label: 'Hastalarım' },
+                  { id: 'messages', label: 'Mesajlar' },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -1525,12 +1572,13 @@ export default function DashboardPage() {
                       setCurrentSection(item.id as Section)
                       window.location.hash = item.id
                     }}
-                    className={`px-4 py-2 rounded-xl transition-colors ${
+                    className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
                       currentSection === item.id
                         ? 'bg-blue-50 text-blue-600 font-medium'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >
+                    {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                     {item.label}
                   </button>
                 ))
@@ -1542,6 +1590,7 @@ export default function DashboardPage() {
                 { id: 'favorites', label: 'Favoriler' },
                 { id: 'stats', label: 'İstatistikler' },
                 { id: 'appointment', label: 'Randevu Talep' },
+                { id: 'messages', label: 'Mesajlar' },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -1549,12 +1598,13 @@ export default function DashboardPage() {
                     setCurrentSection(item.id as Section)
                     window.location.hash = item.id
                   }}
-                  className={`px-4 py-2 rounded-xl transition-colors ${
+                  className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
                     currentSection === item.id
                       ? 'bg-blue-50 text-blue-600 font-medium'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
+                  {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                   {item.label}
                 </button>
                 ))
@@ -1629,6 +1679,7 @@ export default function DashboardPage() {
                     { id: 'my-appointments', label: 'Randevularım' },
                     { id: 'appointment-history', label: 'Randevu Geçmişi' },
                     { id: 'my-patients', label: 'Hastalarım' },
+                    { id: 'messages', label: 'Mesajlar' },
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -1637,12 +1688,13 @@ export default function DashboardPage() {
                         window.location.hash = item.id
                         setMobileMenuOpen(false)
                       }}
-                      className={`px-4 py-2 rounded-xl text-left transition-colors ${
+                      className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
                         currentSection === item.id
                           ? 'bg-blue-50 text-blue-600 font-medium'
                           : 'text-gray-700 hover:bg-gray-50'
                       }`}
                     >
+                      {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                       {item.label}
                     </button>
                   ))
@@ -1654,6 +1706,7 @@ export default function DashboardPage() {
                   { id: 'favorites', label: 'Favoriler' },
                   { id: 'stats', label: 'İstatistikler' },
                   { id: 'appointment', label: 'Randevu Talep' },
+                  { id: 'messages', label: 'Mesajlar' },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -1662,12 +1715,13 @@ export default function DashboardPage() {
                       window.location.hash = item.id
                       setMobileMenuOpen(false)
                     }}
-                    className={`px-4 py-2 rounded-xl text-left transition-colors ${
+                    className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
                       currentSection === item.id
                         ? 'bg-blue-50 text-blue-600 font-medium'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >
+                    {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                     {item.label}
                   </button>
                   ))
@@ -2937,6 +2991,13 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {currentSection === 'messages' && user && (
+            <MessagesSection
+              user={{ uid: user.uid, email: user.email }}
+              isDoctor={isDoctor}
+            />
           )}
 
           {currentSection === 'profile' && (
