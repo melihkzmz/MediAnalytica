@@ -289,7 +289,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
   const handleSendRequest = async (opts?: { doctorToDoctor?: boolean }) => {
     const doctorToDoctor = Boolean(opts?.doctorToDoctor)
     if (!selectedDoctorId) {
-      showToast(doctorToDoctor ? 'Lütfen bir kolay seçin.' : 'Lütfen bir doktor seçin.', 'warning')
+      showToast('Lütfen bir doktor seçin.', 'warning')
       return
     }
     if (selectedDoctorId === user.uid) {
@@ -303,14 +303,14 @@ export default function MessagesSection({ user, isDoctor }: Props) {
         r.status === 'pending'
     )
     if (dup) {
-      showToast(doctorToDoctor ? 'Bu kolaya zaten bekleyen bir isteğiniz var.' : 'Bu doktora zaten bekleyen bir isteğiniz var.', 'warning')
+      showToast('Bu doktora zaten bekleyen bir isteğiniz var.', 'warning')
       return
     }
     const existingConv = conversations.find(
       (c) => c.participantIds.includes(user.uid) && c.participantIds.includes(selectedDoctorId)
     )
     if (existingConv) {
-      showToast(doctorToDoctor ? 'Bu kolayla zaten bir sohbetiniz var.' : 'Bu doktorla zaten bir sohbetiniz var.', 'info')
+      showToast('Bu doktorla zaten bir sohbetiniz var.', 'info')
       setSelectedConv(existingConv)
       if (doctorToDoctor) {
         setDoctorTab('chats')
@@ -425,7 +425,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
           <h2 className="text-2xl font-bold text-gray-900">Mesajlar</h2>
           <p className="text-sm text-gray-600">
             {isDoctor
-              ? 'Hasta ve doktor kolaylarınızdan gelen istekleri onaylayın; onaylı doktorlara da yeni sohbet isteği gönderebilirsiniz.'
+              ? 'Hastalardan ve doktorlardan gelen istekleri onaylayın; diğer onaylı doktorlara da sohbet isteği gönderebilirsiniz.'
               : 'Onaylı doktorlara sohbet isteği gönderin; onay sonrası mesajlaşın.'}
           </p>
         </div>
@@ -452,7 +452,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                     doctorTab === 'newPeer' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'
                   }`}
                 >
-                  Kolaya istek
+                  Doktor
                 </button>
                 <button
                   type="button"
@@ -467,7 +467,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
 
               {doctorTab === 'newPeer' && (
                 <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3">
-                  <label className="block text-sm font-medium text-gray-700">Doktor kolayınızı seçin</label>
+                  <label className="block text-sm font-medium text-gray-700">Doktor seçin</label>
                   {loadingDoctors ? (
                     <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
                   ) : (
@@ -493,7 +493,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                     onChange={(e) => setIntroText(e.target.value.slice(0, 500))}
                     rows={3}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    placeholder="Kolaya neden yazmak istediğinizi kısaca belirtebilirsiniz."
+                    placeholder="Doktora kısaca neden yazmak istediğinizi belirtebilirsiniz."
                   />
                   <button
                     type="button"
@@ -501,7 +501,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                     disabled={sendingRequest || !selectedDoctorId}
                     className="w-full py-2 rounded-lg bg-violet-600 text-white font-medium text-sm disabled:opacity-50 hover:bg-violet-700"
                   >
-                    {sendingRequest ? 'Gönderiliyor…' : 'Kolaya istek gönder'}
+                    {sendingRequest ? 'Gönderiliyor…' : 'Doktora istek gönder'}
                   </button>
                 </div>
               )}
@@ -534,7 +534,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                               </span>
                               {r.requestKind === 'doctor_to_doctor' ? (
                                 <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">
-                                  Doktor kolayası
+                                  Doktor
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
@@ -583,7 +583,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                               → {doctorDisplay(r.toDoctorUserId)}
                             </div>
                             <div className="text-xs text-violet-800">
-                              {r.requestKind === 'doctor_to_doctor' ? 'Kolay isteği' : 'Sohbet isteği'} · Beklemede
+                              {r.requestKind === 'doctor_to_doctor' ? 'Doktor' : 'Sohbet isteği'} · Beklemede
                             </div>
                             {r.introMessage ? (
                               <p className="text-xs text-gray-600 line-clamp-2">{r.introMessage}</p>
