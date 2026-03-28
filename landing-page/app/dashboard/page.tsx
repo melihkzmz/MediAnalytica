@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { config } from '@/lib/config'
 import { showToast, validateImageFile, compressImage } from '@/lib/utils'
+import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
@@ -100,6 +101,7 @@ export default function DashboardPage() {
   const [loadingFavorites, setLoadingFavorites] = useState(false)
   const [loadingStats, setLoadingStats] = useState(false)
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
+  const [showQualityBypassPrompt, setShowQualityBypassPrompt] = useState(false)
   const [isDoctor, setIsDoctor] = useState(false)
   const [doctorData, setDoctorData] = useState<any>(null)
   const [pendingAppointments, setPendingAppointments] = useState<any[]>([])
@@ -263,6 +265,7 @@ export default function DashboardPage() {
       setAnalysisResult(null)
       setCurrentAnalysisId(null)
       setAnalyzing(false)
+      setShowQualityBypassPrompt(false)
     }
   }, [currentSection])
 
@@ -1224,6 +1227,7 @@ export default function DashboardPage() {
 
     if (!validateImageFile(file)) return
 
+    setShowQualityBypassPrompt(false)
     setSelectedImage(file)
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -1232,11 +1236,22 @@ export default function DashboardPage() {
     reader.readAsDataURL(file)
   }
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (skipQualityCheck = false) => {
     if (!selectedDisease || !selectedImage) {
       showToast('Lütfen hastalık türü seçin ve görüntü yükleyin.', 'warning')
       return
     }
+
+    if (!skipQualityCheck) {
+      const quality = await assessImageForAnalysis(selectedImage)
+      if (!quality.ok) {
+        setShowQualityBypassPrompt(true)
+        showToast(IMAGE_QUALITY_REJECT_MESSAGE, 'warning')
+        return
+      }
+    }
+
+    setShowQualityBypassPrompt(false)
 
     setAnalyzing(true)
     try {
@@ -1740,7 +1755,10 @@ export default function DashboardPage() {
                     {diseaseOptions.map((option) => (
                       <button
                         key={option.value}
-                        onClick={() => setSelectedDisease(option.value as DiseaseType)}
+                        onClick={() => {
+                          setSelectedDisease(option.value as DiseaseType)
+                          setShowQualityBypassPrompt(false)
+                        }}
                         className={`group relative p-4 rounded-xl border-2 transition-all transform hover:scale-105 hover:shadow-lg ${
                           selectedDisease === option.value
                             ? 'border-blue-600 bg-gradient-to-br from-blue-50 to-purple-50 shadow-md'
@@ -1805,6 +1823,7 @@ export default function DashboardPage() {
                       onClick={() => {
                         setImagePreview(null)
                         setSelectedImage(null)
+                        setShowQualityBypassPrompt(false)
                       }}
                       className="absolute top-4 right-4 bg-red-500 text-white p-3 rounded-full hover:bg-red-600 shadow-lg hover:scale-110 transition-all flex items-center justify-center"
                     >
@@ -1821,7 +1840,7 @@ export default function DashboardPage() {
 
               {/* Analyze Button */}
               <button
-                onClick={handleAnalyze}
+                onClick={() => void handleAnalyze()}
                 disabled={!selectedDisease || !selectedImage || analyzing}
                 className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 text-white py-5 rounded-2xl font-bold text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3 transform hover:scale-[1.02] active:scale-[0.98] bg-[length:200%_100%] hover:bg-[position:100%_0] transition-all duration-500"
               >
@@ -1837,6 +1856,32 @@ export default function DashboardPage() {
                   </>
                 )}
               </button>
+
+              {showQualityBypassPrompt && (
+                <div
+                  className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-md"
+                  role="alert"
+                >
+                  <p className="text-sm text-amber-950 mb-4">{IMAGE_QUALITY_REJECT_MESSAGE}</p>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleAnalyze(true)}
+                      disabled={analyzing}
+                      className="rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      Yine de analiz et
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQualityBypassPrompt(false)}
+                      className="rounded-xl border border-amber-300 bg-white px-5 py-2.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                    >
+                      Vazgeç
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Results */}
               {analysisResult && (

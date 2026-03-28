@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { config } from '@/lib/config'
 import { showToast, validateImageFile, compressImage } from '@/lib/utils'
+import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
@@ -70,6 +71,7 @@ export default function AnalyzePage() {
   const [loadingFavorites, setLoadingFavorites] = useState(false)
   const [loadingStats, setLoadingStats] = useState(false)
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
+  const [showQualityBypassPrompt, setShowQualityBypassPrompt] = useState(false)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -118,6 +120,7 @@ export default function AnalyzePage() {
       setAnalysisResult(null)
       setCurrentAnalysisId(null)
       setAnalyzing(false)
+      setShowQualityBypassPrompt(false)
     }
   }, [currentSection])
 
@@ -369,6 +372,7 @@ export default function AnalyzePage() {
 
     if (!validateImageFile(file)) return
 
+    setShowQualityBypassPrompt(false)
     setSelectedImage(file)
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -377,11 +381,22 @@ export default function AnalyzePage() {
     reader.readAsDataURL(file)
   }
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (skipQualityCheck = false) => {
     if (!selectedDisease || !selectedImage) {
       showToast('Lütfen hastalık türü seçin ve görüntü yükleyin.', 'warning')
       return
     }
+
+    if (!skipQualityCheck) {
+      const quality = await assessImageForAnalysis(selectedImage)
+      if (!quality.ok) {
+        setShowQualityBypassPrompt(true)
+        showToast(IMAGE_QUALITY_REJECT_MESSAGE, 'warning')
+        return
+      }
+    }
+
+    setShowQualityBypassPrompt(false)
 
     setAnalyzing(true)
     try {
@@ -711,7 +726,10 @@ export default function AnalyzePage() {
                   {diseaseOptions.map((option) => (
                     <button
                       key={option.value}
-                      onClick={() => setSelectedDisease(option.value as DiseaseType)}
+                      onClick={() => {
+                        setSelectedDisease(option.value as DiseaseType)
+                        setShowQualityBypassPrompt(false)
+                      }}
                       className={`p-4 rounded-xl border-2 transition-all ${
                         selectedDisease === option.value
                           ? 'border-blue-600 bg-blue-50'
@@ -752,6 +770,7 @@ export default function AnalyzePage() {
                       onClick={() => {
                         setImagePreview(null)
                         setSelectedImage(null)
+                        setShowQualityBypassPrompt(false)
                       }}
                       className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-full hover:bg-red-600"
                     >
@@ -763,7 +782,7 @@ export default function AnalyzePage() {
 
               {/* Analyze Button */}
               <button
-                onClick={handleAnalyze}
+                onClick={() => void handleAnalyze()}
                 disabled={!selectedDisease || !selectedImage || analyzing}
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
@@ -779,6 +798,32 @@ export default function AnalyzePage() {
                   </>
                 )}
               </button>
+
+              {showQualityBypassPrompt && (
+                <div
+                  className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm"
+                  role="alert"
+                >
+                  <p className="text-sm text-amber-950 mb-3">{IMAGE_QUALITY_REJECT_MESSAGE}</p>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleAnalyze(true)}
+                      disabled={analyzing}
+                      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      Yine de analiz et
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQualityBypassPrompt(false)}
+                      className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                    >
+                      Vazgeç
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Results */}
               {analysisResult && (
