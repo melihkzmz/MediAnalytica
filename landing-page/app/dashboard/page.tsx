@@ -11,7 +11,7 @@ import {
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
-  Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare
+  Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope
 } from 'lucide-react'
 import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
@@ -60,6 +60,30 @@ const formatDiseaseClassName = (className: string, diseaseType: string | null | 
   return className
 }
 
+/** Maps analyze modality to appointment `doctorType` / doctors.specialty slug */
+const DISEASE_TO_DOCTOR_TYPE: Record<DiseaseType, string> = {
+  skin: 'dermatolog',
+  bone: 'ortopedist',
+  lung: 'gogus-hast',
+  eye: 'goz-hast',
+  brain: 'noroloji',
+}
+
+const SPECIALTY_LABELS: Record<string, string> = {
+  dermatolog: 'Dermatolog',
+  ortopedist: 'Ortopedist',
+  'gogus-hast': 'Göğüs Hastalıkları Uzmanı',
+  'goz-hast': 'Göz Hastalıkları Uzmanı',
+  noroloji: 'Nöroloji',
+}
+
+function doctorInitials(firstName?: string, lastName?: string): string {
+  const a = (firstName || '').trim().charAt(0)
+  const b = (lastName || '').trim().charAt(0)
+  if (a || b) return (a + b).toUpperCase()
+  return '?'
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -105,6 +129,8 @@ export default function DashboardPage() {
   const [loadingFavorites, setLoadingFavorites] = useState(false)
   const [loadingStats, setLoadingStats] = useState(false)
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
+  const [relatedDoctors, setRelatedDoctors] = useState<Array<Record<string, unknown> & { id: string }>>([])
+  const [loadingRelatedDoctors, setLoadingRelatedDoctors] = useState(false)
   const [showQualityBypassPrompt, setShowQualityBypassPrompt] = useState(false)
   const [isDoctor, setIsDoctor] = useState(false)
   const [doctorData, setDoctorData] = useState<any>(null)
@@ -265,7 +291,16 @@ export default function DashboardPage() {
                 console.error(e)
               }
             }
-            return { id: appointmentDoc.id, ...data, doctor }
+            let preferredDoctor: Record<string, unknown> | null = null
+            if (data.preferredDoctorId && typeof data.preferredDoctorId === 'string') {
+              try {
+                const pd = await getDoc(doc(db, 'doctors', data.preferredDoctorId))
+                if (pd.exists()) preferredDoctor = pd.data() as Record<string, unknown>
+              } catch (e) {
+                console.error(e)
+              }
+            }
+            return { id: appointmentDoc.id, ...data, doctor, preferredDoctor }
           })
         )
         rows.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
@@ -370,10 +405,45 @@ export default function DashboardPage() {
       setImagePreview(null)
       setAnalysisResult(null)
       setCurrentAnalysisId(null)
+      setRelatedDoctors([])
       setAnalyzing(false)
       setShowQualityBypassPrompt(false)
     }
   }, [currentSection])
+
+  // After analysis: load approved doctors matching this modality (specialty slug)
+  useEffect(() => {
+    if (!analysisResult || !selectedDisease || !user || isDoctor) {
+      setRelatedDoctors([])
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      setLoadingRelatedDoctors(true)
+      try {
+        const slug = DISEASE_TO_DOCTOR_TYPE[selectedDisease]
+        const { collection, query, where, getDocs } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const q = query(
+          collection(db, 'doctors'),
+          where('status', '==', 'approved'),
+          where('specialty', '==', slug)
+        )
+        const snap = await getDocs(q)
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string }))
+        if (!cancelled) setRelatedDoctors(list)
+      } catch (e) {
+        console.error('Related doctors load failed:', e)
+        if (!cancelled) setRelatedDoctors([])
+      } finally {
+        if (!cancelled) setLoadingRelatedDoctors(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [analysisResult, selectedDisease, user, isDoctor])
 
   const loadAnalyses = async () => {
     if (!user) return
@@ -664,10 +734,21 @@ export default function DashboardPage() {
             }
           }
           
+          let preferredDoctor = null as Record<string, unknown> | null
+          if (data.preferredDoctorId && typeof data.preferredDoctorId === 'string') {
+            try {
+              const pd = await getDoc(doc(db, 'doctors', data.preferredDoctorId as string))
+              if (pd.exists()) preferredDoctor = pd.data() as Record<string, unknown>
+            } catch (e) {
+              console.error(e)
+            }
+          }
+
           return {
             id: appointmentDoc.id,
             ...data,
-            patient: patientData
+            patient: patientData,
+            preferredDoctor,
           }
         })
       )
@@ -1487,14 +1568,12 @@ export default function DashboardPage() {
       showToast('Analiz tamamlandı!', 'success')
       
       // Save to Firebase
-      const analysisId = await saveAnalysisToFirebase(selectedDisease, formattedResult, selectedImage)
-      if (analysisId) {
-        setCurrentAnalysisId(analysisId)
-        // Always refresh history and stats after saving
+      const saved = await saveAnalysisToFirebase(selectedDisease, formattedResult, selectedImage)
+      if (saved) {
+        setCurrentAnalysisId(saved.id)
         loadAnalyses()
         loadStats()
       } else {
-        // Even if save failed, show the result (but without favorite button)
         console.warn('Analysis saved but no ID returned')
       }
     } catch (error: any) {
@@ -1505,7 +1584,11 @@ export default function DashboardPage() {
     }
   }
 
-  const saveAnalysisToFirebase = async (diseaseType: DiseaseType, results: any, imageFile: File) => {
+  const saveAnalysisToFirebase = async (
+    diseaseType: DiseaseType,
+    results: any,
+    imageFile: File
+  ): Promise<{ id: string; imageUrl: string } | null> => {
     try {
       if (!user) {
         console.error('No user found')
@@ -1551,7 +1634,7 @@ export default function DashboardPage() {
       console.log('Saving analysis to Firestore...')
       const docRef = await addDoc(collection(db, 'analyses'), analysisData)
       console.log('Analysis saved to Firestore:', docRef.id)
-      return docRef.id
+      return { id: docRef.id, imageUrl }
       
     } catch (error: any) {
       console.error('Error saving analysis:', error)
@@ -1575,6 +1658,15 @@ export default function DashboardPage() {
       showToast(`Analiz kaydedilirken bir hata oluştu: ${errorMessage}`, 'error')
       return null
     }
+  }
+
+  const openAppointmentWithDoctor = (doctorId: string) => {
+    if (!selectedDisease) return
+    const params = new URLSearchParams()
+    params.set('doctorType', DISEASE_TO_DOCTOR_TYPE[selectedDisease])
+    params.set('preferredDoctorId', doctorId)
+    if (currentAnalysisId) params.set('analysisId', currentAnalysisId)
+    router.push(`/appointment?${params.toString()}`)
   }
 
   if (loading) {
@@ -2088,6 +2180,85 @@ export default function DashboardPage() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {!isDoctor && selectedDisease && (
+                    <div className="space-y-4 border-t border-gray-200 pt-8">
+                      <h4 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
+                        <Stethoscope className="w-6 h-6 text-teal-600" />
+                        <span>İlgili doktorlarla görüşün</span>
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        Bu analiz türüyle uyumlu uzmanlıktaki onaylı doktorlarımızdan biriyle randevu talep edebilirsiniz. Analiz görüntünüz randevu kaydına eklenir.
+                      </p>
+                      {loadingRelatedDoctors ? (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Doktorlar yükleniyor...</span>
+                        </div>
+                      ) : relatedDoctors.length === 0 ? (
+                        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">
+                          Bu uzmanlıkta şu an listelenecek onaylı doktor bulunmuyor. Genel randevu formundan talep oluşturabilirsiniz.{' '}
+                          <button
+                            type="button"
+                            onClick={() => router.push('/appointment')}
+                            className="font-semibold text-amber-950 underline"
+                          >
+                            Randevu talep et
+                          </button>
+                        </div>
+                      ) : (
+                        <ul className="space-y-3">
+                          {relatedDoctors.map((docRow) => {
+                            const fn = String(docRow.firstName ?? '')
+                            const ln = String(docRow.lastName ?? '')
+                            const spec = String(docRow.specialty ?? '')
+                            const inst = String(docRow.institution ?? '')
+                            const photo =
+                              typeof docRow.profilePhotoUrl === 'string' ? docRow.profilePhotoUrl : null
+                            return (
+                              <li
+                                key={docRow.id}
+                                className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl border-2 border-gray-100 bg-gradient-to-r from-gray-50 to-white hover:border-teal-200 hover:shadow-md transition-all"
+                              >
+                                <div className="flex items-center gap-4 flex-1 min-w-0">
+                                  {photo ? (
+                                    <img
+                                      src={photo}
+                                      alt=""
+                                      className="w-14 h-14 rounded-full object-cover border-2 border-white shadow shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 text-white flex items-center justify-center font-bold text-lg shrink-0">
+                                      {doctorInitials(fn, ln)}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-gray-900 truncate">
+                                      Dr. {fn} {ln}
+                                    </p>
+                                    <p className="text-sm text-teal-700 font-medium">
+                                      {SPECIALTY_LABELS[spec] || spec}
+                                    </p>
+                                    <div className="flex items-start gap-1.5 text-sm text-gray-600 mt-1">
+                                      <Building className="w-4 h-4 shrink-0 mt-0.5" />
+                                      <span className="break-words">{inst || 'Kurum belirtilmemiş'}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => openAppointmentWithDoctor(docRow.id)}
+                                  className="shrink-0 px-5 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-blue-600 text-white font-semibold hover:shadow-lg transition-all"
+                                >
+                                  Randevu talep et
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
                     </div>
                   )}
 
@@ -2838,6 +3009,9 @@ export default function DashboardPage() {
                     const doctorName = apt.doctor
                       ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim()
                       : null
+                    const preferredName = apt.preferredDoctor
+                      ? `Dr. ${(apt.preferredDoctor as { firstName?: string }).firstName || ''} ${(apt.preferredDoctor as { lastName?: string }).lastName || ''}`.trim()
+                      : null
                     return (
                       <div
                         key={apt.id}
@@ -2853,6 +3027,9 @@ export default function DashboardPage() {
                                 <span className="text-xs text-gray-500">Branş: {apt.doctorType}</span>
                               ) : null}
                             </div>
+                            {preferredName && st === 'pending' ? (
+                              <p className="text-sm text-teal-800 font-medium">Tercih edilen uzman: {preferredName}</p>
+                            ) : null}
                             <div className="grid sm:grid-cols-2 gap-3 text-sm">
                               <div className="flex items-center gap-2 text-gray-700">
                                 <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
@@ -2874,6 +3051,16 @@ export default function DashboardPage() {
                               </div>
                             </div>
                           </div>
+                          {apt.analysisImageUrl ? (
+                            <div className="shrink-0 text-center sm:text-left">
+                              <p className="text-xs text-gray-500 mb-1">Analiz görüntüsü</p>
+                              <img
+                                src={String(apt.analysisImageUrl)}
+                                alt=""
+                                className="w-28 h-28 rounded-lg object-cover border border-gray-200 mx-auto sm:mx-0"
+                              />
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     )
@@ -2940,6 +3127,23 @@ export default function DashboardPage() {
                                 {appointment.doctorType || 'Uzmanlık belirtilmemiş'}
                               </span>
                             </div>
+                            {appointment.preferredDoctor ? (
+                              <p className="text-sm text-teal-800 mt-2">
+                                Hasta tercihi: Dr.{' '}
+                                {(appointment.preferredDoctor as { firstName?: string }).firstName || ''}{' '}
+                                {(appointment.preferredDoctor as { lastName?: string }).lastName || ''}
+                              </p>
+                            ) : null}
+                            {appointment.analysisImageUrl ? (
+                              <div className="mt-3">
+                                <p className="text-xs text-gray-500 mb-1">Gönderilen analiz görüntüsü</p>
+                                <img
+                                  src={String(appointment.analysisImageUrl)}
+                                  alt=""
+                                  className="max-h-40 rounded-lg border border-gray-200 object-contain bg-gray-50"
+                                />
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2">

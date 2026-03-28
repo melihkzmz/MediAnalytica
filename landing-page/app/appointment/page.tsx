@@ -1,17 +1,26 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useEffect, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { showToast } from '@/lib/utils'
-import { Calendar, Clock, FileText, User, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { Calendar, Clock, FileText, User, ArrowLeft, CheckCircle2, Building, Stethoscope } from 'lucide-react'
 import Link from 'next/link'
 import { generateJitsiRoomName } from '@/lib/appointmentUtils'
 
-export default function AppointmentPage() {
+const doctorTypes = [
+  { value: 'dermatolog', label: 'Dermatolog' },
+  { value: 'ortopedist', label: 'Ortopedist' },
+  { value: 'gogus-hast', label: 'Göğüs Hastalıkları Uzmanı' },
+  { value: 'goz-hast', label: 'Göz Hastalıkları Uzmanı' },
+  { value: 'noroloji', label: 'Nöroloji' },
+]
+
+function AppointmentForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -19,44 +28,111 @@ export default function AppointmentPage() {
     date: '',
     time: '',
     reason: '',
-    doctorType: ''
+    doctorType: '',
   })
+  const [preferredDoctorId, setPreferredDoctorId] = useState<string | null>(null)
+  const [analysisId, setAnalysisId] = useState<string | null>(null)
+  const [analysisImageUrl, setAnalysisImageUrl] = useState<string | null>(null)
+  const [preferredDoctor, setPreferredDoctor] = useState<{
+    firstName?: string
+    lastName?: string
+    institution?: string
+    specialty?: string
+  } | null>(null)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (!u) {
         router.push('/login')
         return
       }
-      if (!user.emailVerified) {
+      if (!u.emailVerified) {
         setLoading(false)
         router.replace('/verify-email')
         return
       }
-      setUser(user)
+      setUser(u)
       setLoading(false)
     })
     return () => unsubscribe()
   }, [router])
 
+  const applySearchParams = useCallback(async () => {
+    const dt = searchParams.get('doctorType')
+    const pid = searchParams.get('preferredDoctorId')
+    const aid = searchParams.get('analysisId')
+    setPreferredDoctorId(pid)
+    setAnalysisId(aid)
+
+    setFormData((prev) => ({
+      ...prev,
+      doctorType: dt || prev.doctorType,
+      reason:
+        prev.reason ||
+        (dt ? 'Yapay zeka analizi sonrası uzman görüşü talebi.' : ''),
+    }))
+
+    if (pid) {
+      try {
+        const snap = await getDoc(doc(db, 'doctors', pid))
+        if (snap.exists()) {
+          const d = snap.data() as Record<string, unknown>
+          setPreferredDoctor({
+            firstName: d.firstName as string | undefined,
+            lastName: d.lastName as string | undefined,
+            institution: d.institution as string | undefined,
+            specialty: d.specialty as string | undefined,
+          })
+        } else {
+          setPreferredDoctor(null)
+        }
+      } catch {
+        setPreferredDoctor(null)
+      }
+    } else {
+      setPreferredDoctor(null)
+    }
+
+    if (aid && user?.uid) {
+      try {
+        const snap = await getDoc(doc(db, 'analyses', aid))
+        if (snap.exists()) {
+          const d = snap.data() as Record<string, unknown>
+          if (d.userId === user.uid && typeof d.imageUrl === 'string') {
+            setAnalysisImageUrl(d.imageUrl)
+          } else {
+            setAnalysisImageUrl(null)
+          }
+        } else {
+          setAnalysisImageUrl(null)
+        }
+      } catch {
+        setAnalysisImageUrl(null)
+      }
+    } else {
+      setAnalysisImageUrl(null)
+    }
+  }, [searchParams, user?.uid])
+
+  useEffect(() => {
+    if (!user) return
+    applySearchParams()
+  }, [user, applySearchParams])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Validate user is logged in
+
     if (!user) {
       showToast('Lütfen önce giriş yapın.', 'error')
       return
     }
-    
+
     setSubmitting(true)
 
     try {
-      // Generate unique room name for video conference
-      // We'll create a temporary ID first, then update with actual ID
       const tempRoomName = `medi-analytica-temp-${Date.now()}`
-      
-      // Save appointment to Firestore
-      const docRef = await addDoc(collection(db, 'appointments'), {
+
+      const payload: Record<string, unknown> = {
         userId: user.uid,
         userEmail: user.email,
         date: formData.date,
@@ -64,32 +140,39 @@ export default function AppointmentPage() {
         reason: formData.reason,
         doctorType: formData.doctorType,
         status: 'pending',
-        jitsiRoom: tempRoomName, // Will be updated when approved
-        createdAt: serverTimestamp()
-      })
-      
-      // Update with actual room name using appointment ID
+        jitsiRoom: tempRoomName,
+        createdAt: serverTimestamp(),
+      }
+
+      if (preferredDoctorId) {
+        payload.preferredDoctorId = preferredDoctorId
+      }
+      if (analysisId && analysisImageUrl) {
+        payload.analysisId = analysisId
+        payload.analysisImageUrl = analysisImageUrl
+      } else if (analysisId) {
+        payload.analysisId = analysisId
+      }
+
+      const docRef = await addDoc(collection(db, 'appointments'), payload)
+
       const { doc: docFn, updateDoc } = await import('firebase/firestore')
       const actualRoomName = generateJitsiRoomName(docRef.id)
       await updateDoc(docFn(db, 'appointments', docRef.id), {
-        jitsiRoom: actualRoomName
+        jitsiRoom: actualRoomName,
       })
 
       showToast('Randevu talebiniz başarıyla iletildi! Onay sonrası bilgilendirileceksiniz.', 'success')
-      
-      // Reset form
+
       setFormData({
         date: '',
         time: '',
         reason: '',
-        doctorType: ''
+        doctorType: '',
       })
+      router.push('/dashboard#patient-appointment-history')
     } catch (error: any) {
       console.error('Error creating appointment:', error)
-      console.error('Error code:', error.code)
-      console.error('Error message:', error.message)
-      
-      // Show more specific error message
       if (error.code === 'permission-denied') {
         showToast('Randevu oluşturma izniniz yok. Lütfen Firebase güvenlik kurallarını kontrol edin.', 'error')
       } else {
@@ -108,8 +191,7 @@ export default function AppointmentPage() {
     )
   }
 
-  // Generate time slots with 15-minute intervals for all 24 hours (00:00 to 23:45)
-  const timeSlots = []
+  const timeSlots: string[] = []
   for (let hour = 0; hour < 24; hour++) {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:00`)
     timeSlots.push(`${hour.toString().padStart(2, '0')}:15`)
@@ -117,15 +199,11 @@ export default function AppointmentPage() {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:45`)
   }
 
-  const doctorTypes = [
-    { value: 'dermatolog', label: 'Dermatolog' },
-    { value: 'ortopedist', label: 'Ortopedist' },
-    { value: 'gogus-hast', label: 'Göğüs Hastalıkları Uzmanı' },
-    { value: 'goz-hast', label: 'Göz Hastalıkları Uzmanı' },
-    { value: 'noroloji', label: 'Nöroloji' },
-  ]
-
   const today = new Date().toISOString().split('T')[0]
+
+  const specLabel =
+    preferredDoctor?.specialty &&
+    doctorTypes.find((t) => t.value === preferredDoctor.specialty)?.label
 
   return (
     <div className="min-h-screen bg-gray-50 pt-24 pb-16">
@@ -140,6 +218,37 @@ export default function AppointmentPage() {
             <Calendar className="w-8 h-8 text-blue-600 mr-3" />
             <h1 className="text-3xl font-bold text-gray-900">Randevu Talep Et</h1>
           </div>
+
+          {(preferredDoctor || analysisImageUrl) && (
+            <div className="mb-8 space-y-4 rounded-2xl border-2 border-teal-100 bg-gradient-to-br from-teal-50/80 to-blue-50/50 p-5">
+              {preferredDoctor && (
+                <div className="flex items-start gap-3">
+                  <Stethoscope className="w-6 h-6 text-teal-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Seçilen uzman</p>
+                    <p className="font-bold text-gray-900">
+                      Dr. {preferredDoctor.firstName || ''} {preferredDoctor.lastName || ''}
+                    </p>
+                    {specLabel && <p className="text-sm text-teal-700">{specLabel}</p>}
+                    {preferredDoctor.institution && (
+                      <p className="text-sm text-gray-600 flex items-center gap-1.5 mt-1">
+                        <Building className="w-4 h-4 shrink-0" />
+                        {preferredDoctor.institution}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {analysisImageUrl && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 mb-2">Analize ait görüntü (randevuya eklenecek)</p>
+                  <div className="rounded-xl overflow-hidden border border-gray-200 max-w-xs">
+                    <img src={analysisImageUrl} alt="Analiz görüntüsü" className="w-full h-auto max-h-48 object-contain bg-gray-50" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -211,9 +320,7 @@ export default function AppointmentPage() {
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors resize-none"
                 placeholder="Şikayet veya açıklama..."
               />
-              <p className="text-sm text-gray-500 mt-2">
-                {formData.reason.length}/500 karakter
-              </p>
+              <p className="text-sm text-gray-500 mt-2">{formData.reason.length}/500 karakter</p>
             </div>
 
             <button
@@ -237,3 +344,18 @@ export default function AppointmentPage() {
   )
 }
 
+function AppointmentLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+  )
+}
+
+export default function AppointmentPage() {
+  return (
+    <Suspense fallback={<AppointmentLoading />}>
+      <AppointmentForm />
+    </Suspense>
+  )
+}

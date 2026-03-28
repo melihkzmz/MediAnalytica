@@ -505,9 +505,9 @@ export default function AnalyzePage() {
       showToast('Analiz tamamlandı!', 'success')
       
       // Save to Firebase
-      const analysisId = await saveAnalysisToFirebase(selectedDisease, formattedResult, selectedImage)
-      if (analysisId) {
-        setCurrentAnalysisId(analysisId)
+      const saved = await saveAnalysisToFirebase(selectedDisease, formattedResult, selectedImage)
+      if (saved) {
+        setCurrentAnalysisId(saved.id)
         // Always refresh history and stats after saving
         loadAnalyses()
         loadStats()
@@ -520,7 +520,11 @@ export default function AnalyzePage() {
     }
   }
 
-  const saveAnalysisToFirebase = async (diseaseType: DiseaseType, results: any, imageFile: File) => {
+  const saveAnalysisToFirebase = async (
+    diseaseType: DiseaseType,
+    results: any,
+    imageFile: File
+  ): Promise<{ id: string; imageUrl: string } | null> => {
     try {
       if (!user) {
         console.error('No user found')
@@ -566,7 +570,7 @@ export default function AnalyzePage() {
       console.log('Saving analysis to Firestore...')
       const docRef = await addDoc(collection(db, 'analyses'), analysisData)
       console.log('Analysis saved to Firestore:', docRef.id)
-      return docRef.id
+      return { id: docRef.id, imageUrl }
       
     } catch (error: any) {
       console.error('Error saving analysis:', error)
