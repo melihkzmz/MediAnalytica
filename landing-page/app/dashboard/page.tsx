@@ -1551,12 +1551,6 @@ export default function DashboardPage() {
 
             {/* Center Menu - Desktop */}
             <div className="hidden md:flex items-center space-x-1 flex-1 justify-center">
-              <Link
-                href="/"
-                className="px-4 py-2 rounded-xl transition-colors text-gray-700 hover:bg-gray-50"
-              >
-                Ana Menü
-              </Link>
               {isDoctor ? (
                 // Doctor tabs
                 [
@@ -1665,13 +1659,6 @@ export default function DashboardPage() {
           {mobileMenuOpen && (
             <div className="md:hidden border-t border-gray-200 py-4">
               <div className="flex flex-col space-y-2">
-                <Link
-                  href="/"
-                  className="px-4 py-2 rounded-xl text-left transition-colors text-gray-700 hover:bg-gray-50"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Ana Menü
-                </Link>
                 {isDoctor ? (
                   // Doctor tabs
                   [
