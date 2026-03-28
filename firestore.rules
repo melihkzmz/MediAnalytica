@@ -36,7 +36,7 @@ service cloud.firestore {
       allow write: if isOwner(doctorId);
     }
 
-    // Chat: patient requests a conversation; doctor approves or rejects
+    // Chat: patient→doctor or doctor→doctor (colleague); recipient doctor approves or rejects
     match /chatRequests/{requestId} {
       allow read: if isAuthenticated() && (
         resource.data.fromUserId == request.auth.uid ||
@@ -49,7 +49,12 @@ service cloud.firestore {
         request.resource.data.status == 'pending' &&
         exists(/databases/$(database)/documents/doctors/$(request.resource.data.toDoctorUserId)) &&
         (!('introMessage' in request.resource.data) ||
-          (request.resource.data.introMessage is string && request.resource.data.introMessage.size() <= 500));
+          (request.resource.data.introMessage is string && request.resource.data.introMessage.size() <= 500)) &&
+        (!('requestKind' in request.resource.data) ||
+          request.resource.data.requestKind in ['patient_to_doctor', 'doctor_to_doctor']) &&
+        (!('requestKind' in request.resource.data) ||
+          request.resource.data.requestKind != 'doctor_to_doctor' ||
+          exists(/databases/$(database)/documents/doctors/$(request.auth.uid)));
       allow update: if isAuthenticated() &&
         isDoctor() &&
         resource.data.toDoctorUserId == request.auth.uid &&
@@ -65,7 +70,7 @@ service cloud.firestore {
     match /conversations/{conversationId} {
       allow read: if isAuthenticated() &&
         request.auth.uid in resource.data.participantIds;
-      // Doctor creates after approving a chat request; participantIds order [patientId, doctorId]
+      // Recipient doctor creates after approving a chat request; patientId = requester, doctorId = approver (doctor–doctor uses same shape)
       allow create: if isAuthenticated() &&
         isDoctor() &&
         request.resource.data.doctorId == request.auth.uid &&

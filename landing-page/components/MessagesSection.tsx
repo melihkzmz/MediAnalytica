@@ -31,6 +31,8 @@ type ChatRequest = {
   introMessage?: string
   conversationId?: string
   createdAt?: Timestamp
+  /** doctor→doctor colleague requests; omit or patient_to_doctor for patients */
+  requestKind?: 'patient_to_doctor' | 'doctor_to_doctor'
 }
 
 type Conversation = {
@@ -79,7 +81,7 @@ type Props = {
 
 export default function MessagesSection({ user, isDoctor }: Props) {
   const [patientTab, setPatientTab] = useState<'chats' | 'new'>('chats')
-  const [doctorTab, setDoctorTab] = useState<'requests' | 'chats'>('requests')
+  const [doctorTab, setDoctorTab] = useState<'requests' | 'chats' | 'newPeer'>('requests')
 
   const [doctors, setDoctors] = useState<DoctorRow[]>([])
   const [loadingDoctors, setLoadingDoctors] = useState(false)
@@ -150,32 +152,63 @@ export default function MessagesSection({ user, isDoctor }: Props) {
     })
   }, [])
 
-  // Incoming / outgoing requests
+  // Chat requests: patients see their outgoing; doctors see incoming + outgoing (e.g. colleague requests)
   useEffect(() => {
     if (!user?.uid) return
 
-    const q = isDoctor
-      ? query(collection(db, 'chatRequests'), where('toDoctorUserId', '==', user.uid))
-      : query(collection(db, 'chatRequests'), where('fromUserId', '==', user.uid))
-
-    const unsub = onSnapshot(q, (snap) => {
-      const list: ChatRequest[] = []
-      snap.forEach((d) => {
-        list.push({ id: d.id, ...(d.data() as Omit<ChatRequest, 'id'>) })
+    if (!isDoctor) {
+      const q = query(collection(db, 'chatRequests'), where('fromUserId', '==', user.uid))
+      const unsub = onSnapshot(q, (snap) => {
+        const list: ChatRequest[] = []
+        snap.forEach((d) => {
+          list.push({ id: d.id, ...(d.data() as Omit<ChatRequest, 'id'>) })
+        })
+        list.sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() ?? 0
+          const tb = b.createdAt?.toMillis?.() ?? 0
+          return tb - ta
+        })
+        setRequests(list)
+        list.forEach((r) => fetchUserName(r.toDoctorUserId))
       })
+      return () => unsub()
+    }
+
+    const incoming: { current: ChatRequest[] } = { current: [] }
+    const outgoing: { current: ChatRequest[] } = { current: [] }
+
+    const flush = () => {
+      const byId = new Map<string, ChatRequest>()
+      incoming.current.forEach((r) => byId.set(r.id, r))
+      outgoing.current.forEach((r) => byId.set(r.id, r))
+      const list = Array.from(byId.values())
       list.sort((a, b) => {
         const ta = a.createdAt?.toMillis?.() ?? 0
         const tb = b.createdAt?.toMillis?.() ?? 0
         return tb - ta
       })
       setRequests(list)
-
       list.forEach((r) => {
-        const other = isDoctor ? r.fromUserId : r.toDoctorUserId
+        const other = r.toDoctorUserId === user.uid ? r.fromUserId : r.toDoctorUserId
         fetchUserName(other)
       })
+    }
+
+    const qIn = query(collection(db, 'chatRequests'), where('toDoctorUserId', '==', user.uid))
+    const qOut = query(collection(db, 'chatRequests'), where('fromUserId', '==', user.uid))
+
+    const unsubIn = onSnapshot(qIn, (snap) => {
+      incoming.current = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ChatRequest, 'id'>) }))
+      flush()
     })
-    return () => unsub()
+    const unsubOut = onSnapshot(qOut, (snap) => {
+      outgoing.current = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ChatRequest, 'id'>) }))
+      flush()
+    })
+    return () => {
+      unsubIn()
+      unsubOut()
+    }
   }, [user?.uid, isDoctor, fetchUserName])
 
   // Conversations for this user
@@ -207,10 +240,8 @@ export default function MessagesSection({ user, isDoctor }: Props) {
   }, [user?.uid, fetchUserName, subscribePresence])
 
   useEffect(() => {
-    if (!isDoctor) {
-      loadDoctorDirectory()
-    }
-  }, [isDoctor, loadDoctorDirectory])
+    loadDoctorDirectory()
+  }, [loadDoctorDirectory])
 
   useEffect(() => {
     if (!selectedConv) {
@@ -250,13 +281,15 @@ export default function MessagesSection({ user, isDoctor }: Props) {
 
   const otherParticipantName = (c: Conversation) => {
     const other = c.patientId === user.uid ? c.doctorId : c.patientId
-    if (isDoctor || c.doctorId === other) return doctorDisplay(other)
+    const peerInDirectory = doctors.some((d) => d.id === other)
+    if (peerInDirectory) return doctorDisplay(other)
     return userNames[other] || 'Hasta'
   }
 
-  const handleSendRequest = async () => {
+  const handleSendRequest = async (opts?: { doctorToDoctor?: boolean }) => {
+    const doctorToDoctor = Boolean(opts?.doctorToDoctor)
     if (!selectedDoctorId) {
-      showToast('Lütfen bir doktor seçin.', 'warning')
+      showToast(doctorToDoctor ? 'Lütfen bir kolay seçin.' : 'Lütfen bir doktor seçin.', 'warning')
       return
     }
     if (selectedDoctorId === user.uid) {
@@ -264,17 +297,26 @@ export default function MessagesSection({ user, isDoctor }: Props) {
       return
     }
     const dup = requests.find(
-      (r) => r.toDoctorUserId === selectedDoctorId && r.status === 'pending'
+      (r) =>
+        r.fromUserId === user.uid &&
+        r.toDoctorUserId === selectedDoctorId &&
+        r.status === 'pending'
     )
     if (dup) {
-      showToast('Bu doktora zaten bekleyen bir isteğiniz var.', 'warning')
+      showToast(doctorToDoctor ? 'Bu kolaya zaten bekleyen bir isteğiniz var.' : 'Bu doktora zaten bekleyen bir isteğiniz var.', 'warning')
       return
     }
-    const existingConv = conversations.find((c) => c.doctorId === selectedDoctorId)
+    const existingConv = conversations.find(
+      (c) => c.participantIds.includes(user.uid) && c.participantIds.includes(selectedDoctorId)
+    )
     if (existingConv) {
-      showToast('Bu doktorla zaten bir sohbetiniz var.', 'info')
+      showToast(doctorToDoctor ? 'Bu kolayla zaten bir sohbetiniz var.' : 'Bu doktorla zaten bir sohbetiniz var.', 'info')
       setSelectedConv(existingConv)
-      setPatientTab('chats')
+      if (doctorToDoctor) {
+        setDoctorTab('chats')
+      } else {
+        setPatientTab('chats')
+      }
       return
     }
 
@@ -284,6 +326,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
         fromUserId: user.uid,
         toDoctorUserId: selectedDoctorId,
         status: 'pending',
+        requestKind: doctorToDoctor ? 'doctor_to_doctor' : 'patient_to_doctor',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }
@@ -292,7 +335,11 @@ export default function MessagesSection({ user, isDoctor }: Props) {
       await addDoc(collection(db, 'chatRequests'), payload)
       showToast('Sohbet isteği gönderildi.', 'success')
       setIntroText('')
-      setPatientTab('chats')
+      if (doctorToDoctor) {
+        setDoctorTab('requests')
+      } else {
+        setPatientTab('chats')
+      }
     } catch (e) {
       console.error(e)
       showToast('İstek gönderilemedi. Firebase kurallarını kontrol edin.', 'error')
@@ -363,7 +410,12 @@ export default function MessagesSection({ user, isDoctor }: Props) {
     }
   }
 
-  const pendingForDoctor = requests.filter((r) => r.status === 'pending')
+  const pendingIncomingForDoctor = requests.filter(
+    (r) => r.status === 'pending' && r.toDoctorUserId === user.uid
+  )
+  const pendingOutgoingForDoctor = requests.filter(
+    (r) => r.status === 'pending' && r.fromUserId === user.uid
+  )
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -373,7 +425,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
           <h2 className="text-2xl font-bold text-gray-900">Mesajlar</h2>
           <p className="text-sm text-gray-600">
             {isDoctor
-              ? 'Hasta sohbet isteklerini onaylayın veya mevcut sohbetlere devam edin.'
+              ? 'Hasta ve doktor kolaylarınızdan gelen istekleri onaylayın; onaylı doktorlara da yeni sohbet isteği gönderebilirsiniz.'
               : 'Onaylı doktorlara sohbet isteği gönderin; onay sonrası mesajlaşın.'}
           </p>
         </div>
@@ -383,20 +435,29 @@ export default function MessagesSection({ user, isDoctor }: Props) {
         <div className="lg:col-span-1 space-y-4">
           {isDoctor ? (
             <>
-              <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+              <div className="flex rounded-xl border border-gray-200 overflow-hidden flex-wrap">
                 <button
                   type="button"
                   onClick={() => setDoctorTab('requests')}
-                  className={`flex-1 py-2 text-sm font-medium ${
+                  className={`flex-1 min-w-[5.5rem] py-2 text-sm font-medium ${
                     doctorTab === 'requests' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'
                   }`}
                 >
-                  İstekler ({pendingForDoctor.length})
+                  İstekler ({pendingIncomingForDoctor.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDoctorTab('newPeer')}
+                  className={`flex-1 min-w-[5.5rem] py-2 text-sm font-medium ${
+                    doctorTab === 'newPeer' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'
+                  }`}
+                >
+                  Kolaya istek
                 </button>
                 <button
                   type="button"
                   onClick={() => setDoctorTab('chats')}
-                  className={`flex-1 py-2 text-sm font-medium ${
+                  className={`flex-1 min-w-[5.5rem] py-2 text-sm font-medium ${
                     doctorTab === 'chats' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'
                   }`}
                 >
@@ -404,42 +465,134 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                 </button>
               </div>
 
-              {doctorTab === 'requests' && (
-                <div className="space-y-2 max-h-[420px] overflow-y-auto">
-                  {pendingForDoctor.length === 0 ? (
-                    <p className="text-sm text-gray-500 p-4 bg-gray-50 rounded-xl">Bekleyen istek yok.</p>
+              {doctorTab === 'newPeer' && (
+                <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">Doktor kolayınızı seçin</label>
+                  {loadingDoctors ? (
+                    <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
                   ) : (
-                    pendingForDoctor.map((r) => (
-                      <div
-                        key={r.id}
-                        className="p-4 bg-white border border-gray-200 rounded-xl shadow-sm space-y-2"
-                      >
-                        <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
-                          <User className="w-4 h-4" />
-                          {userNames[r.fromUserId] || 'Hasta'}
-                        </div>
-                        {r.introMessage ? (
-                          <p className="text-xs text-gray-600 line-clamp-3">{r.introMessage}</p>
-                        ) : null}
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleApprove(r)}
-                            className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
-                          >
-                            <Check className="w-4 h-4" /> Onayla
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleReject(r)}
-                            className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50"
-                          >
-                            <X className="w-4 h-4" /> Reddet
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                    <select
+                      value={selectedDoctorId}
+                      onChange={(e) => setSelectedDoctorId(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">— Seçin —</option>
+                      {doctors
+                        .filter((d) => d.id !== user.uid)
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>
+                            Dr. {d.firstName} {d.lastName}
+                            {d.specialty ? ` · ${d.specialty}` : ''}
+                          </option>
+                        ))}
+                    </select>
                   )}
+                  <label className="block text-sm font-medium text-gray-700">Kısa mesaj (isteğe bağlı)</label>
+                  <textarea
+                    value={introText}
+                    onChange={(e) => setIntroText(e.target.value.slice(0, 500))}
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    placeholder="Kolaya neden yazmak istediğinizi kısaca belirtebilirsiniz."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSendRequest({ doctorToDoctor: true })}
+                    disabled={sendingRequest || !selectedDoctorId}
+                    className="w-full py-2 rounded-lg bg-violet-600 text-white font-medium text-sm disabled:opacity-50 hover:bg-violet-700"
+                  >
+                    {sendingRequest ? 'Gönderiliyor…' : 'Kolaya istek gönder'}
+                  </button>
+                </div>
+              )}
+
+              {doctorTab === 'requests' && (
+                <div className="space-y-4 max-h-[480px] overflow-y-auto">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                      Gelen — onayınızı bekleyen
+                    </p>
+                    {pendingIncomingForDoctor.length === 0 ? (
+                      <p className="text-sm text-gray-500 p-3 bg-gray-50 rounded-xl">Bekleyen gelen istek yok.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {pendingIncomingForDoctor.map((r) => (
+                          <div
+                            key={r.id}
+                            className="p-4 bg-white border border-gray-200 rounded-xl shadow-sm space-y-2"
+                          >
+                            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-900">
+                              {r.requestKind === 'doctor_to_doctor' ? (
+                                <Stethoscope className="w-4 h-4 text-violet-600 shrink-0" />
+                              ) : (
+                                <User className="w-4 h-4 shrink-0" />
+                              )}
+                              <span>
+                                {r.requestKind === 'doctor_to_doctor'
+                                  ? doctorDisplay(r.fromUserId)
+                                  : userNames[r.fromUserId] || 'Hasta'}
+                              </span>
+                              {r.requestKind === 'doctor_to_doctor' ? (
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full">
+                                  Doktor kolayası
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                                  Hasta
+                                </span>
+                              )}
+                            </div>
+                            {r.introMessage ? (
+                              <p className="text-xs text-gray-600 line-clamp-3">{r.introMessage}</p>
+                            ) : null}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleApprove(r)}
+                                className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
+                              >
+                                <Check className="w-4 h-4" /> Onayla
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleReject(r)}
+                                className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50"
+                              >
+                                <X className="w-4 h-4" /> Reddet
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                      Giden — onay bekleyen
+                    </p>
+                    {pendingOutgoingForDoctor.length === 0 ? (
+                      <p className="text-sm text-gray-500 p-3 bg-gray-50 rounded-xl">Giden bekleyen istek yok.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {pendingOutgoingForDoctor.map((r) => (
+                          <div
+                            key={r.id}
+                            className="p-3 bg-violet-50/60 border border-violet-100 rounded-xl text-sm space-y-1"
+                          >
+                            <div className="font-medium text-gray-900">
+                              → {doctorDisplay(r.toDoctorUserId)}
+                            </div>
+                            <div className="text-xs text-violet-800">
+                              {r.requestKind === 'doctor_to_doctor' ? 'Kolay isteği' : 'Sohbet isteği'} · Beklemede
+                            </div>
+                            {r.introMessage ? (
+                              <p className="text-xs text-gray-600 line-clamp-2">{r.introMessage}</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -528,7 +681,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                   />
                   <button
                     type="button"
-                    onClick={handleSendRequest}
+                    onClick={() => handleSendRequest()}
                     disabled={sendingRequest || !selectedDoctorId}
                     className="w-full py-2 rounded-lg bg-blue-600 text-white font-medium text-sm disabled:opacity-50"
                   >
@@ -575,7 +728,9 @@ export default function MessagesSection({ user, isDoctor }: Props) {
                         <div className="flex justify-between gap-2">
                           <span className="font-medium text-sm">{otherParticipantName(c)}</span>
                           <span className="text-xs text-gray-500">
-                            {presenceLabel(presence[c.doctorId]?.lastSeen)}
+                            {presenceLabel(
+                              presence[c.patientId === user.uid ? c.doctorId : c.patientId]?.lastSeen
+                            )}
                           </span>
                         </div>
                         {c.lastMessagePreview ? (
@@ -599,7 +754,21 @@ export default function MessagesSection({ user, isDoctor }: Props) {
               <div className="p-4 border-b border-gray-200 flex items-center justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    {isDoctor ? <User className="w-5 h-5 text-gray-500" /> : <Stethoscope className="w-5 h-5 text-gray-500" />}
+                    {(() => {
+                      const oid =
+                        selectedConv.patientId === user.uid
+                          ? selectedConv.doctorId
+                          : selectedConv.patientId
+                      const peerDoctor = doctors.some((d) => d.id === oid)
+                      if (peerDoctor) {
+                        return <Stethoscope className="w-5 h-5 text-violet-600" />
+                      }
+                      return isDoctor ? (
+                        <User className="w-5 h-5 text-gray-500" />
+                      ) : (
+                        <Stethoscope className="w-5 h-5 text-gray-500" />
+                      )
+                    })()}
                     {otherParticipantName(selectedConv)}
                   </h3>
                   <p className="text-xs text-gray-500 mt-1">
