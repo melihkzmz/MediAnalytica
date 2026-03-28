@@ -20,6 +20,7 @@ import { isAppointmentTime } from '@/lib/appointmentUtils'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
+               'patient-appointment-history' |
                'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
 
 // Helper function to map skin disease abbreviations to full Turkish names
@@ -71,6 +72,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const hash = window.location.hash.replace('#', '')
     const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
+                          'patient-appointment-history',
                           'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
     if (hash && validSections.includes(hash)) {
       setCurrentSection(hash as Section)
@@ -82,6 +84,7 @@ export default function DashboardPage() {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '')
       const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
+                            'patient-appointment-history',
                             'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
       if (hash && validSections.includes(hash)) {
         setCurrentSection(hash as Section)
@@ -108,6 +111,7 @@ export default function DashboardPage() {
   const [pendingAppointments, setPendingAppointments] = useState<any[]>([])
   const [myAppointments, setMyAppointments] = useState<any[]>([])
   const [appointmentHistory, setAppointmentHistory] = useState<any[]>([])
+  const [patientAppointmentHistory, setPatientAppointmentHistory] = useState<any[]>([])
   const [myPatients, setMyPatients] = useState<any[]>([])
   const [loadingAppointments, setLoadingAppointments] = useState(false)
   const [activeAppointments, setActiveAppointments] = useState<any[]>([])
@@ -232,6 +236,57 @@ export default function DashboardPage() {
       }
     }
   }, [user, isDoctor, doctorData, currentSection])
+
+  // Patient: all own appointments (pending → completed)
+  useEffect(() => {
+    if (!user || isDoctor || currentSection !== 'patient-appointment-history') return
+    let cancelled = false
+    const run = async () => {
+      setLoadingAppointments(true)
+      try {
+        const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const q = query(collection(db, 'appointments'), where('userId', '==', user.uid))
+        const snap = await getDocs(q)
+        const rows = await Promise.all(
+          snap.docs.map(async (appointmentDoc) => {
+            const data = appointmentDoc.data() as Record<string, unknown>
+            if (data.createdAt && typeof (data.createdAt as { toDate?: () => Date }).toDate === 'function') {
+              data.createdAt = (data.createdAt as { toDate: () => Date }).toDate().getTime()
+            } else if ((data.createdAt as { seconds?: number })?.seconds) {
+              data.createdAt = (data.createdAt as { seconds: number }).seconds * 1000
+            }
+            let doctor: Record<string, unknown> | null = null
+            if (data.doctorId && typeof data.doctorId === 'string') {
+              try {
+                const dd = await getDoc(doc(db, 'doctors', data.doctorId))
+                if (dd.exists()) doctor = dd.data() as Record<string, unknown>
+              } catch (e) {
+                console.error(e)
+              }
+            }
+            return { id: appointmentDoc.id, ...data, doctor }
+          })
+        )
+        rows.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+          const da = String(a.date ?? '')
+          const db = String(b.date ?? '')
+          if (da !== db) return db.localeCompare(da)
+          return String(b.time ?? '').localeCompare(String(a.time ?? ''))
+        })
+        if (!cancelled) setPatientAppointmentHistory(rows)
+      } catch (e) {
+        console.error(e)
+        if (!cancelled) showToast('Randevu geçmişi yüklenirken hata oluştu.', 'error')
+      } finally {
+        if (!cancelled) setLoadingAppointments(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [user, isDoctor, currentSection])
 
   // Check for active appointments (appointments that are happening now)
   useEffect(() => {
@@ -1589,6 +1644,7 @@ export default function DashboardPage() {
                 { id: 'favorites', label: 'Favoriler' },
                 { id: 'stats', label: 'İstatistikler' },
                 { id: 'appointment', label: 'Randevu Talep' },
+                { id: 'patient-appointment-history', label: 'Randevu Geçmişi' },
                 { id: 'messages', label: 'Mesajlar' },
               ].map((item) => (
                 <button
@@ -1604,6 +1660,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                  {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
                   {item.label}
                 </button>
                 ))
@@ -1698,6 +1755,7 @@ export default function DashboardPage() {
                   { id: 'favorites', label: 'Favoriler' },
                   { id: 'stats', label: 'İstatistikler' },
                   { id: 'appointment', label: 'Randevu Talep' },
+                  { id: 'patient-appointment-history', label: 'Randevu Geçmişi' },
                   { id: 'messages', label: 'Mesajlar' },
                 ].map((item) => (
                   <button
@@ -1714,6 +1772,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                    {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
                     {item.label}
                   </button>
                   ))
@@ -2719,6 +2778,111 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {currentSection === 'patient-appointment-history' && !isDoctor && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex items-center gap-3">
+                <History className="w-8 h-8 text-blue-600" />
+                <div>
+                  <h2 className="text-3xl font-bold text-gray-900">Randevu Geçmişi</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Tüm randevu talepleriniz ve durumları (en yeniden eskiye).
+                  </p>
+                </div>
+              </div>
+
+              {loadingAppointments ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Randevular yükleniyor...</p>
+                </div>
+              ) : patientAppointmentHistory.length === 0 ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center border border-gray-100">
+                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Henüz randevu yok</h3>
+                  <p className="text-gray-600 mb-6">Randevu talebi oluşturduğunuzda burada listelenir.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentSection('appointment')
+                      window.location.hash = 'appointment'
+                    }}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                  >
+                    Randevu talep et
+                  </button>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {patientAppointmentHistory.map((apt: any) => {
+                    const st = apt.status as string
+                    const statusLabel =
+                      st === 'pending'
+                        ? 'Beklemede'
+                        : st === 'approved'
+                          ? 'Onaylandı'
+                          : st === 'rejected'
+                            ? 'Reddedildi'
+                            : st === 'completed'
+                              ? 'Tamamlandı'
+                              : st || 'Bilinmiyor'
+                    const statusClass =
+                      st === 'pending'
+                        ? 'bg-amber-100 text-amber-800'
+                        : st === 'approved'
+                          ? 'bg-green-100 text-green-800'
+                          : st === 'rejected'
+                            ? 'bg-red-100 text-red-800'
+                            : st === 'completed'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-800'
+                    const doctorName = apt.doctor
+                      ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim()
+                      : null
+                    return (
+                      <div
+                        key={apt.id}
+                        className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                          <div className="flex-1 space-y-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+                                {statusLabel}
+                              </span>
+                              {apt.doctorType ? (
+                                <span className="text-xs text-gray-500">Branş: {apt.doctorType}</span>
+                              ) : null}
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                              <div className="flex items-center gap-2 text-gray-700">
+                                <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+                                <span>{apt.date || '—'}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-gray-700">
+                                <Clock className="w-4 h-4 text-gray-400 shrink-0" />
+                                <span>{apt.time || '—'}</span>
+                              </div>
+                              <div className="sm:col-span-2 flex items-start gap-2 text-gray-700">
+                                <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                                <span>{apt.reason || 'Neden belirtilmemiş'}</span>
+                              </div>
+                              <div className="sm:col-span-2 flex items-center gap-2 text-gray-700">
+                                <User className="w-4 h-4 text-gray-400 shrink-0" />
+                                <span>
+                                  {doctorName || (st === 'pending' ? 'Henüz doktor atanmadı' : 'Doktor bilgisi yok')}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
