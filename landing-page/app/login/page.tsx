@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth'
+import { sendVerificationEmail } from '@/lib/emailVerification'
 import { auth, db, storage } from '@/lib/firebase'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -37,7 +38,10 @@ export default function LoginPage() {
     // Check if user is already logged in
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user && isLogin) {
-        // Only redirect if we're in login mode (not during registration)
+        if (!user.emailVerified) {
+          router.replace('/verify-email')
+          return
+        }
         router.push('/dashboard')
       }
     })
@@ -54,12 +58,15 @@ export default function LoginPage() {
         const userCredential = await signInWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
 
-        // Email verification removed - direct login allowed
-
-        // Save token to localStorage
         const token = await user.getIdToken()
         localStorage.setItem('firebase_id_token', token)
-        
+
+        if (!user.emailVerified) {
+          showToast('Lütfen e-posta adresinizi doğrulayın.', 'warning')
+          router.replace('/verify-email')
+          return
+        }
+
         showToast('Giriş başarılı!', 'success')
         router.push('/dashboard')
       } else {
@@ -93,11 +100,20 @@ export default function LoginPage() {
               }
               
               await setDoc(doc(db, 'users', user.uid), userDoc)
-              
-              showToast('Kayıt başarılı! Giriş yapılıyor...', 'success')
+
+              try {
+                await sendVerificationEmail(user)
+                showToast('Kayıt oluşturuldu. E-postanızdaki doğrulama bağlantısına tıklayın.', 'success')
+              } catch (verifyErr) {
+                console.error(verifyErr)
+                showToast(
+                  'Hesap oluşturuldu; doğrulama e-postası gönderilemedi. Doğrulama sayfasından tekrar deneyin.',
+                  'warning'
+                )
+              }
               const token = await user.getIdToken()
               localStorage.setItem('firebase_id_token', token)
-              router.push('/dashboard')
+              router.replace('/verify-email')
               return
             } catch (error: any) {
               console.error('Error saving user data:', error)
@@ -218,12 +234,19 @@ export default function LoginPage() {
 
       await setDoc(doc(db, 'doctors', user.uid), doctorData)
 
-      showToast('Doktor kaydı başarılı! Giriş yapılıyor...', 'success')
-      
-      // Save token and redirect
+      try {
+        await sendVerificationEmail(user)
+        showToast('Kayıt oluşturuldu. E-postanızdaki doğrulama bağlantısına tıklayın.', 'success')
+      } catch (verifyErr) {
+        console.error(verifyErr)
+        showToast(
+          'Hesap oluşturuldu; doğrulama e-postası gönderilemedi. Doğrulama sayfasından tekrar deneyin.',
+          'warning'
+        )
+      }
       const token = await user.getIdToken()
       localStorage.setItem('firebase_id_token', token)
-      router.push('/dashboard')
+      router.replace('/verify-email')
     } catch (error: any) {
       console.error('Error saving doctor data:', error)
       showToast('Doktor bilgileri kaydedilirken hata oluştu.', 'error')

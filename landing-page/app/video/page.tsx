@@ -28,7 +28,12 @@ function VideoConferenceContent() {
         router.push('/login')
         return
       }
-      
+      if (!currentUser.emailVerified) {
+        setLoading(false)
+        router.replace('/verify-email')
+        return
+      }
+
       setUser(currentUser)
       const displayName = currentUser.displayName || currentUser.email?.split('@')[0] || 'Kullanıcı'
       setUserName(displayName)

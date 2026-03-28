@@ -119,6 +119,11 @@ export default function DashboardPage() {
         router.push('/login')
         return
       }
+      if (!user.emailVerified) {
+        setLoading(false)
+        router.replace('/verify-email')
+        return
+      }
       setUser(user)
       
       // Check if user is a doctor

@@ -79,7 +79,11 @@ export default function AnalyzePage() {
         router.push('/login')
         return
       }
-      // Email verification check removed
+      if (!user.emailVerified) {
+        setLoading(false)
+        router.replace('/verify-email')
+        return
+      }
       setUser(user)
       setLoading(false)
     })

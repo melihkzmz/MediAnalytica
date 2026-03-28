@@ -23,6 +23,11 @@ export default function ProfilePage() {
         router.push('/login')
         return
       }
+      if (!user.emailVerified) {
+        setLoading(false)
+        router.replace('/verify-email')
+        return
+      }
       setUser(user)
       setName(user.displayName || '')
       setPhotoURL(user.photoURL || '')

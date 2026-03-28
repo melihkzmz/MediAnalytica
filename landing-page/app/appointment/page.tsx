@@ -28,6 +28,11 @@ export default function AppointmentPage() {
         router.push('/login')
         return
       }
+      if (!user.emailVerified) {
+        setLoading(false)
+        router.replace('/verify-email')
+        return
+      }
       setUser(user)
       setLoading(false)
     })
