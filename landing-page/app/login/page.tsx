@@ -561,10 +561,7 @@ export default function LoginPage() {
                         <option value="ortopedist">Ortopedist</option>
                         <option value="gogus-hast">Göğüs Hastalıkları Uzmanı</option>
                         <option value="goz-hast">Göz Hastalıkları Uzmanı</option>
-                        <option value="genel-cerrahi">Genel Cerrahi</option>
-                        <option value="ic-hastaliklari">İç Hastalıkları</option>
                         <option value="noroloji">Nöroloji</option>
-                        <option value="kardiyoloji">Kardiyoloji</option>
                       </select>
                     </div>
 

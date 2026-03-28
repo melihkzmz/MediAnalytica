@@ -625,10 +625,7 @@ export default function DashboardPage() {
         'Ortopedist': 'ortopedist',
         'Göğüs Hastalıkları Uzmanı': 'gogus-hast',
         'Göz Hastalıkları Uzmanı': 'goz-hast',
-        'Genel Cerrahi': 'genel-cerrahi',
-        'İç Hastalıkları': 'ic-hastaliklari',
         'Nöroloji': 'noroloji',
-        'Kardiyoloji': 'kardiyoloji'
       }
       
       const doctorType = specialtyMap[doctorData.specialty] || doctorData.specialty?.toLowerCase()

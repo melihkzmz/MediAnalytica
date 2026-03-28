@@ -122,10 +122,7 @@ export default function AppointmentPage() {
     { value: 'ortopedist', label: 'Ortopedist' },
     { value: 'gogus-hast', label: 'Göğüs Hastalıkları Uzmanı' },
     { value: 'goz-hast', label: 'Göz Hastalıkları Uzmanı' },
-    { value: 'genel-cerrahi', label: 'Genel Cerrahi' },
-    { value: 'ic-hastaliklari', label: 'İç Hastalıkları' },
     { value: 'noroloji', label: 'Nöroloji' },
-    { value: 'kardiyoloji', label: 'Kardiyoloji' },
   ]
 
   const today = new Date().toISOString().split('T')[0]
