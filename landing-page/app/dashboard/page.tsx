@@ -1856,9 +1856,13 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="relative group">
-                    <div className="relative w-full h-auto rounded-2xl overflow-hidden shadow-xl border-2 border-gray-200">
-                      <img src={imagePreview} alt="Preview" className="w-full h-auto object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="relative flex min-h-[200px] max-h-[min(65vh,480px)] w-full items-center justify-center rounded-2xl border-2 border-gray-200 bg-gray-50/90 p-3 shadow-xl">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="max-h-[min(65vh,480px)] w-auto max-w-full object-contain"
+                      />
+                      <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-black/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                     </div>
                     <button
                       onClick={() => {
