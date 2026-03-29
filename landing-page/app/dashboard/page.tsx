@@ -1293,29 +1293,80 @@ export default function DashboardPage() {
       doc.text(splitDescription, margin + 5, yPos)
       yPos += splitDescription.length * 5 + 5
 
-      // Recommendations Section
-      checkPageBreak(50)
-      
+      // Olası semptomlar & ön kontrol (dashboard ile aynı kaynak: getSymptomHintsWithFallback)
+      const symptomHintsPdf = getSymptomHintsWithFallback(
+        selectedDisease,
+        String(analysisResult.prediction ?? '')
+      )
+      const lineH = 5
+
+      checkPageBreak(30)
       doc.setFontSize(14)
       doc.setFont('helvetica', 'bold')
-      doc.text('Tedavi Önerileri', margin, yPos)
-      
+      doc.setTextColor(0, 0, 0)
+      doc.text(fixTurkishChars('Olası Semptomlar'), margin, yPos)
+      yPos += 9
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      symptomHintsPdf.symptoms.forEach((line) => {
+        const bulletText = fixTurkishChars(`• ${line}`)
+        const wrapped = doc.splitTextToSize(bulletText, contentWidth - 12)
+        checkPageBreak(wrapped.length * lineH + 4)
+        doc.text(wrapped, margin + 5, yPos)
+        yPos += wrapped.length * lineH + 3
+      })
+      yPos += 5
+
+      checkPageBreak(30)
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text(fixTurkishChars('Ön Kontrol Önerileri'), margin, yPos)
+      yPos += 9
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      symptomHintsPdf.tips.forEach((line) => {
+        const bulletText = fixTurkishChars(`• ${line}`)
+        const wrapped = doc.splitTextToSize(bulletText, contentWidth - 12)
+        checkPageBreak(wrapped.length * lineH + 4)
+        doc.text(wrapped, margin + 5, yPos)
+        yPos += wrapped.length * lineH + 3
+      })
+      yPos += 6
+
+      checkPageBreak(18)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(90, 90, 90)
+      const hintNote = fixTurkishChars(
+        'Yukarıdaki semptom ve ön kontrol maddeleri, en yüksek olasılıklı tahmine göre genel bilgilendirme amaçlıdır; tıbbi tanı veya tedavi önerisi değildir.'
+      )
+      const hintNoteLines = doc.splitTextToSize(hintNote, contentWidth - 10)
+      doc.text(hintNoteLines, margin + 5, yPos)
+      yPos += hintNoteLines.length * 4 + 10
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(0, 0, 0)
+
+      // Genel hatırlatmalar (platform / hekim — ön kontrol listesiyle çakışmayan kısa maddeler)
+      checkPageBreak(40)
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text(fixTurkishChars('Genel Hatırlatmalar'), margin, yPos)
       yPos += 10
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
-      
+
       const recommendations = [
-        'Bu sonuçlar sadece bilgilendirme amaçlidir ve profesyonel tibbi tani yerine geçmez.',
-        'Kesin tani ve tedavi için mutlaka bir uzman doktora danismaniz önerilir.',
-        'Erken teshis ve düzenli takip sagliginiz için önemlidir.',
-        'Analiz sonuçlarinizi doktorunuzla paylasarak profesyonel görüs alabilirsiniz.',
-        'MediAnalytica platformundan uzman doktorlarla görüntülü konsültasyon randevusu alabilirsiniz.'
+        'Kesin tanı ve tedavi planı için mutlaka ilgili branşta bir hekimle yüz yüze değerlendirme yapınız.',
+        'Analiz çıktınızı hekiminizle paylaşarak profesyonel görüş alınız.',
+        'MediAnalytica üzerinden uzman doktorlarla görüntülü konsültasyon randevusu talep edebilirsiniz.',
       ]
-      
-      recommendations.forEach((rec, index) => {
-        checkPageBreak(8)
-        doc.text(`• ${rec}`, margin + 5, yPos)
-        yPos += 7
+
+      recommendations.forEach((rec) => {
+        const t = fixTurkishChars(`• ${rec}`)
+        const wrapped = doc.splitTextToSize(t, contentWidth - 12)
+        checkPageBreak(wrapped.length * lineH + 4)
+        doc.text(wrapped, margin + 5, yPos)
+        yPos += wrapped.length * lineH + 3
       })
 
       // Warning Box
