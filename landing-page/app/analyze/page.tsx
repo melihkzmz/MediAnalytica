@@ -13,46 +13,10 @@ import {
   X, CheckCircle2, Loader2, Image as ImageIcon
 } from 'lucide-react'
 import Link from 'next/link'
+import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment'
-
-// Helper function to map skin disease abbreviations to full Turkish names
-const getSkinDiseaseName = (className: string): string => {
-  const skinDiseaseMap: { [key: string]: string } = {
-    'akiec': 'Aktinik Keratoz',
-    'bcc': 'Bazal Hücreli Karsinom',
-    'bkl': 'İyi Huylu Keratoz',
-    'mel': 'Melanom',
-    'nv': 'Melanositik Nevüs (Ben)'
-  }
-  return skinDiseaseMap[className.toLowerCase()] || className
-}
-
-// Brain tumor labels: matches 4-class EfficientNetB3 model (glioma, meningioma, no_tumor, pituitary).
-const getBrainDiseaseName = (className: string): string => {
-  const key = className.toLowerCase().replace(/-/g, '_')
-  const brainMap: { [key: string]: string } = {
-    glioma: 'Glioma',
-    meningioma: 'Meningioma',
-    no_tumor: 'Tümör Yok',
-    notumor: 'Tümör Yok',
-    pituitary: 'Hipofiz Tümörü'
-  }
-  return brainMap[key] || className
-}
-
-// Helper function to format disease class name based on disease type
-const formatDiseaseClassName = (className: string, diseaseType: string | null | undefined): string => {
-  if (!className) return 'Bilinmiyor'
-  if (diseaseType === 'skin') {
-    return getSkinDiseaseName(className)
-  }
-  if (diseaseType === 'brain') {
-    return getBrainDiseaseName(className)
-  }
-  return className
-}
 
 export default function AnalyzePage() {
   const router = useRouter()

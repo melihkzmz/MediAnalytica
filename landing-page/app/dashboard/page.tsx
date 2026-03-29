@@ -19,48 +19,12 @@ import AppointmentNotificationCard from '@/components/AppointmentNotificationCar
 import MessagesSection from '@/components/MessagesSection'
 import { isAppointmentTime } from '@/lib/appointmentUtils'
 import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
+import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
                'patient-appointment-history' |
                'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
-
-// Helper function to map skin disease abbreviations to full Turkish names
-const getSkinDiseaseName = (className: string): string => {
-  const skinDiseaseMap: { [key: string]: string } = {
-    'akiec': 'Aktinik Keratoz',
-    'bcc': 'Bazal Hücreli Karsinom',
-    'bkl': 'İyi Huylu Keratoz',
-    'mel': 'Melanom',
-    'nv': 'Melanositik Nevüs (Ben)'
-  }
-  return skinDiseaseMap[className.toLowerCase()] || className
-}
-
-// Brain tumor labels: matches EfficientNetB3 4-class model (glioma, meningioma, no_tumor, pituitary).
-const getBrainDiseaseName = (className: string): string => {
-  const key = className.toLowerCase().replace(/-/g, '_')
-  const brainMap: { [key: string]: string } = {
-    glioma: 'Glioma',
-    meningioma: 'Meningioma',
-    no_tumor: 'Tümör Yok',
-    notumor: 'Tümör Yok',
-    pituitary: 'Hipofiz Tümörü'
-  }
-  return brainMap[key] || className
-}
-
-// Helper function to format disease class name based on disease type
-const formatDiseaseClassName = (className: string, diseaseType: string | null | undefined): string => {
-  if (!className) return 'Bilinmiyor'
-  if (diseaseType === 'skin') {
-    return getSkinDiseaseName(className)
-  }
-  if (diseaseType === 'brain') {
-    return getBrainDiseaseName(className)
-  }
-  return className
-}
 
 /** Maps analyze modality to appointment `doctorType` / doctors.specialty slug */
 const DISEASE_TO_DOCTOR_TYPE: Record<DiseaseType, string> = {
@@ -1228,7 +1192,10 @@ export default function DashboardPage() {
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...successColor)
-      doc.text(analysisResult.prediction, margin + 60, yPos + 8)
+      const predictionDisplay = fixTurkishChars(
+        formatDiseaseClassName(analysisResult.prediction, selectedDisease)
+      )
+      doc.text(predictionDisplay.substring(0, 55), margin + 60, yPos + 8)
       
       yPos += 18
       doc.setFontSize(10)
@@ -1290,7 +1257,9 @@ export default function DashboardPage() {
           doc.text(`${index + 1}`, margin + 5, yPos + 6.5)
           
           doc.setFont('helvetica', 'normal')
-          const className = (item.class || item.className || 'Bilinmiyor').substring(0, 40)
+          const className = fixTurkishChars(
+            formatDiseaseClassName(item.class || item.className || 'Bilinmiyor', selectedDisease)
+          ).substring(0, 45)
           doc.text(className, margin + 25, yPos + 6.5)
           
           const itemConfidence = ((item.confidence || item.probability) * 100).toFixed(2)
@@ -1315,7 +1284,10 @@ export default function DashboardPage() {
       yPos += 10
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
-      const description = `Bu analiz, yapay zeka destekli derin ögrenme modelleri kullanilarak gerçeklestirilmistir. Tespit edilen hastalik "${analysisResult.prediction}" olarak belirlenmistir. Güven orani %${confidence} olarak hesaplanmistir. Bu sonuçlar, yüksek dogruluk oranina sahip AI modelleri tarafindan üretilmistir.`
+      const predictionTr = fixTurkishChars(
+        formatDiseaseClassName(analysisResult.prediction, selectedDisease)
+      )
+      const description = `Bu analiz, yapay zeka destekli derin ögrenme modelleri kullanilarak gerçeklestirilmistir. Tespit edilen hastalik "${predictionTr}" olarak belirlenmistir. Güven orani %${confidence} olarak hesaplanmistir. Bu sonuçlar, yüksek dogruluk oranina sahip AI modelleri tarafindan üretilmistir.`
       
       const splitDescription = doc.splitTextToSize(description, contentWidth - 10)
       doc.text(splitDescription, margin + 5, yPos)
