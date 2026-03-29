@@ -11,12 +11,14 @@ import {
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
-  Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope
+  Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope,
+  HeartPulse, ClipboardList, AlertTriangle
 } from 'lucide-react'
 import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
 import MessagesSection from '@/components/MessagesSection'
 import { isAppointmentTime } from '@/lib/appointmentUtils'
+import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
@@ -2121,6 +2123,54 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
+
+                  {selectedDisease &&
+                    (() => {
+                      const sh = getSymptomHintsWithFallback(
+                        selectedDisease,
+                        String(analysisResult.prediction ?? '')
+                      )
+                      return (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-6 md:p-8 space-y-6 shadow-sm">
+                          <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200/80 p-4 text-sm text-amber-950">
+                            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+                            <p>
+                              <span className="font-semibold">Bilgilendirme: </span>
+                              Aşağıdaki maddeler yalnızca genel bilgilendirme amaçlıdır; tıbbi tanı veya tedavi önerisi değildir. Metinler,{' '}
+                              <span className="font-medium text-amber-950">
+                                en yüksek olasılıklı tahmin (
+                                {formatDiseaseClassName(analysisResult.prediction, selectedDisease)})
+                              </span>{' '}
+                              dikkate alınarak üretilmiştir.
+                            </p>
+                          </div>
+                          <div className="grid md:grid-cols-2 gap-8">
+                            <div className="space-y-3">
+                              <h4 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <HeartPulse className="w-6 h-6 text-rose-600 shrink-0" />
+                                Olası semptomlar
+                              </h4>
+                              <ul className="list-disc list-inside space-y-2 text-gray-700 text-sm leading-relaxed pl-1">
+                                {sh.symptoms.map((line, i) => (
+                                  <li key={i}>{line}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div className="space-y-3">
+                              <h4 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <ClipboardList className="w-6 h-6 text-teal-600 shrink-0" />
+                                Ön kontrol önerileri
+                              </h4>
+                              <ul className="list-disc list-inside space-y-2 text-gray-700 text-sm leading-relaxed pl-1">
+                                {sh.tips.map((line, i) => (
+                                  <li key={i}>{line}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                   {/* Top 3 Results */}
                   {analysisResult.top_3 && analysisResult.top_3.length > 0 && (
