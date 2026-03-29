@@ -201,6 +201,22 @@ function AppointmentForm() {
     setSubmitting(true)
 
     try {
+      let resolvedAnalysisImageUrl = analysisImageUrl
+      if (analysisId && !resolvedAnalysisImageUrl) {
+        try {
+          const snap = await getDoc(doc(db, 'analyses', analysisId))
+          if (snap.exists()) {
+            const d = snap.data() as Record<string, unknown>
+            if (d.userId === user.uid && typeof d.imageUrl === 'string') {
+              resolvedAnalysisImageUrl = d.imageUrl
+              setAnalysisImageUrl(d.imageUrl)
+            }
+          }
+        } catch {
+          /* keep null */
+        }
+      }
+
       const tempRoomName = `medi-analytica-temp-${Date.now()}`
 
       const payload: Record<string, unknown> = {
@@ -218,11 +234,11 @@ function AppointmentForm() {
       if (preferredDoctorId) {
         payload.preferredDoctorId = preferredDoctorId
       }
-      if (analysisId && analysisImageUrl) {
+      if (analysisId) {
         payload.analysisId = analysisId
-        payload.analysisImageUrl = analysisImageUrl
-      } else if (analysisId) {
-        payload.analysisId = analysisId
+        if (resolvedAnalysisImageUrl) {
+          payload.analysisImageUrl = resolvedAnalysisImageUrl
+        }
       }
 
       const docRef = await addDoc(collection(db, 'appointments'), payload)

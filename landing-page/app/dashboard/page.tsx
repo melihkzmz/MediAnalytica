@@ -1685,13 +1685,25 @@ export default function DashboardPage() {
     }
   }
 
+  /** Randevu sayfasına analiz + uzmanlık bağlamı (ve isteğe bağlı tercih edilen doktor) ile git. */
+  const buildAppointmentUrl = (options?: { preferredDoctorId?: string }) => {
+    const params = new URLSearchParams()
+    if (selectedDisease) {
+      params.set('doctorType', DISEASE_TO_DOCTOR_TYPE[selectedDisease])
+    }
+    if (currentAnalysisId) {
+      params.set('analysisId', currentAnalysisId)
+    }
+    if (options?.preferredDoctorId) {
+      params.set('preferredDoctorId', options.preferredDoctorId)
+    }
+    const q = params.toString()
+    return q ? `/appointment?${q}` : '/appointment'
+  }
+
   const openAppointmentWithDoctor = (doctorId: string) => {
     if (!selectedDisease) return
-    const params = new URLSearchParams()
-    params.set('doctorType', DISEASE_TO_DOCTOR_TYPE[selectedDisease])
-    params.set('preferredDoctorId', doctorId)
-    if (currentAnalysisId) params.set('analysisId', currentAnalysisId)
-    router.push(`/appointment?${params.toString()}`)
+    router.push(buildAppointmentUrl({ preferredDoctorId: doctorId }))
   }
 
   if (loading) {
@@ -2275,7 +2287,7 @@ export default function DashboardPage() {
                           Bu uzmanlıkta şu an listelenecek onaylı doktor bulunmuyor. Genel randevu formundan talep oluşturabilirsiniz.{' '}
                           <button
                             type="button"
-                            onClick={() => router.push('/appointment')}
+                            onClick={() => router.push(buildAppointmentUrl())}
                             className="font-semibold text-amber-950 underline"
                           >
                             Randevu talep et
@@ -2991,7 +3003,7 @@ export default function DashboardPage() {
                 </div>
 
                 <Link
-                  href="/appointment"
+                  href={buildAppointmentUrl()}
                   className="block w-full bg-gradient-to-r from-green-600 via-blue-600 to-purple-600 text-white py-5 rounded-2xl font-bold text-lg hover:shadow-2xl transition-all flex items-center justify-center space-x-3 transform hover:scale-[1.02] active:scale-[0.98] bg-[length:200%_100%] hover:bg-[position:100%_0] transition-all duration-500"
                 >
                   <Video className="w-6 h-6" />
