@@ -3561,6 +3561,40 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-500 mt-2">E-posta adresi burada değiştirilemez.</p>
                   </div>
 
+                  {isDoctor && doctorData && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Uzmanlık alanı
+                        </label>
+                        <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+                          <Stethoscope className="w-5 h-5 text-teal-600 shrink-0" />
+                          <span className="text-gray-700">
+                            {SPECIALTY_LABELS[String(doctorData.specialty ?? '')] ||
+                              (doctorData.specialty ? String(doctorData.specialty) : '—')}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-2">
+                          Hesap kaydındaki uzmanlık bilgisidir.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Kurum / hastane
+                        </label>
+                        <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+                          <Building className="w-5 h-5 text-gray-400 shrink-0" />
+                          <span className="text-gray-700">
+                            {doctorData.institution ? String(doctorData.institution) : '—'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-2">
+                          Kayıt sırasında girdiğiniz çalışılan kurum adıdır.
+                        </p>
+                      </div>
+                    </>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Üyelik tarihi
