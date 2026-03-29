@@ -3,10 +3,20 @@
 import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
-import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
+import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { showToast } from '@/lib/utils'
-import { Calendar, Clock, FileText, User, ArrowLeft, CheckCircle2, Building, Stethoscope } from 'lucide-react'
+import {
+  Calendar,
+  Clock,
+  FileText,
+  User,
+  ArrowLeft,
+  CheckCircle2,
+  Building,
+  Stethoscope,
+  Loader2,
+} from 'lucide-react'
 import Link from 'next/link'
 import { generateJitsiRoomName } from '@/lib/appointmentUtils'
 
@@ -39,6 +49,17 @@ function AppointmentForm() {
     institution?: string
     specialty?: string
   } | null>(null)
+  const [doctorsForSpecialty, setDoctorsForSpecialty] = useState<
+    Array<{
+      id: string
+      firstName?: string
+      lastName?: string
+      institution?: string
+      specialty?: string
+      profilePhotoUrl?: string
+    }>
+  >([])
+  const [loadingDoctors, setLoadingDoctors] = useState(false)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -57,6 +78,25 @@ function AppointmentForm() {
     return () => unsubscribe()
   }, [router])
 
+  const loadPreferredDoctorDetails = useCallback(async (doctorId: string) => {
+    try {
+      const snap = await getDoc(doc(db, 'doctors', doctorId))
+      if (snap.exists()) {
+        const d = snap.data() as Record<string, unknown>
+        setPreferredDoctor({
+          firstName: d.firstName as string | undefined,
+          lastName: d.lastName as string | undefined,
+          institution: d.institution as string | undefined,
+          specialty: d.specialty as string | undefined,
+        })
+      } else {
+        setPreferredDoctor(null)
+      }
+    } catch {
+      setPreferredDoctor(null)
+    }
+  }, [])
+
   const applySearchParams = useCallback(async () => {
     const dt = searchParams.get('doctorType')
     const pid = searchParams.get('preferredDoctorId')
@@ -73,22 +113,7 @@ function AppointmentForm() {
     }))
 
     if (pid) {
-      try {
-        const snap = await getDoc(doc(db, 'doctors', pid))
-        if (snap.exists()) {
-          const d = snap.data() as Record<string, unknown>
-          setPreferredDoctor({
-            firstName: d.firstName as string | undefined,
-            lastName: d.lastName as string | undefined,
-            institution: d.institution as string | undefined,
-            specialty: d.specialty as string | undefined,
-          })
-        } else {
-          setPreferredDoctor(null)
-        }
-      } catch {
-        setPreferredDoctor(null)
-      }
+      await loadPreferredDoctorDetails(pid)
     } else {
       setPreferredDoctor(null)
     }
@@ -112,12 +137,58 @@ function AppointmentForm() {
     } else {
       setAnalysisImageUrl(null)
     }
-  }, [searchParams, user?.uid])
+  }, [searchParams, user?.uid, loadPreferredDoctorDetails])
 
   useEffect(() => {
     if (!user) return
     applySearchParams()
   }, [user, applySearchParams])
+
+  useEffect(() => {
+    if (!user?.uid || !formData.doctorType) {
+      setDoctorsForSpecialty([])
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      setLoadingDoctors(true)
+      try {
+        const q = query(
+          collection(db, 'doctors'),
+          where('status', '==', 'approved'),
+          where('specialty', '==', formData.doctorType)
+        )
+        const snap = await getDocs(q)
+        let rows = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Record<string, unknown>),
+        })) as Array<{
+          id: string
+          firstName?: string
+          lastName?: string
+          institution?: string
+          specialty?: string
+          profilePhotoUrl?: string
+        }>
+        rows.sort((a, b) =>
+          `${a.firstName || ''} ${a.lastName || ''}`.localeCompare(
+            `${b.firstName || ''} ${b.lastName || ''}`,
+            'tr'
+          )
+        )
+        if (!cancelled) setDoctorsForSpecialty(rows)
+      } catch (e) {
+        console.error('Doctors load failed:', e)
+        if (!cancelled) setDoctorsForSpecialty([])
+      } finally {
+        if (!cancelled) setLoadingDoctors(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.uid, formData.doctorType])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -170,6 +241,10 @@ function AppointmentForm() {
         reason: '',
         doctorType: '',
       })
+      setPreferredDoctorId(null)
+      setPreferredDoctor(null)
+      setAnalysisId(null)
+      setAnalysisImageUrl(null)
       router.push('/dashboard#patient-appointment-history')
     } catch (error: any) {
       console.error('Error creating appointment:', error)
@@ -293,7 +368,12 @@ function AppointmentForm() {
               </label>
               <select
                 value={formData.doctorType}
-                onChange={(e) => setFormData({ ...formData, doctorType: e.target.value })}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setFormData({ ...formData, doctorType: v })
+                  setPreferredDoctorId(null)
+                  setPreferredDoctor(null)
+                }}
                 required
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
               >
@@ -305,6 +385,52 @@ function AppointmentForm() {
                 ))}
               </select>
             </div>
+
+            {formData.doctorType && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Stethoscope className="w-4 h-4 inline mr-2" />
+                  Uzman seçimi{' '}
+                  <span className="text-gray-400 font-normal">(isteğe bağlı)</span>
+                </label>
+                {loadingDoctors ? (
+                  <div className="flex items-center gap-2 text-gray-600 py-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    <span>Doktorlar yükleniyor...</span>
+                  </div>
+                ) : doctorsForSpecialty.length === 0 ? (
+                  <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    Bu uzmanlıkta şu an onaylı doktor bulunmuyor. Talebiniz yine de ilgili branş havuzuna iletilir; uygun doktor atandığında
+                    bilgilendirilirsiniz.
+                  </p>
+                ) : (
+                  <select
+                    value={preferredDoctorId ?? ''}
+                    onChange={(e) => {
+                      const id = e.target.value
+                      setPreferredDoctorId(id || null)
+                      if (id) {
+                        void loadPreferredDoctorDetails(id)
+                      } else {
+                        setPreferredDoctor(null)
+                      }
+                    }}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                  >
+                    <option value="">Belirli bir doktor tercih etmiyorum</option>
+                    {doctorsForSpecialty.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        Dr. {d.firstName || ''} {d.lastName || ''}
+                        {d.institution ? ` · ${d.institution}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-xs text-gray-500 mt-2">
+                  Seçtiğiniz uzman müsait olduğunda talebinizi onaylayabilir; başka bir uygun uzman da atanabilir.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
