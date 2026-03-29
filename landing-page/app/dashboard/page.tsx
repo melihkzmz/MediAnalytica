@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { auth, storage } from '@/lib/firebase'
 import { config } from '@/lib/config'
 import { showToast, validateImageFile, compressImage } from '@/lib/utils'
 import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
-  Settings, LogOut, User, Home, HelpCircle, Mail, Building,
+  Settings, LogOut, User, Home, HelpCircle, Mail, Building, Camera, Save,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
   Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope,
   HeartPulse, ClipboardList, AlertTriangle
@@ -108,6 +109,16 @@ export default function DashboardPage() {
   const [loadingAppointments, setLoadingAppointments] = useState(false)
   const [activeAppointments, setActiveAppointments] = useState<any[]>([])
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
+  const [profileDisplayName, setProfileDisplayName] = useState('')
+  const [profilePhotoURL, setProfilePhotoURL] = useState('')
+  const [profileUploading, setProfileUploading] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    setProfileDisplayName(user.displayName || '')
+    setProfilePhotoURL(user.photoURL || '')
+  }, [user?.uid, user?.displayName, user?.photoURL])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1682,6 +1693,44 @@ export default function DashboardPage() {
       
       showToast(`Analiz kaydedilirken bir hata oluştu: ${errorMessage}`, 'error')
       return null
+    }
+  }
+
+  const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    if (!file.type.startsWith('image/')) {
+      showToast('Lütfen bir görüntü dosyası seçin.', 'error')
+      return
+    }
+    setProfileUploading(true)
+    try {
+      const storageRef = ref(storage, `profile_photos/${user.uid}/${Date.now()}_${file.name}`)
+      await uploadBytes(storageRef, file)
+      const downloadURL = await getDownloadURL(storageRef)
+      setProfilePhotoURL(downloadURL)
+      showToast('Fotoğraf yüklendi!', 'success')
+    } catch {
+      showToast('Fotoğraf yüklenirken bir hata oluştu.', 'error')
+    } finally {
+      setProfileUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleProfileSave = async () => {
+    if (!user) return
+    setProfileSaving(true)
+    try {
+      await updateProfile(user, {
+        displayName: profileDisplayName,
+        photoURL: profilePhotoURL || undefined,
+      })
+      showToast('Profil güncellendi!', 'success')
+    } catch {
+      showToast('Profil güncellenirken bir hata oluştu.', 'error')
+    } finally {
+      setProfileSaving(false)
     }
   }
 
@@ -3448,39 +3497,93 @@ export default function DashboardPage() {
 
           {currentSection === 'profile' && (
             <div className="max-w-2xl mx-auto space-y-6">
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">Profil Ayarları</h2>
-              <div className="bg-white rounded-xl p-6 shadow-sm">
-                <div className="space-y-4">
+              <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <User className="w-8 h-8 text-blue-600" />
+                Profil Ayarları
+              </h2>
+              <div className="bg-white rounded-xl p-6 md:p-8 shadow-sm border border-gray-100">
+                <div className="space-y-8">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-4">
+                      Profil fotoğrafı
+                    </label>
+                    <div className="flex items-center gap-6">
+                      <div className="relative shrink-0">
+                        {profilePhotoURL ? (
+                          <img
+                            src={profilePhotoURL}
+                            alt=""
+                            className="w-24 h-24 rounded-full object-cover border-4 border-blue-100"
+                          />
+                        ) : (
+                          <div className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center border-4 border-blue-200">
+                            <User className="w-12 h-12 text-blue-600" />
+                          </div>
+                        )}
+                        <label className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer hover:bg-blue-700 transition-colors">
+                          <Camera className="w-4 h-4" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleProfilePhotoUpload}
+                            disabled={profileUploading}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {profileUploading ? 'Yükleniyor...' : 'Fotoğrafınızı güncellemek için kamera simgesine tıklayın.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ad soyad
+                    </label>
+                    <input
+                      type="text"
+                      value={profileDisplayName}
+                      onChange={(e) => setProfileDisplayName(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                      placeholder="Adınız ve soyadınız"
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       E-posta
                     </label>
-                    <input
-                      type="email"
-                      value={user?.email || ''}
-                      disabled
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 text-gray-500"
-                    />
+                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+                      <Mail className="w-5 h-5 text-gray-400 shrink-0" />
+                      <span className="text-gray-700">{user?.email}</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-2">E-posta adresi burada değiştirilemez.</p>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Kullanıcı Adı
+                      Üyelik tarihi
                     </label>
-                    <input
-                      type="text"
-                      value={user?.email?.split('@')[0] || ''}
-                      disabled
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 text-gray-500"
-                    />
+                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+                      <Calendar className="w-5 h-5 text-gray-400 shrink-0" />
+                      <span className="text-gray-700">
+                        {user?.metadata?.creationTime
+                          ? new Date(user.metadata.creationTime).toLocaleDateString('tr-TR')
+                          : 'Bilinmiyor'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="pt-4 border-t border-gray-200">
-                    <Link
-                      href="/profile"
-                      className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
-                    >
-                      Detaylı Profil Ayarları
-                    </Link>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleProfileSave}
+                    disabled={profileSaving}
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center disabled:opacity-60"
+                  >
+                    <Save className="w-5 h-5 mr-2" />
+                    {profileSaving ? 'Kaydediliyor...' : 'Değişiklikleri kaydet'}
+                  </button>
                 </div>
               </div>
             </div>
