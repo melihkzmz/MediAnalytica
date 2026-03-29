@@ -28,11 +28,8 @@ service cloud.firestore {
     
     // Doctors Collection
     match /doctors/{doctorId} {
-      // Owner full access; any signed-in user may read approved profiles (doctor directory for chat / discovery)
-      allow read: if isAuthenticated() && (
-        isOwner(doctorId) ||
-        resource.data.status == 'approved'
-      );
+      // Owner full access; any signed-in user may read profiles (directory / chat / discovery; no approval gate)
+      allow read: if isAuthenticated();
       allow write: if isOwner(doctorId);
     }
 

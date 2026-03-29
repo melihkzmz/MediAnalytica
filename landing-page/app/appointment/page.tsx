@@ -155,7 +155,6 @@ function AppointmentForm() {
       try {
         const q = query(
           collection(db, 'doctors'),
-          where('status', '==', 'approved'),
           where('specialty', '==', formData.doctorType)
         )
         const snap = await getDocs(q)
@@ -416,7 +415,7 @@ function AppointmentForm() {
                   </div>
                 ) : doctorsForSpecialty.length === 0 ? (
                   <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                    Bu uzmanlıkta şu an onaylı doktor bulunmuyor. Talebiniz yine de ilgili branş havuzuna iletilir; uygun doktor atandığında
+                    Bu uzmanlıkta şu an doktor bulunmuyor. Talebiniz yine de ilgili branş havuzuna iletilir; uygun doktor atandığında
                     bilgilendirilirsiniz.
                   </p>
                 ) : (

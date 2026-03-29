@@ -104,7 +104,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
   const loadDoctorDirectory = useCallback(async () => {
     setLoadingDoctors(true)
     try {
-      const q = query(collection(db, 'doctors'), where('status', '==', 'approved'))
+      const q = query(collection(db, 'doctors'))
       const snap = await getDocs(q)
       const rows: DoctorRow[] = []
       snap.forEach((d) => {
@@ -425,7 +425,7 @@ export default function MessagesSection({ user, isDoctor }: Props) {
           <h2 className="text-2xl font-bold text-gray-900">Mesajlar</h2>
           <p className="text-sm text-gray-600">
             {isDoctor
-              ? 'Hastalardan ve doktorlardan gelen istekleri onaylayın; diğer onaylı doktorlara da sohbet isteği gönderebilirsiniz.'
+              ? 'Hastalardan ve doktorlardan gelen istekleri onaylayın; diğer doktorlara da sohbet isteği gönderebilirsiniz.'
               : 'Onaylı doktorlara sohbet isteği gönderin; onay sonrası mesajlaşın.'}
           </p>
         </div>

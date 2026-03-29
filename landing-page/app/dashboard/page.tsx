@@ -388,7 +388,7 @@ export default function DashboardPage() {
     }
   }, [currentSection])
 
-  // After analysis: load approved doctors matching this modality (specialty slug)
+  // After analysis: load doctors matching this modality (specialty slug; any registration status)
   useEffect(() => {
     if (!analysisResult || !selectedDisease || !user || isDoctor) {
       setRelatedDoctors([])
@@ -401,11 +401,7 @@ export default function DashboardPage() {
         const slug = DISEASE_TO_DOCTOR_TYPE[selectedDisease]
         const { collection, query, where, getDocs } = await import('firebase/firestore')
         const { db } = await import('@/lib/firebase')
-        const q = query(
-          collection(db, 'doctors'),
-          where('status', '==', 'approved'),
-          where('specialty', '==', slug)
-        )
+        const q = query(collection(db, 'doctors'), where('specialty', '==', slug))
         const snap = await getDocs(q)
         const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string }))
         if (!cancelled) setRelatedDoctors(list)
@@ -2324,7 +2320,7 @@ export default function DashboardPage() {
                         <span>İlgili doktorlarla görüşün</span>
                       </h4>
                       <p className="text-sm text-gray-600">
-                        Bu analiz türüyle uyumlu uzmanlıktaki onaylı doktorlarımızdan biriyle randevu talep edebilirsiniz. Analiz görüntünüz randevu kaydına eklenir.
+                        Bu analiz türüyle uyumlu uzmanlıktaki doktorlarımızdan biriyle randevu talep edebilirsiniz. Analiz görüntünüz randevu kaydına eklenir.
                       </p>
                       {loadingRelatedDoctors ? (
                         <div className="flex items-center gap-2 text-gray-600">
@@ -2333,7 +2329,7 @@ export default function DashboardPage() {
                         </div>
                       ) : relatedDoctors.length === 0 ? (
                         <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">
-                          Bu uzmanlıkta şu an listelenecek onaylı doktor bulunmuyor. Genel randevu formundan talep oluşturabilirsiniz.{' '}
+                          Bu uzmanlıkta şu an listelenecek doktor bulunmuyor. Genel randevu formundan talep oluşturabilirsiniz.{' '}
                           <button
                             type="button"
                             onClick={() => router.push(buildAppointmentUrl())}
