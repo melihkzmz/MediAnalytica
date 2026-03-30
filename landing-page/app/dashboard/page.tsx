@@ -907,10 +907,14 @@ export default function DashboardPage() {
       // Fetch patient data with appointment statistics
       const patientsData = await Promise.all(
         Array.from(patientAppointmentsMap.entries()).map(async ([patientId, appointments]) => {
+          const fallbackEmail =
+            appointments.find((apt) => typeof apt.userEmail === 'string')?.userEmail || ''
           try {
             const userRef = doc(db, 'users', patientId)
             const userDoc = await getDoc(userRef)
             if (userDoc.exists()) {
+              const userData = userDoc.data() as Record<string, unknown>
+              const fullName = `${String(userData.firstName || '')} ${String(userData.lastName || '')}`.trim()
               // Get appointment statistics
               const totalAppointments = appointments.length
               const lastAppointment = appointments
@@ -921,7 +925,9 @@ export default function DashboardPage() {
               
               return {
                 id: patientId,
-                ...userDoc.data(),
+                ...userData,
+                email: String(userData.email || fallbackEmail || ''),
+                displayName: String(userData.displayName || fullName || fallbackEmail.split('@')[0] || 'Bilinmeyen Hasta'),
                 totalAppointments,
                 lastAppointment
               }
@@ -929,11 +935,24 @@ export default function DashboardPage() {
           } catch (error) {
             console.error(`Error fetching patient ${patientId}:`, error)
           }
-          return null
+          // Fallback for legacy records where users/{id} may not exist
+          const totalAppointments = appointments.length
+          const lastAppointment = appointments
+            .map(apt => apt.date)
+            .filter(date => date)
+            .sort()
+            .reverse()[0] || null
+          return {
+            id: patientId,
+            email: fallbackEmail || '',
+            displayName: fallbackEmail ? fallbackEmail.split('@')[0] : 'Bilinmeyen Hasta',
+            totalAppointments,
+            lastAppointment
+          }
         })
       )
       
-      setMyPatients(patientsData.filter(p => p !== null))
+      setMyPatients(patientsData.filter(Boolean))
     } catch (error) {
       console.error('Error loading patients:', error)
       showToast('Hastalar yüklenirken hata oluştu.', 'error')
@@ -3596,9 +3615,12 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900">
-                            {patient.displayName || patient.email?.split('@')[0] || 'Bilinmeyen Hasta'}
+                            {patient.displayName ||
+                              `${patient.firstName || ''} ${patient.lastName || ''}`.trim() ||
+                              patient.email?.split('@')[0] ||
+                              'Bilinmeyen Hasta'}
                           </h3>
-                          <p className="text-sm text-gray-600">{patient.email}</p>
+                          <p className="text-sm text-gray-600">{patient.email || '-'}</p>
                         </div>
                       </div>
                       <div className="space-y-2 pt-4 border-t border-gray-100">
