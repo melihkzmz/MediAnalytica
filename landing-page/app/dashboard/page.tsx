@@ -3810,8 +3810,8 @@ export default function DashboardPage() {
                 <div className="grid gap-4">
                   {appointmentHistory.map((appointment) => (
                     <div key={appointment.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-3 mb-3">
                             <div className="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
                               <User className="w-6 h-6 text-white" />
@@ -3847,6 +3847,17 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         </div>
+
+                        {appointment.analysisImageUrl ? (
+                          <div className="shrink-0 text-center md:text-left">
+                            <p className="text-xs text-gray-500 mb-1">Randevu görüntüsü</p>
+                            <img
+                              src={String(appointment.analysisImageUrl)}
+                              alt=""
+                              className="w-28 h-28 rounded-lg object-cover border border-gray-200 mx-auto md:mx-0"
+                            />
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ))}
