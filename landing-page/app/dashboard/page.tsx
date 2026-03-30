@@ -1955,19 +1955,21 @@ export default function DashboardPage() {
       </nav>
 
       <div className="pt-16">
-        {/* Active Appointment Notifications */}
-        {activeAppointments
-          .filter(apt => !dismissedNotifications.has(apt.id))
-          .map((appointment) => (
-            <AppointmentNotificationCard
-              key={appointment.id}
-              appointment={appointment}
-              isDoctor={isDoctor}
-              onDismiss={() => {
-                setDismissedNotifications(prev => new Set(prev).add(appointment.id))
-              }}
-            />
-          ))}
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end">
+          {/* Active Appointment Notifications */}
+          {activeAppointments
+            .filter(apt => !dismissedNotifications.has(apt.id))
+            .map((appointment) => (
+              <AppointmentNotificationCard
+                key={appointment.id}
+                appointment={appointment}
+                isDoctor={isDoctor}
+                onDismiss={() => {
+                  setDismissedNotifications(prev => new Set(prev).add(appointment.id))
+                }}
+              />
+            ))}
+        </div>
 
         {/* Main Content */}
         <main className="p-6 md:p-8">

@@ -4,7 +4,7 @@
 
 /**
  * Check if current time is within appointment window
- * Allows joining 30 minutes before and 30 minutes after scheduled time
+ * Allows joining 30 minutes before and a small grace period after start
  */
 export function isAppointmentTime(appointment: {
   date: string // YYYY-MM-DD
@@ -15,8 +15,8 @@ export function isAppointmentTime(appointment: {
   
   // Allow join 30 minutes before scheduled time
   const bufferBefore = 30 * 60 * 1000 // 30 minutes in milliseconds
-  // Allow join up to 30 minutes after scheduled time
-  const bufferAfter = 30 * 60 * 1000 // 30 minutes in milliseconds
+  // Allow join shortly after scheduled time (small delay tolerance)
+  const bufferAfter = 5 * 60 * 1000 // 5 minutes in milliseconds
   
   const startTime = appointmentDateTime.getTime() - bufferBefore
   const endTime = appointmentDateTime.getTime() + bufferAfter
