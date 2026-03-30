@@ -37,7 +37,7 @@ export const config = {
     version: "1.0.0",
     defaultLanguage: "tr",
     maxFileSize: 10 * 1024 * 1024, // 10MB
-    allowedImageTypes: ['image/jpeg', 'image/jpg', 'image/png'],
+    allowedImageTypes: ['image/jpeg', 'image/jpg', 'image/png', 'application/dicom'],
     pagination: {
       defaultPageSize: 20,
       maxPageSize: 100

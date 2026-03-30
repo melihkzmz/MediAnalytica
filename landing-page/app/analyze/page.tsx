@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { config } from '@/lib/config'
-import { showToast, validateImageFile, compressImage } from '@/lib/utils'
+import { showToast, validateImageFile, compressImage, isDicomFile } from '@/lib/utils'
 import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
@@ -342,6 +342,11 @@ export default function AnalyzePage() {
 
     setShowQualityBypassPrompt(false)
     setSelectedImage(file)
+    if (isDicomFile(file)) {
+      setImagePreview(null)
+      showToast('DICOM dosyası seçildi. Analizden önce güvenli şekilde PNG formatına dönüştürülecek.', 'info')
+      return
+    }
     const reader = new FileReader()
     reader.onload = (e) => {
       setImagePreview(e.target?.result as string)
@@ -355,7 +360,8 @@ export default function AnalyzePage() {
       return
     }
 
-    if (!skipQualityCheck) {
+    const selectedIsDicom = isDicomFile(selectedImage)
+    if (!skipQualityCheck && !selectedIsDicom) {
       const quality = await assessImageForAnalysis(selectedImage)
       if (!quality.ok) {
         setShowQualityBypassPrompt(true)
@@ -368,10 +374,13 @@ export default function AnalyzePage() {
 
     setAnalyzing(true)
     try {
-      // Compress image
-      const compressedImage = await compressImage(selectedImage)
       const formData = new FormData()
-      formData.append('image', compressedImage, selectedImage.name)
+      if (selectedIsDicom) {
+        formData.append('image', selectedImage, selectedImage.name)
+      } else {
+        const compressedImage = await compressImage(selectedImage)
+        formData.append('image', compressedImage, selectedImage.name)
+      }
       formData.append('with_gradcam', 'true')
 
       // Determine API endpoint based on disease type
@@ -720,11 +729,11 @@ export default function AnalyzePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-4">
                   Görüntü Yükleyin
                 </label>
-                {!imagePreview ? (
+                {!imagePreview && !selectedImage ? (
                   <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-500 transition-colors">
                     <input
                       type="file"
-                      accept="image/jpeg,image/jpg,image/png"
+                      accept="image/jpeg,image/jpg,image/png,.dcm,application/dicom"
                       onChange={handleImageSelect}
                       className="hidden"
                       id="image-upload"
@@ -732,10 +741,10 @@ export default function AnalyzePage() {
                     <label htmlFor="image-upload" className="cursor-pointer">
                       <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                       <p className="text-gray-600 mb-2">Görüntüyü sürükleyin veya tıklayın</p>
-                      <p className="text-sm text-gray-500">JPEG, PNG (Max 10MB)</p>
+                      <p className="text-sm text-gray-500">JPEG, PNG, DICOM (.dcm) (Max 10MB)</p>
                     </label>
                   </div>
-                ) : (
+                ) : imagePreview ? (
                   <div className="relative">
                     <img src={imagePreview} alt="Preview" className="w-full rounded-xl" />
                     <button
@@ -745,6 +754,21 @@ export default function AnalyzePage() {
                         setShowQualityBypassPrompt(false)
                       }}
                       className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-full hover:bg-red-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative border rounded-xl p-5 bg-blue-50 border-blue-200">
+                    <p className="text-sm font-semibold text-blue-800">DICOM dosyası seçildi</p>
+                    <p className="text-xs text-blue-700 mt-1">{selectedImage?.name}</p>
+                    <button
+                      onClick={() => {
+                        setImagePreview(null)
+                        setSelectedImage(null)
+                        setShowQualityBypassPrompt(false)
+                      }}
+                      className="absolute top-3 right-3 bg-red-500 text-white p-2 rounded-full hover:bg-red-600"
                     >
                       <X className="w-4 h-4" />
                     </button>

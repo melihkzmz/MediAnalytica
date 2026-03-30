@@ -1,5 +1,8 @@
 type ToastType = 'success' | 'error' | 'warning' | 'info'
 
+const DICOM_EXTENSIONS = ['dcm', 'dicom']
+const DICOM_MIME_TYPES = ['application/dicom', 'application/dicom+json']
+
 export const showToast = (message: string, type: ToastType = 'info') => {
   // Remove any existing toasts first
   const existingToasts = document.querySelectorAll('[data-toast]')
@@ -73,7 +76,10 @@ export const showToast = (message: string, type: ToastType = 'info') => {
 
 export const validateImageFile = (file: File): boolean => {
   const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-  const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png']
+  const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', ...DICOM_MIME_TYPES]
+  const extension = (file.name.split('.').pop() || '').toLowerCase()
+  const isDicomByExtension = DICOM_EXTENSIONS.includes(extension)
+  const isDicomByMime = DICOM_MIME_TYPES.includes(file.type)
   
   if (!file) {
     showToast('Lütfen bir dosya seçin.', 'error')
@@ -85,13 +91,18 @@ export const validateImageFile = (file: File): boolean => {
     return false
   }
   
-  if (!ALLOWED_TYPES.includes(file.type)) {
+  if (!ALLOWED_TYPES.includes(file.type) && !isDicomByExtension && !isDicomByMime) {
     const fileExtension = file.name.split('.').pop()?.toUpperCase()
-    showToast(`Yüklediğiniz görüntü formatı (${fileExtension}) desteklenmiyor. Lütfen JPEG veya PNG formatında bir görüntü yükleyin.`, 'error')
+    showToast(`Yüklediğiniz görüntü formatı (${fileExtension}) desteklenmiyor. Lütfen JPEG, PNG veya DICOM (.dcm) formatında bir görüntü yükleyin.`, 'error')
     return false
   }
   
   return true
+}
+
+export const isDicomFile = (file: File): boolean => {
+  const extension = (file.name.split('.').pop() || '').toLowerCase()
+  return DICOM_EXTENSIONS.includes(extension) || DICOM_MIME_TYPES.includes(file.type)
 }
 
 export const compressImage = async (file: File, maxWidth: number = 1920, quality: number = 0.8): Promise<File> => {
