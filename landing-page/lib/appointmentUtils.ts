@@ -25,6 +25,21 @@ export function isAppointmentTime(appointment: {
 }
 
 /**
+ * Check if we are at the exact appointment start moment.
+ * Uses a short grace window after start to avoid clock drift issues.
+ */
+export function isAppointmentStartMoment(appointment: {
+  date: string
+  time: string
+}): boolean {
+  const now = new Date()
+  const appointmentDateTime = new Date(`${appointment.date}T${appointment.time}:00`)
+  const startTime = appointmentDateTime.getTime()
+  const graceAfter = 2 * 60 * 1000 // 2 minutes
+  return now.getTime() >= startTime && now.getTime() <= (startTime + graceAfter)
+}
+
+/**
  * Check if appointment time has passed (for history)
  */
 export function isAppointmentPast(appointment: {

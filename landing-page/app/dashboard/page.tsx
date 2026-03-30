@@ -18,7 +18,7 @@ import {
 import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
 import MessagesSection from '@/components/MessagesSection'
-import { isAppointmentTime } from '@/lib/appointmentUtils'
+import { isAppointmentTime, isAppointmentStartMoment } from '@/lib/appointmentUtils'
 import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 
@@ -110,10 +110,14 @@ export default function DashboardPage() {
   const [myPatients, setMyPatients] = useState<any[]>([])
   const [loadingAppointments, setLoadingAppointments] = useState(false)
   const [activeAppointments, setActiveAppointments] = useState<any[]>([])
+  const [startMomentAppointments, setStartMomentAppointments] = useState<any[]>([])
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false)
   const [hasMessageIndicator, setHasMessageIndicator] = useState(false)
   const [pendingAppointmentAlertCount, setPendingAppointmentAlertCount] = useState(0)
+  const [cancelReasonByAppointment, setCancelReasonByAppointment] = useState<Record<string, string>>({})
+  const [showCancelInputForAppointment, setShowCancelInputForAppointment] = useState<Record<string, boolean>>({})
+  const [cancelSubmittingForAppointment, setCancelSubmittingForAppointment] = useState<Record<string, boolean>>({})
   const [profileDisplayName, setProfileDisplayName] = useState('')
   const [profilePhotoURL, setProfilePhotoURL] = useState('')
   const [profileUploading, setProfileUploading] = useState(false)
@@ -486,6 +490,7 @@ export default function DashboardPage() {
 
         const querySnapshot = await getDocs(appointmentsQuery)
         const active: any[] = []
+        const startNow: any[] = []
 
         for (const appointmentDoc of querySnapshot.docs) {
           const appointmentData = appointmentDoc.data()
@@ -514,9 +519,17 @@ export default function DashboardPage() {
             
             active.push(appointment)
           }
+
+          if (appointment.date && appointment.time && isAppointmentStartMoment({
+            date: appointment.date,
+            time: appointment.time
+          })) {
+            startNow.push(appointment)
+          }
         }
 
         setActiveAppointments(active)
+        setStartMomentAppointments(startNow)
       } catch (error) {
         console.error('Error checking active appointments:', error)
       }
@@ -963,7 +976,7 @@ export default function DashboardPage() {
       const appointmentsRef = collection(db, 'appointments')
       const q = query(
         appointmentsRef,
-        where('status', 'in', ['completed', 'rejected']),
+        where('status', 'in', ['completed', 'rejected', 'cancelled_by_patient', 'cancelled_by_doctor']),
         where('doctorId', '==', user.uid),
         orderBy('date', 'desc'),
         orderBy('time', 'desc')
@@ -1171,6 +1184,55 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error joining appointment:', error)
       showToast('Görüntülü görüşmeye katılırken hata oluştu.', 'error')
+    }
+  }
+
+  const joinAppointmentFromPopup = (appointment: any) => {
+    const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
+    const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}&isDoctor=${isDoctor ? 'true' : 'false'}`
+    router.push(videoUrl)
+  }
+
+  const cancelApprovedAppointmentWithReason = async (appointment: any) => {
+    if (!user) return
+    const reason = String(cancelReasonByAppointment[appointment.id] || '').trim()
+    if (!reason) {
+      showToast('Lütfen iptal nedeni girin.', 'warning')
+      return
+    }
+    setCancelSubmittingForAppointment((prev) => ({ ...prev, [appointment.id]: true }))
+    try {
+      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const canceledStatus = isDoctor ? 'cancelled_by_doctor' : 'cancelled_by_patient'
+      const canceledByRole = isDoctor ? 'doctor' : 'patient'
+      await updateDoc(doc(db, 'appointments', appointment.id), {
+        status: canceledStatus,
+        cancelReason: reason,
+        cancelledByRole: canceledByRole,
+        cancelledByUid: user.uid,
+        cancelledAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      showToast('Randevu iptal edildi.', 'info')
+      setShowCancelInputForAppointment((prev) => ({ ...prev, [appointment.id]: false }))
+      setCancelReasonByAppointment((prev) => ({ ...prev, [appointment.id]: '' }))
+      setStartMomentAppointments((prev) => prev.filter((x) => x.id !== appointment.id))
+      if (isDoctor) {
+        loadMyAppointments()
+        loadAppointmentHistory()
+      } else {
+        // keep patient lists fresh in appointment sections
+        if (currentSection === 'patient-appointment-history' || currentSection === 'my-appointments-patient') {
+          // data is loaded by section effect; force immediate refresh by moving hash-triggered section state
+          setCurrentSection((s) => s)
+        }
+      }
+    } catch (error) {
+      console.error('Error cancelling appointment:', error)
+      showToast('Randevu iptal edilirken hata oluştu.', 'error')
+    } finally {
+      setCancelSubmittingForAppointment((prev) => ({ ...prev, [appointment.id]: false }))
     }
   }
 
@@ -2274,8 +2336,69 @@ export default function DashboardPage() {
       </nav>
 
       <div className="pt-16">
+        <div className="fixed top-20 right-6 z-50 flex flex-col gap-3 items-end">
+          {/* Exact-time persistent join/cancel cards */}
+          {startMomentAppointments.map((appointment) => {
+            const showReasonInput = Boolean(showCancelInputForAppointment[appointment.id])
+            const cancelReason = cancelReasonByAppointment[appointment.id] || ''
+            const isCancelling = Boolean(cancelSubmittingForAppointment[appointment.id])
+            return (
+              <div key={appointment.id} className="w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-blue-200 bg-white shadow-lg p-4">
+                <p className="text-sm font-semibold text-gray-900 mb-1">Randevu saati geldi</p>
+                <p className="text-xs text-gray-500 mb-3">{appointment.date} - {appointment.time}</p>
+
+                {showReasonInput ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={cancelReason}
+                      onChange={(e) =>
+                        setCancelReasonByAppointment((prev) => ({ ...prev, [appointment.id]: e.target.value }))
+                      }
+                      rows={3}
+                      placeholder="İptal nedeninizi yazın..."
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => cancelApprovedAppointmentWithReason(appointment)}
+                        disabled={isCancelling}
+                        className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+                      >
+                        {isCancelling ? 'Gönderiliyor...' : 'İptali Onayla'}
+                      </button>
+                      <button
+                        onClick={() => setShowCancelInputForAppointment((prev) => ({ ...prev, [appointment.id]: false }))}
+                        className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                      >
+                        Vazgeç
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => joinAppointmentFromPopup(appointment)}
+                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                    >
+                      Katıl
+                    </button>
+                    <button
+                      onClick={() =>
+                        setShowCancelInputForAppointment((prev) => ({ ...prev, [appointment.id]: true }))
+                      }
+                      className="flex-1 px-3 py-2 border border-red-300 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50"
+                    >
+                      İptal et
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
         <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end">
-          {/* Active Appointment Notifications */}
+          {/* Pre-appointment reminder toasts */}
           {activeAppointments
             .filter(apt => !dismissedNotifications.has(apt.id))
             .map((appointment) => (
@@ -3547,6 +3670,10 @@ export default function DashboardPage() {
                             ? 'Reddedildi'
                             : st === 'completed'
                               ? 'Tamamlandı'
+                              : st === 'cancelled_by_patient'
+                                ? 'Hasta İptal Etti'
+                                : st === 'cancelled_by_doctor'
+                                  ? 'Doktor İptal Etti'
                               : st || 'Bilinmiyor'
                     const statusClass =
                       st === 'pending'
@@ -3557,6 +3684,10 @@ export default function DashboardPage() {
                             ? 'bg-red-100 text-red-800'
                             : st === 'completed'
                               ? 'bg-blue-100 text-blue-800'
+                              : st === 'cancelled_by_patient'
+                                ? 'bg-orange-100 text-orange-800'
+                                : st === 'cancelled_by_doctor'
+                                  ? 'bg-rose-100 text-rose-800'
                               : 'bg-gray-100 text-gray-800'
                     const doctorName = apt.doctor
                       ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim()
@@ -3601,6 +3732,12 @@ export default function DashboardPage() {
                                   {doctorName || (st === 'pending' ? 'Henüz doktor atanmadı' : 'Doktor bilgisi yok')}
                                 </span>
                               </div>
+                              {(st === 'cancelled_by_patient' || st === 'cancelled_by_doctor') && apt.cancelReason ? (
+                                <div className="sm:col-span-2 rounded-lg border border-red-100 bg-red-50 p-3">
+                                  <p className="text-xs font-semibold text-red-700 mb-1">İptal Nedeni</p>
+                                  <p className="text-sm text-red-900">{String(apt.cancelReason)}</p>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                           {apt.analysisImageUrl ? (
@@ -3840,12 +3977,28 @@ export default function DashboardPage() {
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 appointment.status === 'completed' 
                                   ? 'bg-blue-100 text-blue-700' 
-                                  : 'bg-red-100 text-red-700'
+                                  : appointment.status === 'cancelled_by_patient'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : appointment.status === 'cancelled_by_doctor'
+                                      ? 'bg-rose-100 text-rose-700'
+                                      : 'bg-red-100 text-red-700'
                               }`}>
-                                {appointment.status === 'completed' ? 'Tamamlandı' : 'Reddedildi'}
+                                {appointment.status === 'completed'
+                                  ? 'Tamamlandı'
+                                  : appointment.status === 'cancelled_by_patient'
+                                    ? 'Hasta İptal Etti'
+                                    : appointment.status === 'cancelled_by_doctor'
+                                      ? 'Doktor İptal Etti'
+                                      : 'Reddedildi'}
                               </span>
                             </div>
                           </div>
+                          {(appointment.status === 'cancelled_by_patient' || appointment.status === 'cancelled_by_doctor') && appointment.cancelReason ? (
+                            <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
+                              <p className="text-xs font-semibold text-red-700 mb-1">İptal Nedeni</p>
+                              <p className="text-sm text-red-900">{String(appointment.cancelReason)}</p>
+                            </div>
+                          ) : null}
                         </div>
 
                         {appointment.analysisImageUrl ? (

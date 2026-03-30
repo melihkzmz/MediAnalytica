@@ -115,6 +115,8 @@ service cloud.firestore {
       // 1. Patients can update jitsiRoom field on their own pending appointments (right after creation)
       // 2. Doctors can approve/reject pending appointments (sets doctorId, status, approvedAt)
       // 3. Doctors can complete approved appointments assigned to them
+      // 4. Patients can cancel their own approved appointments with reason
+      // 5. Assigned doctors can cancel approved appointments with reason
       allow update: if isAuthenticated() && (
         // Case 1: Patients can update jitsiRoom on their own pending appointments
         (resource.data.status == 'pending' && 
@@ -147,7 +149,40 @@ service cloud.firestore {
          request.resource.data.date == resource.data.date &&
          request.resource.data.time == resource.data.time &&
          request.resource.data.reason == resource.data.reason &&
-         request.resource.data.doctorType == resource.data.doctorType)
+         request.resource.data.doctorType == resource.data.doctorType) ||
+        // Case 4: Patient cancels own approved appointment with a reason
+        (resource.data.status == 'approved' &&
+         resource.data.userId == request.auth.uid &&
+         request.resource.data.status == 'cancelled_by_patient' &&
+         request.resource.data.cancelledByRole == 'patient' &&
+         request.resource.data.cancelledByUid == request.auth.uid &&
+         request.resource.data.cancelReason is string &&
+         request.resource.data.cancelReason.size() > 0 &&
+         request.resource.data.cancelReason.size() <= 1000 &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.doctorId == resource.data.doctorId) ||
+        // Case 5: Assigned doctor cancels approved appointment with a reason
+        (isDoctor() &&
+         resource.data.status == 'approved' &&
+         resource.data.doctorId == request.auth.uid &&
+         request.resource.data.status == 'cancelled_by_doctor' &&
+         request.resource.data.cancelledByRole == 'doctor' &&
+         request.resource.data.cancelledByUid == request.auth.uid &&
+         request.resource.data.cancelReason is string &&
+         request.resource.data.cancelReason.size() > 0 &&
+         request.resource.data.cancelReason.size() <= 1000 &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.doctorId == resource.data.doctorId)
       );
     }
     
