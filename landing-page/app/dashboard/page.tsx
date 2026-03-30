@@ -110,6 +110,7 @@ export default function DashboardPage() {
   const [activeAppointments, setActiveAppointments] = useState<any[]>([])
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false)
+  const [hasMessageIndicator, setHasMessageIndicator] = useState(false)
   const [profileDisplayName, setProfileDisplayName] = useState('')
   const [profilePhotoURL, setProfilePhotoURL] = useState('')
   const [profileUploading, setProfileUploading] = useState(false)
@@ -142,6 +143,87 @@ export default function DashboardPage() {
     const key = `dismissedAppointmentNotifs_${user.uid}`
     localStorage.setItem(key, JSON.stringify([...dismissedNotifications]))
   }, [dismissedNotifications, user?.uid])
+
+  // Messages indicator: show dot when there is new chat activity or pending incoming request.
+  useEffect(() => {
+    if (!user?.uid) return
+
+    const lastSeenKey = `messagesLastSeenAt_${user.uid}`
+    const lastSeenMs = Number(localStorage.getItem(lastSeenKey) || 0)
+    let hasRequestAlert = false
+    let hasConversationAlert = false
+
+    const updateIndicator = () => {
+      setHasMessageIndicator(hasRequestAlert || hasConversationAlert)
+    }
+
+    let unsubReq: (() => void) | null = null
+    let unsubConv: (() => void) | null = null
+    let alive = true
+
+    const run = async () => {
+      try {
+        const { collection, query, where, onSnapshot } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+
+        if (!alive) return
+
+        if (isDoctor) {
+          const qReq = query(
+            collection(db, 'chatRequests'),
+            where('toDoctorUserId', '==', user.uid),
+            where('status', '==', 'pending')
+          )
+          unsubReq = onSnapshot(qReq, (snap) => {
+            hasRequestAlert = !snap.empty
+            updateIndicator()
+          })
+        } else {
+          // For patients: alert if any request result (approved/rejected) is newer than last seen.
+          const qReq = query(collection(db, 'chatRequests'), where('fromUserId', '==', user.uid))
+          unsubReq = onSnapshot(qReq, (snap) => {
+            hasRequestAlert = snap.docs.some((d) => {
+              const x = d.data() as Record<string, unknown>
+              const status = String(x.status || '')
+              const updatedAt = (x.updatedAt as { toMillis?: () => number } | undefined)?.toMillis?.() || 0
+              return (status === 'approved' || status === 'rejected') && updatedAt > lastSeenMs
+            })
+            updateIndicator()
+          })
+        }
+
+        const qConv = query(
+          collection(db, 'conversations'),
+          where('participantIds', 'array-contains', user.uid)
+        )
+        unsubConv = onSnapshot(qConv, (snap) => {
+          hasConversationAlert = snap.docs.some((d) => {
+            const x = d.data() as Record<string, unknown>
+            const lastMessageAt = (x.lastMessageAt as { toMillis?: () => number } | undefined)?.toMillis?.() || 0
+            return lastMessageAt > lastSeenMs
+          })
+          updateIndicator()
+        })
+      } catch (e) {
+        console.error('Error subscribing message indicator:', e)
+      }
+    }
+
+    run()
+    return () => {
+      alive = false
+      if (unsubReq) unsubReq()
+      if (unsubConv) unsubConv()
+    }
+  }, [user?.uid, isDoctor])
+
+  useEffect(() => {
+    if (!user?.uid) return
+    if (currentSection !== 'messages') return
+    const key = `messagesLastSeenAt_${user.uid}`
+    localStorage.setItem(key, String(Date.now()))
+    setHasMessageIndicator(false)
+  }, [currentSection, user?.uid])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1846,7 +1928,12 @@ export default function DashboardPage() {
                     }`}
                   >
                     {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
-                    {item.label}
+                    <span className="relative">
+                      {item.label}
+                      {item.id === 'messages' && hasMessageIndicator && (
+                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                      )}
+                    </span>
                   </button>
                 ))
               ) : (
@@ -1874,7 +1961,12 @@ export default function DashboardPage() {
                 >
                   {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                   {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
-                  {item.label}
+                  <span className="relative">
+                    {item.label}
+                    {item.id === 'messages' && hasMessageIndicator && (
+                      <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                    )}
+                  </span>
                 </button>
                 ))
               )}
@@ -2070,7 +2162,12 @@ export default function DashboardPage() {
                       }`}
                     >
                       {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
-                      {item.label}
+                      <span className="relative">
+                        {item.label}
+                        {item.id === 'messages' && hasMessageIndicator && (
+                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                        )}
+                      </span>
                     </button>
                   ))
                 ) : (
@@ -2099,7 +2196,12 @@ export default function DashboardPage() {
                   >
                     {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                     {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
-                    {item.label}
+                    <span className="relative">
+                      {item.label}
+                      {item.id === 'messages' && hasMessageIndicator && (
+                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                      )}
+                    </span>
                   </button>
                   ))
                 )}
