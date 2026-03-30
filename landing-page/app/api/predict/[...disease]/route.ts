@@ -186,7 +186,7 @@ export async function POST(
         const bytes = new Uint8Array(await imageField.arrayBuffer())
         const pngBuffer = dicomFileToPngBuffer(bytes)
         const pngName = imageField.name.replace(/\.(dcm|dicom)$/i, '.png') || 'dicom-image.png'
-        const pngFile = new File([pngBuffer], pngName, { type: 'image/png' })
+        const pngFile = new File([new Uint8Array(pngBuffer)], pngName, { type: 'image/png' })
         outgoingFormData.set('image', pngFile, pngName)
       } catch (e: any) {
         console.error('[PROXY] DICOM conversion error:', e)
