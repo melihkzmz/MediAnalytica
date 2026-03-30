@@ -113,6 +113,7 @@ export default function DashboardPage() {
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false)
   const [hasMessageIndicator, setHasMessageIndicator] = useState(false)
+  const [pendingAppointmentAlertCount, setPendingAppointmentAlertCount] = useState(0)
   const [profileDisplayName, setProfileDisplayName] = useState('')
   const [profilePhotoURL, setProfilePhotoURL] = useState('')
   const [profileUploading, setProfileUploading] = useState(false)
@@ -226,6 +227,55 @@ export default function DashboardPage() {
     localStorage.setItem(key, String(Date.now()))
     setHasMessageIndicator(false)
   }, [currentSection, user?.uid])
+
+  // Doctor: pending appointments indicator for "Bekleyen Randevularım" tab
+  useEffect(() => {
+    if (!user?.uid || !isDoctor || !doctorData?.specialty) {
+      setPendingAppointmentAlertCount(0)
+      return
+    }
+
+    let unsub: (() => void) | null = null
+    let alive = true
+
+    const run = async () => {
+      try {
+        const { collection, query, where, onSnapshot } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+
+        if (!alive) return
+        const specialtyMap: { [key: string]: string } = {
+          'Dermatolog': 'dermatolog',
+          'Ortopedist': 'ortopedist',
+          'Göğüs Hastalıkları Uzmanı': 'gogus-hast',
+          'Göz Hastalıkları Uzmanı': 'goz-hast',
+          'Nöroloji': 'noroloji',
+        }
+        const doctorType = specialtyMap[String(doctorData.specialty)] || String(doctorData.specialty).toLowerCase()
+        if (!doctorType) {
+          setPendingAppointmentAlertCount(0)
+          return
+        }
+
+        const q = query(
+          collection(db, 'appointments'),
+          where('status', '==', 'pending'),
+          where('doctorType', '==', doctorType)
+        )
+        unsub = onSnapshot(q, (snap) => {
+          setPendingAppointmentAlertCount(snap.size)
+        })
+      } catch (e) {
+        console.error('Error subscribing pending appointment indicator:', e)
+      }
+    }
+
+    run()
+    return () => {
+      alive = false
+      if (unsub) unsub()
+    }
+  }, [user?.uid, isDoctor, doctorData?.specialty])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1932,6 +1982,9 @@ export default function DashboardPage() {
                     {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                     <span className="relative">
                       {item.label}
+                      {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
+                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                      )}
                       {item.id === 'messages' && hasMessageIndicator && (
                         <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                       )}
@@ -2168,6 +2221,9 @@ export default function DashboardPage() {
                       {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                       <span className="relative">
                         {item.label}
+                        {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
+                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                        )}
                         {item.id === 'messages' && hasMessageIndicator && (
                           <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                         )}
