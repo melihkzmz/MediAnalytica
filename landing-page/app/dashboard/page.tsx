@@ -115,6 +115,7 @@ export default function DashboardPage() {
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false)
   const [hasMessageIndicator, setHasMessageIndicator] = useState(false)
   const [pendingAppointmentAlertCount, setPendingAppointmentAlertCount] = useState(0)
+  const [doctorUpcomingAppointmentAlertCount, setDoctorUpcomingAppointmentAlertCount] = useState(0)
   const [cancelReasonByAppointment, setCancelReasonByAppointment] = useState<Record<string, string>>({})
   const [showCancelInputForAppointment, setShowCancelInputForAppointment] = useState<Record<string, boolean>>({})
   const [cancelSubmittingForAppointment, setCancelSubmittingForAppointment] = useState<Record<string, boolean>>({})
@@ -280,6 +281,40 @@ export default function DashboardPage() {
       if (unsub) unsub()
     }
   }, [user?.uid, isDoctor, doctorData?.specialty])
+
+  // Doctor: upcoming approved appointments indicator for "Randevularım" tab
+  useEffect(() => {
+    if (!user?.uid || !isDoctor) {
+      setDoctorUpcomingAppointmentAlertCount(0)
+      return
+    }
+    let unsub: (() => void) | null = null
+    let alive = true
+    const run = async () => {
+      try {
+        const { collection, query, where, onSnapshot } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        if (!alive) return
+        const today = new Date().toISOString().split('T')[0]
+        const q = query(
+          collection(db, 'appointments'),
+          where('status', '==', 'approved'),
+          where('doctorId', '==', user.uid),
+          where('date', '>=', today)
+        )
+        unsub = onSnapshot(q, (snap) => {
+          setDoctorUpcomingAppointmentAlertCount(snap.size)
+        })
+      } catch (e) {
+        console.error('Error subscribing doctor upcoming appointment indicator:', e)
+      }
+    }
+    run()
+    return () => {
+      alive = false
+      if (unsub) unsub()
+    }
+  }, [user?.uid, isDoctor])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -2044,6 +2079,9 @@ export default function DashboardPage() {
                     {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                     <span className="relative">
                       {item.label}
+                      {item.id === 'my-appointments' && currentSection !== 'my-appointments' && doctorUpcomingAppointmentAlertCount > 0 && (
+                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                      )}
                       {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
                         <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                       )}
@@ -2283,6 +2321,9 @@ export default function DashboardPage() {
                       {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
                       <span className="relative">
                         {item.label}
+                        {item.id === 'my-appointments' && currentSection !== 'my-appointments' && doctorUpcomingAppointmentAlertCount > 0 && (
+                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                        )}
                         {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
                           <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                         )}
@@ -3910,15 +3951,24 @@ export default function DashboardPage() {
                               </span>
                             </div>
                           </div>
-                          <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                            <button
-                              onClick={() => completeAppointment(appointment.id)}
-                              className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
-                            >
-                              <CheckCircle className="w-5 h-5" />
-                              <span>Tamamlandı Olarak İşaretle</span>
-                            </button>
-                          </div>
+                          {appointment.date && appointment.time && isAppointmentTime({
+                            date: appointment.date,
+                            time: appointment.time
+                          }) ? (
+                            <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                              <button
+                                onClick={() => completeAppointment(appointment.id)}
+                                className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                              >
+                                <CheckCircle className="w-5 h-5" />
+                                <span>Tamamlandı Olarak İşaretle</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex">
+                              Randevu saati gelmeden tamamlandı olarak işaretlenemez.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
