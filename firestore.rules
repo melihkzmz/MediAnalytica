@@ -106,10 +106,26 @@ service cloud.firestore {
         isDoctor()
       );
       
-      // Create rules: Patients can create appointments (status must be 'pending')
-      allow create: if isAuthenticated() && 
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.status == 'pending';
+      // Create rules: Patients create bookings (pending). Doctors invite peers (pending_peer, doctor_peer).
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        (!('appointmentKind' in request.resource.data) ||
+          request.resource.data.appointmentKind == null)
+      ) || (
+        isDoctor() &&
+        request.resource.data.appointmentKind == 'doctor_peer' &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending_peer' &&
+        request.resource.data.doctorType == 'peer' &&
+        request.resource.data.peerDoctorUserId is string &&
+        request.resource.data.peerDoctorUserId != request.auth.uid &&
+        exists(/databases/$(database)/documents/doctors/$(request.resource.data.peerDoctorUserId)) &&
+        (!('reason' in request.resource.data) ||
+          (request.resource.data.reason is string && request.resource.data.reason.size() <= 2000)) &&
+        (!('userEmail' in request.resource.data) ||
+          request.resource.data.userEmail is string)
+      );
       
       // Update rules: 
       // 1. Patients can update jitsiRoom field on their own pending appointments (right after creation)
@@ -128,6 +144,19 @@ service cloud.firestore {
          request.resource.data.time == resource.data.time &&
          request.resource.data.reason == resource.data.reason &&
          request.resource.data.doctorType == resource.data.doctorType) ||
+        // Case 1b: Organizer updates jitsiRoom on pending doctor–doctor peer invite
+        (resource.data.appointmentKind == 'doctor_peer' &&
+         resource.data.status == 'pending_peer' &&
+         resource.data.userId == request.auth.uid &&
+         request.resource.data.status == 'pending_peer' &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.appointmentKind == resource.data.appointmentKind &&
+         (!('userEmail' in resource.data) || request.resource.data.userEmail == resource.data.userEmail)) ||
         // Case 2: Doctors can approve/reject pending appointments (sets doctorId, status, approvedAt)
         (isDoctor() && 
          resource.data.status == 'pending' && 
@@ -139,17 +168,68 @@ service cloud.firestore {
          request.resource.data.time == resource.data.time &&
          request.resource.data.reason == resource.data.reason &&
          request.resource.data.doctorType == resource.data.doctorType) ||
-        // Case 3: Doctors can complete approved appointments assigned to them
+        // Case 2b: Invitee doctor accepts peer meeting
+        (isDoctor() &&
+         resource.data.appointmentKind == 'doctor_peer' &&
+         resource.data.status == 'pending_peer' &&
+         resource.data.peerDoctorUserId == request.auth.uid &&
+         request.resource.data.status == 'approved' &&
+         request.resource.data.doctorId == request.auth.uid &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.appointmentKind == resource.data.appointmentKind &&
+         (!('userEmail' in resource.data) || request.resource.data.userEmail == resource.data.userEmail)) ||
+        // Case 2c: Invitee rejects peer meeting
+        (isDoctor() &&
+         resource.data.appointmentKind == 'doctor_peer' &&
+         resource.data.status == 'pending_peer' &&
+         resource.data.peerDoctorUserId == request.auth.uid &&
+         request.resource.data.status == 'rejected' &&
+         request.resource.data.doctorId == request.auth.uid &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.appointmentKind == resource.data.appointmentKind &&
+         (!('userEmail' in resource.data) || request.resource.data.userEmail == resource.data.userEmail)) ||
+        // Case 2d: Organizer cancels pending peer invite
+        (resource.data.appointmentKind == 'doctor_peer' &&
+         resource.data.status == 'pending_peer' &&
+         resource.data.userId == request.auth.uid &&
+         request.resource.data.status == 'cancelled_peer' &&
+         request.resource.data.cancelledByUid == request.auth.uid &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.appointmentKind == resource.data.appointmentKind &&
+         (!('userEmail' in resource.data) || request.resource.data.userEmail == resource.data.userEmail) &&
+         (!('cancelReason' in request.resource.data) ||
+           (request.resource.data.cancelReason is string &&
+            request.resource.data.cancelReason.size() <= 1000))) ||
+        // Case 3: Doctors complete approved appointments (assigned doctor, or peer organizer)
         (isDoctor() && 
          resource.data.status == 'approved' && 
-         resource.data.doctorId == request.auth.uid &&
          request.resource.data.status == 'completed' &&
+         (resource.data.doctorId == request.auth.uid ||
+           (resource.data.appointmentKind == 'doctor_peer' && resource.data.userId == request.auth.uid)) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.userEmail == resource.data.userEmail &&
          request.resource.data.date == resource.data.date &&
          request.resource.data.time == resource.data.time &&
          request.resource.data.reason == resource.data.reason &&
-         request.resource.data.doctorType == resource.data.doctorType) ||
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.doctorId == resource.data.doctorId &&
+         (!('peerDoctorUserId' in resource.data) || request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId) &&
+         (!('appointmentKind' in resource.data) || request.resource.data.appointmentKind == resource.data.appointmentKind)) ||
         // Case 4: Patient cancels own approved appointment with a reason
         (resource.data.status == 'approved' &&
          resource.data.userId == request.auth.uid &&
@@ -165,7 +245,9 @@ service cloud.firestore {
          request.resource.data.time == resource.data.time &&
          request.resource.data.reason == resource.data.reason &&
          request.resource.data.doctorType == resource.data.doctorType &&
-         request.resource.data.doctorId == resource.data.doctorId) ||
+         request.resource.data.doctorId == resource.data.doctorId &&
+         (!('peerDoctorUserId' in resource.data) || request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId) &&
+         (!('appointmentKind' in resource.data) || request.resource.data.appointmentKind == resource.data.appointmentKind)) ||
         // Case 5: Assigned doctor cancels approved appointment with a reason
         (isDoctor() &&
          resource.data.status == 'approved' &&
@@ -182,7 +264,9 @@ service cloud.firestore {
          request.resource.data.time == resource.data.time &&
          request.resource.data.reason == resource.data.reason &&
          request.resource.data.doctorType == resource.data.doctorType &&
-         request.resource.data.doctorId == resource.data.doctorId)
+         request.resource.data.doctorId == resource.data.doctorId &&
+         (!('peerDoctorUserId' in resource.data) || request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId) &&
+         (!('appointmentKind' in resource.data) || request.resource.data.appointmentKind == resource.data.appointmentKind))
       );
     }
     

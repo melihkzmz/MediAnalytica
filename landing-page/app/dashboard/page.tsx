@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -25,7 +25,8 @@ import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
                'my-appointments-patient' | 'patient-appointment-history' |
-               'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
+               'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients' |
+               'doctor-peer-meetings'
 
 /** Maps analyze modality to appointment `doctorType` / doctors.specialty slug */
 const DISEASE_TO_DOCTOR_TYPE: Record<DiseaseType, string> = {
@@ -65,7 +66,8 @@ export default function DashboardPage() {
     const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
                           'my-appointments-patient',
                           'patient-appointment-history',
-                          'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
+                          'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients',
+                          'doctor-peer-meetings']
     if (hash && validSections.includes(hash)) {
       setCurrentSection(hash as Section)
     }
@@ -78,7 +80,8 @@ export default function DashboardPage() {
       const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
                             'my-appointments-patient',
                             'patient-appointment-history',
-                            'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
+                            'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients',
+                            'doctor-peer-meetings']
       if (hash && validSections.includes(hash)) {
         setCurrentSection(hash as Section)
       }
@@ -116,6 +119,13 @@ export default function DashboardPage() {
   const [hasMessageIndicator, setHasMessageIndicator] = useState(false)
   const [pendingAppointmentAlertCount, setPendingAppointmentAlertCount] = useState(0)
   const [doctorUpcomingAppointmentAlertCount, setDoctorUpcomingAppointmentAlertCount] = useState(0)
+  const [doctorPeerInviteAlertCount, setDoctorPeerInviteAlertCount] = useState(0)
+  const [incomingPeerInvites, setIncomingPeerInvites] = useState<any[]>([])
+  const [outgoingPeerInvites, setOutgoingPeerInvites] = useState<any[]>([])
+  const [peerDoctorsList, setPeerDoctorsList] = useState<Array<{ id: string; firstName?: string; lastName?: string; specialty?: string }>>([])
+  const [peerMeetingForm, setPeerMeetingForm] = useState({ peerDoctorUserId: '', date: '', time: '', reason: '' })
+  const [peerMeetingsLoading, setPeerMeetingsLoading] = useState(false)
+  const [peerInviteSubmitting, setPeerInviteSubmitting] = useState(false)
   const [cancelReasonByAppointment, setCancelReasonByAppointment] = useState<Record<string, string>>({})
   const [showCancelInputForAppointment, setShowCancelInputForAppointment] = useState<Record<string, boolean>>({})
   const [cancelSubmittingForAppointment, setCancelSubmittingForAppointment] = useState<Record<string, boolean>>({})
@@ -282,10 +292,65 @@ export default function DashboardPage() {
     }
   }, [user?.uid, isDoctor, doctorData?.specialty])
 
-  // Doctor: upcoming approved appointments indicator for "Randevularım" tab
+  // Doctor: upcoming approved appointments indicator for "Randevularım" tab (hasta + meslektaş görüşmeleri düzenleyen)
+  const upcomingAptCountsRef = useRef({ assigned: 0, peerOrganizer: 0 })
   useEffect(() => {
     if (!user?.uid || !isDoctor) {
       setDoctorUpcomingAppointmentAlertCount(0)
+      return
+    }
+    let unsubAssigned: (() => void) | null = null
+    let unsubOrganizer: (() => void) | null = null
+    let alive = true
+    const pushTotal = () => {
+      setDoctorUpcomingAppointmentAlertCount(
+        upcomingAptCountsRef.current.assigned + upcomingAptCountsRef.current.peerOrganizer
+      )
+    }
+    const run = async () => {
+      try {
+        const { collection, query, where, onSnapshot } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        if (!alive) return
+        const today = new Date().toISOString().split('T')[0]
+        const qAssigned = query(
+          collection(db, 'appointments'),
+          where('status', '==', 'approved'),
+          where('doctorId', '==', user.uid),
+          where('date', '>=', today)
+        )
+        unsubAssigned = onSnapshot(qAssigned, (snap) => {
+          upcomingAptCountsRef.current.assigned = snap.size
+          pushTotal()
+        })
+        const qOrganizer = query(
+          collection(db, 'appointments'),
+          where('status', '==', 'approved'),
+          where('userId', '==', user.uid)
+        )
+        unsubOrganizer = onSnapshot(qOrganizer, (snap) => {
+          upcomingAptCountsRef.current.peerOrganizer = snap.docs.filter((d) => {
+            const x = d.data() as Record<string, unknown>
+            return x.appointmentKind === 'doctor_peer' && String(x.date || '') >= today
+          }).length
+          pushTotal()
+        })
+      } catch (e) {
+        console.error('Error subscribing doctor upcoming appointment indicator:', e)
+      }
+    }
+    run()
+    return () => {
+      alive = false
+      if (unsubAssigned) unsubAssigned()
+      if (unsubOrganizer) unsubOrganizer()
+    }
+  }, [user?.uid, isDoctor])
+
+  // Doctor: incoming meslektaş görüşmesi davetleri (sidebar dot)
+  useEffect(() => {
+    if (!user?.uid || !isDoctor) {
+      setDoctorPeerInviteAlertCount(0)
       return
     }
     let unsub: (() => void) | null = null
@@ -295,18 +360,14 @@ export default function DashboardPage() {
         const { collection, query, where, onSnapshot } = await import('firebase/firestore')
         const { db } = await import('@/lib/firebase')
         if (!alive) return
-        const today = new Date().toISOString().split('T')[0]
         const q = query(
           collection(db, 'appointments'),
-          where('status', '==', 'approved'),
-          where('doctorId', '==', user.uid),
-          where('date', '>=', today)
+          where('peerDoctorUserId', '==', user.uid),
+          where('status', '==', 'pending_peer')
         )
-        unsub = onSnapshot(q, (snap) => {
-          setDoctorUpcomingAppointmentAlertCount(snap.size)
-        })
+        unsub = onSnapshot(q, (snap) => setDoctorPeerInviteAlertCount(snap.size))
       } catch (e) {
-        console.error('Error subscribing doctor upcoming appointment indicator:', e)
+        console.error('Error subscribing peer invite indicator:', e)
       }
     }
     run()
@@ -432,6 +493,9 @@ export default function DashboardPage() {
         loadAppointmentHistory()
       } else if (currentSection === 'my-patients') {
         loadMyPatients()
+      } else if (currentSection === 'doctor-peer-meetings') {
+        loadDoctorPeerMeetings()
+        loadPeerDoctorsDirectory()
       }
     }
   }, [user, isDoctor, doctorData, currentSection])
@@ -524,14 +588,62 @@ export default function DashboardPage() {
         }
 
         const querySnapshot = await getDocs(appointmentsQuery)
+        const seenIds = new Set<string>()
+        const mergedDocs: typeof querySnapshot.docs = []
+        for (const d of querySnapshot.docs) {
+          seenIds.add(d.id)
+          mergedDocs.push(d)
+        }
+        if (isDoctor) {
+          const peerOrganizerSnap = await getDocs(
+            query(
+              collection(db, 'appointments'),
+              where('status', '==', 'approved'),
+              where('userId', '==', user.uid)
+            )
+          )
+          for (const d of peerOrganizerSnap.docs) {
+            const raw = d.data() as Record<string, unknown>
+            if (raw.appointmentKind === 'doctor_peer' && !seenIds.has(d.id)) {
+              seenIds.add(d.id)
+              mergedDocs.push(d)
+            }
+          }
+        }
+
         const active: any[] = []
         const startNow: any[] = []
 
-        for (const appointmentDoc of querySnapshot.docs) {
+        for (const appointmentDoc of mergedDocs) {
           const appointmentData = appointmentDoc.data()
           const appointment: any = {
             id: appointmentDoc.id,
             ...appointmentData
+          }
+
+          if (isDoctor && appointment.userId) {
+            try {
+              if (appointment.appointmentKind === 'doctor_peer') {
+                const otherUid =
+                  appointment.userId === user.uid ? appointment.doctorId : appointment.userId
+                if (otherUid) {
+                  const ddoc = await getDoc(doc(db, 'doctors', otherUid))
+                  if (ddoc.exists()) {
+                    const o = ddoc.data() as Record<string, unknown>
+                    appointment.peerDoctorLabel =
+                      `Dr. ${String(o.firstName || '').trim()} ${String(o.lastName || '').trim()}`.trim()
+                  }
+                }
+              } else {
+                const userRef = doc(db, 'users', appointment.userId)
+                const userDoc = await getDoc(userRef)
+                if (userDoc.exists()) {
+                  appointment.patient = userDoc.data()
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching appointment counterparty:', error)
+            }
           }
 
           // Check if appointment has required fields and time has arrived
@@ -539,19 +651,6 @@ export default function DashboardPage() {
             date: appointment.date,
             time: appointment.time
           })) {
-            // Fetch patient data for doctors
-            if (isDoctor && appointment.userId) {
-              try {
-                const userRef = doc(db, 'users', appointment.userId)
-                const userDoc = await getDoc(userRef)
-                if (userDoc.exists()) {
-                  appointment.patient = userDoc.data()
-                }
-              } catch (error) {
-                console.error('Error fetching patient:', error)
-              }
-            }
-            
             active.push(appointment)
           }
 
@@ -946,12 +1045,10 @@ export default function DashboardPage() {
     try {
       const { collection, query, where, orderBy, getDocs, doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
-      
+
       const today = new Date().toISOString().split('T')[0]
-      
-      // Query approved appointments assigned to this doctor, upcoming dates
       const appointmentsRef = collection(db, 'appointments')
-      const q = query(
+      const qAssigned = query(
         appointmentsRef,
         where('status', '==', 'approved'),
         where('doctorId', '==', user.uid),
@@ -959,38 +1056,76 @@ export default function DashboardPage() {
         orderBy('date', 'asc'),
         orderBy('time', 'asc')
       )
-      
-      const querySnapshot = await getDocs(q)
-      const appointmentsData = await Promise.all(
-        querySnapshot.docs.map(async (appointmentDoc) => {
-          const data = appointmentDoc.data()
-          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
-            data.createdAt = data.createdAt.toDate().getTime()
-          } else if (data.createdAt?.seconds) {
-            data.createdAt = data.createdAt.seconds * 1000
-          }
-          
-          let patientData = null
-          if (data.userId) {
+      const qOrganizer = query(
+        appointmentsRef,
+        where('status', '==', 'approved'),
+        where('userId', '==', user.uid)
+      )
+
+      const [snapAssigned, snapOrganizer] = await Promise.all([getDocs(qAssigned), getDocs(qOrganizer)])
+
+      const processDoc = async (appointmentDoc: { id: string; data: () => Record<string, unknown> }) => {
+        const data = appointmentDoc.data()
+        if (data.createdAt && typeof (data.createdAt as { toDate?: () => Date }).toDate === 'function') {
+          data.createdAt = (data.createdAt as { toDate: () => Date }).toDate().getTime()
+        } else if ((data.createdAt as { seconds?: number } | undefined)?.seconds) {
+          data.createdAt = (data.createdAt as { seconds: number }).seconds * 1000
+        }
+
+        let patientData = null
+        let peerDoctorLabel: string | undefined
+        if (data.appointmentKind === 'doctor_peer') {
+          const otherUid =
+            data.userId === user.uid ? (data.doctorId as string | undefined) : (data.userId as string | undefined)
+          if (otherUid) {
             try {
-              const userRef = doc(db, 'users', data.userId)
-              const userDoc = await getDoc(userRef)
-              if (userDoc.exists()) {
-                patientData = userDoc.data()
+              const ddoc = await getDoc(doc(db, 'doctors', otherUid))
+              if (ddoc.exists()) {
+                const o = ddoc.data() as Record<string, unknown>
+                peerDoctorLabel = `Dr. ${String(o.firstName || '').trim()} ${String(o.lastName || '').trim()}`.trim()
               }
             } catch (error) {
-              console.error(`Error fetching user ${data.userId}:`, error)
+              console.error(`Error fetching doctor ${otherUid}:`, error)
             }
           }
-          
-          return {
-            id: appointmentDoc.id,
-            ...data,
-            patient: patientData
+        } else if (data.userId) {
+          try {
+            const userRef = doc(db, 'users', data.userId as string)
+            const userDoc = await getDoc(userRef)
+            if (userDoc.exists()) patientData = userDoc.data()
+          } catch (error) {
+            console.error(`Error fetching user ${data.userId}:`, error)
           }
-        })
-      )
-      
+        }
+
+        return {
+          id: appointmentDoc.id,
+          ...data,
+          patient: patientData,
+          peerDoctorLabel,
+        }
+      }
+
+      const byId = new Map<string, any>()
+      for (const d of snapAssigned.docs) {
+        byId.set(d.id, await processDoc(d))
+      }
+      for (const d of snapOrganizer.docs) {
+        const raw = d.data() as Record<string, unknown>
+        if (raw.appointmentKind !== 'doctor_peer') continue
+        if (String(raw.date || '') < today) continue
+        if (!byId.has(d.id)) {
+          byId.set(d.id, await processDoc(d))
+        }
+      }
+
+      const appointmentsData = [...byId.values()].sort((a, b) => {
+        const da = String(a.date || '')
+        const db_ = String(b.date || '')
+        if (da !== db_) return da.localeCompare(db_)
+        return String(a.time || '').localeCompare(String(b.time || ''))
+      })
+
       setMyAppointments(appointmentsData)
     } catch (error) {
       console.error('Error loading my appointments:', error)
@@ -1006,48 +1141,93 @@ export default function DashboardPage() {
     try {
       const { collection, query, where, orderBy, getDocs, doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
-      
-      // Query completed and rejected appointments assigned to this doctor
+
+      const historyStatuses = [
+        'completed',
+        'rejected',
+        'cancelled_by_patient',
+        'cancelled_by_doctor',
+        'cancelled_peer',
+      ]
       const appointmentsRef = collection(db, 'appointments')
-      const q = query(
+      const qAssigned = query(
         appointmentsRef,
-        where('status', 'in', ['completed', 'rejected', 'cancelled_by_patient', 'cancelled_by_doctor']),
+        where('status', 'in', historyStatuses),
         where('doctorId', '==', user.uid),
         orderBy('date', 'desc'),
         orderBy('time', 'desc')
       )
-      
-      const querySnapshot = await getDocs(q)
-      const appointmentsData = await Promise.all(
-        querySnapshot.docs.map(async (appointmentDoc) => {
-          const data = appointmentDoc.data()
-          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
-            data.createdAt = data.createdAt.toDate().getTime()
-          } else if (data.createdAt?.seconds) {
-            data.createdAt = data.createdAt.seconds * 1000
-          }
-          
-          let patientData = null
-          if (data.userId) {
+      const qPeerOrganizer = query(
+        appointmentsRef,
+        where('appointmentKind', '==', 'doctor_peer'),
+        where('userId', '==', user.uid),
+        where('status', 'in', historyStatuses)
+      )
+
+      const [snapAssigned, snapOrganizer] = await Promise.all([
+        getDocs(qAssigned),
+        getDocs(qPeerOrganizer),
+      ])
+
+      const processDoc = async (appointmentDoc: { id: string; data: () => Record<string, unknown> }) => {
+        const data = appointmentDoc.data()
+        if (data.createdAt && typeof (data.createdAt as { toDate?: () => Date }).toDate === 'function') {
+          data.createdAt = (data.createdAt as { toDate: () => Date }).toDate().getTime()
+        } else if ((data.createdAt as { seconds?: number } | undefined)?.seconds) {
+          data.createdAt = (data.createdAt as { seconds: number }).seconds * 1000
+        }
+
+        let patientData = null
+        let peerDoctorLabel: string | undefined
+        if (data.appointmentKind === 'doctor_peer') {
+          const otherUid =
+            data.userId === user.uid ? (data.doctorId as string | undefined) : (data.userId as string | undefined)
+          if (otherUid) {
             try {
-              const userRef = doc(db, 'users', data.userId)
-              const userDoc = await getDoc(userRef)
-              if (userDoc.exists()) {
-                patientData = userDoc.data()
+              const ddoc = await getDoc(doc(db, 'doctors', otherUid))
+              if (ddoc.exists()) {
+                const o = ddoc.data() as Record<string, unknown>
+                peerDoctorLabel = `Dr. ${String(o.firstName || '').trim()} ${String(o.lastName || '').trim()}`.trim()
               }
             } catch (error) {
-              console.error(`Error fetching user ${data.userId}:`, error)
+              console.error(`Error fetching doctor ${otherUid}:`, error)
             }
           }
-          
-          return {
-            id: appointmentDoc.id,
-            ...data,
-            patient: patientData
+        } else if (data.userId) {
+          try {
+            const userRef = doc(db, 'users', data.userId as string)
+            const userDoc = await getDoc(userRef)
+            if (userDoc.exists()) patientData = userDoc.data()
+          } catch (error) {
+            console.error(`Error fetching user ${data.userId}:`, error)
           }
-        })
-      )
-      
+        }
+
+        return {
+          id: appointmentDoc.id,
+          ...data,
+          patient: patientData,
+          peerDoctorLabel,
+        }
+      }
+
+      const byId = new Map<string, any>()
+      for (const d of snapAssigned.docs) {
+        byId.set(d.id, await processDoc(d))
+      }
+      for (const d of snapOrganizer.docs) {
+        if (!byId.has(d.id)) {
+          byId.set(d.id, await processDoc(d))
+        }
+      }
+
+      const appointmentsData = [...byId.values()].sort((a, b) => {
+        const da = String(a.date || '')
+        const db_ = String(b.date || '')
+        if (da !== db_) return db_.localeCompare(da)
+        return String(b.time || '').localeCompare(String(a.time || ''))
+      })
+
       setAppointmentHistory(appointmentsData)
     } catch (error) {
       console.error('Error loading appointment history:', error)
@@ -1078,6 +1258,7 @@ export default function DashboardPage() {
       const patientAppointmentsMap = new Map<string, any[]>()
       querySnapshot.docs.forEach(doc => {
         const data = doc.data()
+        if (data.appointmentKind === 'doctor_peer') return
         if (data.userId) {
           if (!patientAppointmentsMap.has(data.userId)) {
             patientAppointmentsMap.set(data.userId, [])
@@ -1143,6 +1324,160 @@ export default function DashboardPage() {
     }
   }
 
+  const loadPeerDoctorsDirectory = async () => {
+    if (!user?.uid || !isDoctor) return
+    try {
+      const { collection, getDocs } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const snap = await getDocs(collection(db, 'doctors'))
+      const rows = snap.docs
+        .map((d) => {
+          const x = d.data() as Record<string, unknown>
+          return {
+            id: d.id,
+            firstName: x.firstName as string | undefined,
+            lastName: x.lastName as string | undefined,
+            specialty: x.specialty as string | undefined,
+          }
+        })
+        .filter((r) => r.id !== user.uid)
+        .sort((a, b) =>
+          `${a.firstName || ''} ${a.lastName || ''}`.localeCompare(
+            `${b.firstName || ''} ${b.lastName || ''}`,
+            'tr'
+          )
+        )
+      setPeerDoctorsList(rows)
+    } catch (e) {
+      console.error('loadPeerDoctorsDirectory', e)
+    }
+  }
+
+  const loadDoctorPeerMeetings = async () => {
+    if (!user?.uid || !isDoctor) return
+    setPeerMeetingsLoading(true)
+    try {
+      const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const appointmentsRef = collection(db, 'appointments')
+      const qIn = query(
+        appointmentsRef,
+        where('peerDoctorUserId', '==', user.uid),
+        where('status', '==', 'pending_peer')
+      )
+      const qOut = query(
+        appointmentsRef,
+        where('userId', '==', user.uid),
+        where('status', '==', 'pending_peer')
+      )
+      const [snapIn, snapOut] = await Promise.all([getDocs(qIn), getDocs(qOut)])
+
+      const doctorName = async (uid: string) => {
+        try {
+          const d = await getDoc(doc(db, 'doctors', uid))
+          if (!d.exists()) return uid
+          const x = d.data() as Record<string, unknown>
+          return `Dr. ${String(x.firstName || '').trim()} ${String(x.lastName || '').trim()}`.trim()
+        } catch {
+          return uid
+        }
+      }
+
+      const incoming = await Promise.all(
+        snapIn.docs.map(async (d) => {
+          const data = d.data() as Record<string, unknown>
+          const fromUid = String(data.userId || '')
+          return {
+            id: d.id,
+            ...data,
+            counterpartyLabel: await doctorName(fromUid),
+          }
+        })
+      )
+      const outgoing = await Promise.all(
+        snapOut.docs.map(async (d) => {
+          const data = d.data() as Record<string, unknown>
+          const toUid = String(data.peerDoctorUserId || '')
+          return {
+            id: d.id,
+            ...data,
+            counterpartyLabel: await doctorName(toUid),
+          }
+        })
+      )
+      setIncomingPeerInvites(incoming)
+      setOutgoingPeerInvites(outgoing)
+    } catch (e) {
+      console.error('loadDoctorPeerMeetings', e)
+      showToast('Meslektaş görüşmeleri yüklenemedi.', 'error')
+    } finally {
+      setPeerMeetingsLoading(false)
+    }
+  }
+
+  const createDoctorPeerInvite = async () => {
+    if (!user || !isDoctor) return
+    const { peerDoctorUserId, date, time, reason } = peerMeetingForm
+    if (!peerDoctorUserId || !date || !time) {
+      showToast('Doktor, tarih ve saat seçin.', 'warning')
+      return
+    }
+    setPeerInviteSubmitting(true)
+    try {
+      const { collection, addDoc, updateDoc, doc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const { generateJitsiRoomName } = await import('@/lib/appointmentUtils')
+      const tempRoom = `medi-analytica-temp-${Date.now()}`
+      const ref = await addDoc(collection(db, 'appointments'), {
+        userId: user.uid,
+        userEmail: user.email || '',
+        peerDoctorUserId,
+        doctorType: 'peer',
+        appointmentKind: 'doctor_peer',
+        status: 'pending_peer',
+        date,
+        time,
+        reason: reason.trim() || 'Meslektaş görüşmesi',
+        jitsiRoom: tempRoom,
+        createdAt: serverTimestamp(),
+      })
+      await updateDoc(doc(db, 'appointments', ref.id), {
+        jitsiRoom: generateJitsiRoomName(ref.id),
+      })
+      showToast('Doktor daveti gönderildi. Karşı taraf onayladığında görüşme kesinleşir.', 'success')
+      setPeerMeetingForm({ peerDoctorUserId: '', date: '', time: '', reason: '' })
+      loadDoctorPeerMeetings()
+    } catch (e: any) {
+      console.error(e)
+      if (e?.code === 'permission-denied') {
+        showToast('Davet gönderme izni yok.', 'error')
+      } else {
+        showToast(e?.message || 'Davet oluşturulamadı.', 'error')
+      }
+    } finally {
+      setPeerInviteSubmitting(false)
+    }
+  }
+
+  const withdrawPeerInvite = async (appointmentId: string) => {
+    if (!user) return
+    try {
+      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      await updateDoc(doc(db, 'appointments', appointmentId), {
+        status: 'cancelled_peer',
+        cancelledByUid: user.uid,
+        cancelReason: 'Düzenleyen doktor daveti iptal etti.',
+        updatedAt: serverTimestamp(),
+      })
+      showToast('Davet iptal edildi.', 'info')
+      loadDoctorPeerMeetings()
+    } catch (e) {
+      console.error(e)
+      showToast('Davet iptal edilemedi.', 'error')
+    }
+  }
+
   const acceptAppointment = async (appointmentId: string) => {
     if (!user) return
     try {
@@ -1169,6 +1504,7 @@ export default function DashboardPage() {
       showToast('Randevu onaylandı!', 'success')
       loadPendingAppointments()
       loadMyAppointments()
+      loadDoctorPeerMeetings()
     } catch (error) {
       console.error('Error accepting appointment:', error)
       showToast('Randevu onaylanırken hata oluştu.', 'error')
@@ -1189,6 +1525,7 @@ export default function DashboardPage() {
       
       showToast('Randevu reddedildi.', 'info')
       loadPendingAppointments()
+      loadDoctorPeerMeetings()
     } catch (error) {
       console.error('Error rejecting appointment:', error)
       showToast('Randevu reddedilirken hata oluştu.', 'error')
@@ -2069,6 +2406,7 @@ export default function DashboardPage() {
                 // Doctor tabs
                 [
                   { id: 'pending-appointments', label: 'Bekleyen Randevularım' },
+                  { id: 'doctor-peer-meetings', label: 'Doktor görüşmeleri' },
                   { id: 'my-appointments', label: 'Randevularım' },
                   { id: 'appointment-history', label: 'Randevu Geçmişi' },
                   { id: 'my-patients', label: 'Hastalarım' },
@@ -2087,6 +2425,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                    {item.id === 'doctor-peer-meetings' ? <Users className="w-4 h-4 shrink-0" /> : null}
                     <span className="relative">
                       {item.label}
                       {item.id === 'my-appointments' && currentSection !== 'my-appointments' && doctorUpcomingAppointmentAlertCount > 0 && (
@@ -2094,6 +2433,9 @@ export default function DashboardPage() {
                       )}
                       {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
                         <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                      )}
+                      {item.id === 'doctor-peer-meetings' && currentSection !== 'doctor-peer-meetings' && doctorPeerInviteAlertCount > 0 && (
+                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-violet-500" />
                       )}
                       {item.id === 'messages' && hasMessageIndicator && (
                         <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
@@ -2310,6 +2652,7 @@ export default function DashboardPage() {
                   // Doctor tabs
                   [
                     { id: 'pending-appointments', label: 'Bekleyen Randevularım' },
+                    { id: 'doctor-peer-meetings', label: 'Doktor görüşmeleri' },
                     { id: 'my-appointments', label: 'Randevularım' },
                     { id: 'appointment-history', label: 'Randevu Geçmişi' },
                     { id: 'my-patients', label: 'Hastalarım' },
@@ -2329,6 +2672,7 @@ export default function DashboardPage() {
                       }`}
                     >
                       {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                      {item.id === 'doctor-peer-meetings' ? <Users className="w-4 h-4 shrink-0" /> : null}
                       <span className="relative">
                         {item.label}
                         {item.id === 'my-appointments' && currentSection !== 'my-appointments' && doctorUpcomingAppointmentAlertCount > 0 && (
@@ -2336,6 +2680,9 @@ export default function DashboardPage() {
                         )}
                         {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
                           <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                        )}
+                        {item.id === 'doctor-peer-meetings' && currentSection !== 'doctor-peer-meetings' && doctorPeerInviteAlertCount > 0 && (
+                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-violet-500" />
                         )}
                         {item.id === 'messages' && hasMessageIndicator && (
                           <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
@@ -3826,6 +4173,176 @@ export default function DashboardPage() {
           )}
 
           {/* Doctor Sections */}
+          {currentSection === 'doctor-peer-meetings' && isDoctor && (
+            <div className="max-w-6xl mx-auto space-y-8">
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900">Doktor görüşmeleri</h2>
+                <p className="mt-2 text-gray-600 max-w-2xl">
+                  Meslektaşınızla ortak tarih ve saatte görüntülü görüşme planlayın. Davet gönderildiğinde karşı
+                  taraf onayladığında görüşme &quot;Randevularım&quot; bölümüne düşer; randevu saatinde bildirimlerle
+                  lobiye katılabilirsiniz.
+                </p>
+              </div>
+
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-violet-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-violet-600" />
+                  Yeni görüşme daveti
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Meslektaş</label>
+                    <select
+                      value={peerMeetingForm.peerDoctorUserId}
+                      onChange={(e) =>
+                        setPeerMeetingForm((f) => ({ ...f, peerDoctorUserId: e.target.value }))
+                      }
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                    >
+                      <option value="">Doktor seçin…</option>
+                      {peerDoctorsList.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          Dr. {d.firstName || ''} {d.lastName || ''}
+                          {d.specialty ? ` · ${SPECIALTY_LABELS[d.specialty] || d.specialty}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tarih</label>
+                    <input
+                      type="date"
+                      value={peerMeetingForm.date}
+                      onChange={(e) => setPeerMeetingForm((f) => ({ ...f, date: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Saat</label>
+                    <input
+                      type="time"
+                      value={peerMeetingForm.time}
+                      onChange={(e) => setPeerMeetingForm((f) => ({ ...f, time: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Konu / not (isteğe bağlı)</label>
+                    <textarea
+                      value={peerMeetingForm.reason}
+                      onChange={(e) => setPeerMeetingForm((f) => ({ ...f, reason: e.target.value }))}
+                      rows={2}
+                      placeholder="Örn. vaka konsültasyonu, görüntü incelemesi…"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={createDoctorPeerInvite}
+                  disabled={peerInviteSubmitting}
+                  className="mt-4 px-6 py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 disabled:opacity-60 flex items-center gap-2"
+                >
+                  {peerInviteSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Video className="w-5 h-5" />}
+                  Davet gönder
+                </button>
+              </div>
+
+              {peerMeetingsLoading ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-violet-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Yükleniyor…</p>
+                </div>
+              ) : (
+                <div className="grid lg:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Mail className="w-5 h-5 text-amber-500" />
+                      Gelen davetler
+                      {incomingPeerInvites.length > 0 ? (
+                        <span className="text-sm font-normal text-gray-500">
+                          ({incomingPeerInvites.length})
+                        </span>
+                      ) : null}
+                    </h3>
+                    {incomingPeerInvites.length === 0 ? (
+                      <p className="text-sm text-gray-500 bg-white rounded-xl border border-gray-100 p-6">
+                        Bekleyen meslektaş daveti yok.
+                      </p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {incomingPeerInvites.map((inv) => (
+                          <li
+                            key={inv.id}
+                            className="bg-white rounded-xl p-4 shadow-sm border border-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                          >
+                            <div>
+                              <p className="font-medium text-gray-900">{inv.counterpartyLabel}</p>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {inv.date} · {inv.time}
+                              </p>
+                              {inv.reason ? <p className="text-sm text-gray-500 mt-2">{String(inv.reason)}</p> : null}
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => acceptAppointment(inv.id)}
+                                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700"
+                              >
+                                Kabul et
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => rejectAppointment(inv.id)}
+                                className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-200"
+                              >
+                                Reddet
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Gönderilen davetler</h3>
+                    {outgoingPeerInvites.length === 0 ? (
+                      <p className="text-sm text-gray-500 bg-white rounded-xl border border-gray-100 p-6">
+                        Bekleyen gönderilmiş davet yok.
+                      </p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {outgoingPeerInvites.map((inv) => (
+                          <li
+                            key={inv.id}
+                            className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                          >
+                            <div>
+                              <p className="font-medium text-gray-900">{inv.counterpartyLabel}</p>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {inv.date} · {inv.time}
+                              </p>
+                              <span className="inline-flex mt-2 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                                Onay bekliyor
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => withdrawPeerInvite(inv.id)}
+                              className="px-4 py-2 border border-red-200 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 shrink-0"
+                            >
+                              İptal et
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {currentSection === 'pending-appointments' && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex items-center justify-between">
@@ -3948,13 +4465,23 @@ export default function DashboardPage() {
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-3">
                             <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-500 rounded-lg flex items-center justify-center">
-                              <User className="w-6 h-6 text-white" />
+                              {appointment.appointmentKind === 'doctor_peer' ? (
+                                <Users className="w-6 h-6 text-white" />
+                              ) : (
+                                <User className="w-6 h-6 text-white" />
+                              )}
                             </div>
                             <div>
                               <h3 className="font-semibold text-gray-900">
-                                {appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
+                                {appointment.appointmentKind === 'doctor_peer'
+                                  ? appointment.peerDoctorLabel || 'Meslektaş görüşmesi'
+                                  : appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
                               </h3>
-                              <p className="text-sm text-gray-600">{appointment.userEmail}</p>
+                              <p className="text-sm text-gray-600">
+                                {appointment.appointmentKind === 'doctor_peer'
+                                  ? 'Doktorlar arası görüntülü görüşme'
+                                  : appointment.userEmail}
+                              </p>
                             </div>
                           </div>
                           <div className="grid md:grid-cols-2 gap-4 mt-4">
@@ -3979,7 +4506,11 @@ export default function DashboardPage() {
                           {appointment.date && appointment.time && isAppointmentTime({
                             date: appointment.date,
                             time: appointment.time
-                          }) ? (
+                          }) &&
+                          user &&
+                          (appointment.doctorId === user.uid ||
+                            (appointment.appointmentKind === 'doctor_peer' &&
+                              appointment.userId === user.uid)) ? (
                             <div className="flex flex-col sm:flex-row gap-2 mt-4">
                               <button
                                 onClick={() => completeAppointment(appointment.id)}
@@ -4026,13 +4557,23 @@ export default function DashboardPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-3 mb-3">
                             <div className="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
-                              <User className="w-6 h-6 text-white" />
+                              {appointment.appointmentKind === 'doctor_peer' ? (
+                                <Users className="w-6 h-6 text-white" />
+                              ) : (
+                                <User className="w-6 h-6 text-white" />
+                              )}
                             </div>
                             <div>
                               <h3 className="font-semibold text-gray-900">
-                                {appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
+                                {appointment.appointmentKind === 'doctor_peer'
+                                  ? appointment.peerDoctorLabel || 'Meslektaş görüşmesi'
+                                  : appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
                               </h3>
-                              <p className="text-sm text-gray-600">{appointment.userEmail}</p>
+                              <p className="text-sm text-gray-600">
+                                {appointment.appointmentKind === 'doctor_peer'
+                                  ? 'Doktorlar arası görüşme'
+                                  : appointment.userEmail}
+                              </p>
                             </div>
                           </div>
                           <div className="grid md:grid-cols-2 gap-4 mt-4">
@@ -4056,19 +4597,30 @@ export default function DashboardPage() {
                                     ? 'bg-orange-100 text-orange-700'
                                     : appointment.status === 'cancelled_by_doctor'
                                       ? 'bg-rose-100 text-rose-700'
-                                      : 'bg-red-100 text-red-700'
+                                      : appointment.status === 'cancelled_peer'
+                                        ? 'bg-slate-100 text-slate-700'
+                                        : 'bg-red-100 text-red-700'
                               }`}>
                                 {appointment.status === 'completed'
                                   ? 'Tamamlandı'
                                   : appointment.status === 'cancelled_by_patient'
-                                    ? 'Hasta İptal Etti'
+                                    ? appointment.appointmentKind === 'doctor_peer'
+                                      ? 'Düzenleyen iptal etti'
+                                      : 'Hasta İptal Etti'
                                     : appointment.status === 'cancelled_by_doctor'
-                                      ? 'Doktor İptal Etti'
-                                      : 'Reddedildi'}
+                                      ? appointment.appointmentKind === 'doctor_peer'
+                                        ? 'Meslektaş iptal etti'
+                                        : 'Doktor İptal Etti'
+                                      : appointment.status === 'cancelled_peer'
+                                        ? 'Davet iptal'
+                                        : 'Reddedildi'}
                               </span>
                             </div>
                           </div>
-                          {(appointment.status === 'cancelled_by_patient' || appointment.status === 'cancelled_by_doctor') && appointment.cancelReason ? (
+                          {(appointment.status === 'cancelled_by_patient' ||
+                            appointment.status === 'cancelled_by_doctor' ||
+                            appointment.status === 'cancelled_peer') &&
+                          appointment.cancelReason ? (
                             <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
                               <p className="text-xs font-semibold text-red-700 mb-1">İptal Nedeni</p>
                               <p className="text-sm text-red-900">{String(appointment.cancelReason)}</p>
