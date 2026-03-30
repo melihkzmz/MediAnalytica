@@ -10,7 +10,7 @@ import { showToast, validateImageFile, compressImage } from '@/lib/utils'
 import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
-  Settings, LogOut, User, Home, HelpCircle, Mail, Building, Camera, Save,
+  Settings, LogOut, User, Home, HelpCircle, Mail, Building, Camera, Save, Bell,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
   Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope,
   HeartPulse, ClipboardList, AlertTriangle
@@ -109,6 +109,7 @@ export default function DashboardPage() {
   const [loadingAppointments, setLoadingAppointments] = useState(false)
   const [activeAppointments, setActiveAppointments] = useState<any[]>([])
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
+  const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false)
   const [profileDisplayName, setProfileDisplayName] = useState('')
   const [profilePhotoURL, setProfilePhotoURL] = useState('')
   const [profileUploading, setProfileUploading] = useState(false)
@@ -119,6 +120,28 @@ export default function DashboardPage() {
     setProfileDisplayName(user.displayName || '')
     setProfilePhotoURL(user.photoURL || '')
   }, [user?.uid, user?.displayName, user?.photoURL])
+
+  // Persist read/unread state for reminder notifications per user
+  useEffect(() => {
+    if (!user?.uid) return
+    const key = `dismissedAppointmentNotifs_${user.uid}`
+    const raw = localStorage.getItem(key)
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setDismissedNotifications(new Set(parsed.filter((x) => typeof x === 'string')))
+      }
+    } catch {
+      // ignore corrupted localStorage
+    }
+  }, [user?.uid])
+
+  useEffect(() => {
+    if (!user?.uid) return
+    const key = `dismissedAppointmentNotifs_${user.uid}`
+    localStorage.setItem(key, JSON.stringify([...dismissedNotifications]))
+  }, [dismissedNotifications, user?.uid])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1846,6 +1869,119 @@ export default function DashboardPage() {
               >
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
+              <div className="relative">
+                <button
+                  onClick={() => setNotificationsMenuOpen(!notificationsMenuOpen)}
+                  className="relative p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                  aria-label="Bildirimler"
+                >
+                  <Bell className="w-5 h-5 text-gray-600" />
+                  {activeAppointments.some((apt) => !dismissedNotifications.has(apt.id)) && (
+                    <span
+                      className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white"
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+
+                {notificationsMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setNotificationsMenuOpen(false)}
+                    ></div>
+                    <div className="absolute right-0 mt-2 w-[360px] bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <span className="font-semibold text-gray-900">Bildirimler</span>
+                        <button
+                          className="text-xs text-blue-600 hover:underline"
+                          onClick={() => {
+                            setDismissedNotifications((prev) => {
+                              const next = new Set(prev)
+                              activeAppointments.forEach((apt) => next.add(apt.id))
+                              return next
+                            })
+                          }}
+                          disabled={!activeAppointments.length}
+                        >
+                          Tümü okundu
+                        </button>
+                      </div>
+
+                      {activeAppointments.length === 0 ? (
+                        <div className="px-4 py-6 text-sm text-gray-500">
+                          Aktif randevu bildirimi yok.
+                        </div>
+                      ) : (
+                        <div className="max-h-[60vh] overflow-auto">
+                          {[...activeAppointments]
+                            .sort((a, b) => {
+                              const da = String(a.date ?? '')
+                              const db = String(b.date ?? '')
+                              if (da !== db) return db.localeCompare(da)
+                              return String(b.time ?? '').localeCompare(String(a.time ?? ''))
+                            })
+                            .map((appointment) => {
+                              const isUnread = !dismissedNotifications.has(appointment.id)
+                              const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
+                              const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}&isDoctor=${isDoctor ? 'true' : 'false'}`
+                              return (
+                                <div
+                                  key={appointment.id}
+                                  className="px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    {isUnread && (
+                                      <span className="mt-2 w-2.5 h-2.5 rounded-full bg-blue-600" aria-hidden="true" />
+                                    )}
+
+                                    <div className="min-w-0 flex-1">
+                                      <Link
+                                        href={videoUrl}
+                                        className="block text-sm font-semibold text-blue-700 hover:underline"
+                                        onClick={() => {
+                                          if (!isUnread) return
+                                          setDismissedNotifications((prev) => {
+                                            const next = new Set(prev)
+                                            next.add(appointment.id)
+                                            return next
+                                          })
+                                          setNotificationsMenuOpen(false)
+                                        }}
+                                      >
+                                        Randevu saatiniz yaklaştı, erkenden katılmak için tıklayın.
+                                      </Link>
+                                      <div className="mt-1 text-xs text-gray-500">
+                                        {appointment.date} - {appointment.time}
+                                      </div>
+                                    </div>
+
+                                    {isUnread && (
+                                      <button
+                                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
+                                        onClick={() => {
+                                          setDismissedNotifications((prev) => {
+                                            const next = new Set(prev)
+                                            next.add(appointment.id)
+                                            return next
+                                          })
+                                          setNotificationsMenuOpen(false)
+                                        }}
+                                      >
+                                        Okundu
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
               <div className="relative">
                 <button 
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
