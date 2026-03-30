@@ -24,7 +24,7 @@ import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
-               'patient-appointment-history' |
+               'my-appointments-patient' | 'patient-appointment-history' |
                'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients'
 
 /** Maps analyze modality to appointment `doctorType` / doctors.specialty slug */
@@ -63,6 +63,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const hash = window.location.hash.replace('#', '')
     const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
+                          'my-appointments-patient',
                           'patient-appointment-history',
                           'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
     if (hash && validSections.includes(hash)) {
@@ -75,6 +76,7 @@ export default function DashboardPage() {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '')
       const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
+                            'my-appointments-patient',
                             'patient-appointment-history',
                             'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients']
       if (hash && validSections.includes(hash)) {
@@ -347,7 +349,7 @@ export default function DashboardPage() {
 
   // Patient: all own appointments (pending → completed)
   useEffect(() => {
-    if (!user || isDoctor || currentSection !== 'patient-appointment-history') return
+    if (!user || isDoctor || (currentSection !== 'patient-appointment-history' && currentSection !== 'my-appointments-patient')) return
     let cancelled = false
     const run = async () => {
       setLoadingAppointments(true)
@@ -1944,6 +1946,7 @@ export default function DashboardPage() {
                 { id: 'favorites', label: 'Favoriler' },
                 { id: 'stats', label: 'İstatistikler' },
                 { id: 'appointment', label: 'Randevu Talep' },
+                { id: 'my-appointments-patient', label: 'Randevularım' },
                 { id: 'patient-appointment-history', label: 'Randevu Geçmişi' },
                 { id: 'messages', label: 'Mesajlar' },
               ].map((item) => (
@@ -1960,6 +1963,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                  {item.id === 'my-appointments-patient' ? <Calendar className="w-4 h-4 shrink-0" /> : null}
                   {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
                   <span className="relative">
                     {item.label}
@@ -2178,6 +2182,7 @@ export default function DashboardPage() {
                   { id: 'favorites', label: 'Favoriler' },
                   { id: 'stats', label: 'İstatistikler' },
                   { id: 'appointment', label: 'Randevu Talep' },
+                  { id: 'my-appointments-patient', label: 'Randevularım' },
                   { id: 'patient-appointment-history', label: 'Randevu Geçmişi' },
                   { id: 'messages', label: 'Mesajlar' },
                 ].map((item) => (
@@ -2195,6 +2200,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                    {item.id === 'my-appointments-patient' ? <Calendar className="w-4 h-4 shrink-0" /> : null}
                     {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
                     <span className="relative">
                       {item.label}
@@ -3335,6 +3341,107 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {currentSection === 'my-appointments-patient' && !isDoctor && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex items-center gap-3">
+                <Calendar className="w-8 h-8 text-blue-600" />
+                <div>
+                  <h2 className="text-3xl font-bold text-gray-900">Randevularım</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Yaklaşan ve tamamlanan randevularınızı burada görebilirsiniz.
+                  </p>
+                </div>
+              </div>
+
+              {loadingAppointments ? (
+                <div className="bg-white rounded-xl p-12 shadow-sm text-center border border-gray-100">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Randevular yükleniyor...</p>
+                </div>
+              ) : (
+                (() => {
+                  const upcomingAppointments = patientAppointmentHistory.filter((apt: any) =>
+                    apt.status === 'pending' || apt.status === 'approved'
+                  )
+                  const completedAppointments = patientAppointmentHistory.filter((apt: any) =>
+                    apt.status === 'completed'
+                  )
+
+                  return (
+                    <div className="space-y-8">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xl font-bold text-gray-900">Yaklaşan Randevular</h3>
+                          <span className="text-sm text-gray-500">{upcomingAppointments.length} kayıt</span>
+                        </div>
+                        {upcomingAppointments.length === 0 ? (
+                          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-gray-600">
+                            Yaklaşan randevu bulunmuyor.
+                          </div>
+                        ) : (
+                          <div className="grid gap-4">
+                            {upcomingAppointments.map((apt: any) => (
+                              <div key={apt.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                        apt.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {apt.status === 'approved' ? 'Onaylandı' : 'Beklemede'}
+                                      </span>
+                                      <span className="text-xs text-gray-500">{apt.doctorType || 'Branş belirtilmedi'}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-700"><span className="font-medium">Tarih:</span> {apt.date || '—'} {apt.time || ''}</p>
+                                    <p className="text-sm text-gray-700"><span className="font-medium">Neden:</span> {apt.reason || 'Neden belirtilmemiş'}</p>
+                                    <p className="text-sm text-gray-700">
+                                      <span className="font-medium">Doktor:</span>{' '}
+                                      {apt.doctor ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : 'Henüz atanmadı'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xl font-bold text-gray-900">Tamamlanan Randevular</h3>
+                          <span className="text-sm text-gray-500">{completedAppointments.length} kayıt</span>
+                        </div>
+                        {completedAppointments.length === 0 ? (
+                          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-gray-600">
+                            Tamamlanan randevu bulunmuyor.
+                          </div>
+                        ) : (
+                          <div className="grid gap-4">
+                            {completedAppointments.map((apt: any) => (
+                              <div key={apt.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                                <div className="space-y-2">
+                                  <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    Tamamlandı
+                                  </span>
+                                  <p className="text-sm text-gray-700"><span className="font-medium">Tarih:</span> {apt.date || '—'} {apt.time || ''}</p>
+                                  <p className="text-sm text-gray-700"><span className="font-medium">Neden:</span> {apt.reason || 'Neden belirtilmemiş'}</p>
+                                  <p className="text-sm text-gray-700">
+                                    <span className="font-medium">Doktor:</span>{' '}
+                                    {apt.doctor ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : 'Doktor bilgisi yok'}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()
+              )}
             </div>
           )}
 
