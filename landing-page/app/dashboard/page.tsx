@@ -123,7 +123,7 @@ export default function DashboardPage() {
   const [incomingPeerInvites, setIncomingPeerInvites] = useState<any[]>([])
   const [outgoingPeerInvites, setOutgoingPeerInvites] = useState<any[]>([])
   const [peerDoctorsList, setPeerDoctorsList] = useState<Array<{ id: string; firstName?: string; lastName?: string; specialty?: string }>>([])
-  const [peerMeetingForm, setPeerMeetingForm] = useState({ peerDoctorUserId: '', date: '', time: '', reason: '' })
+  const [peerMeetingForm, setPeerMeetingForm] = useState({ peerDoctorUserIds: [] as string[], date: '', time: '', reason: '' })
   const [peerMeetingsLoading, setPeerMeetingsLoading] = useState(false)
   const [peerInviteSubmitting, setPeerInviteSubmitting] = useState(false)
   const [cancelReasonByAppointment, setCancelReasonByAppointment] = useState<Record<string, string>>({})
@@ -1417,9 +1417,9 @@ export default function DashboardPage() {
 
   const createDoctorPeerInvite = async () => {
     if (!user || !isDoctor) return
-    const { peerDoctorUserId, date, time, reason } = peerMeetingForm
-    if (!peerDoctorUserId || !date || !time) {
-      showToast('Doktor, tarih ve saat seçin.', 'warning')
+    const { peerDoctorUserIds, date, time, reason } = peerMeetingForm
+    if (peerDoctorUserIds.length === 0 || !date || !time) {
+      showToast('En az bir doktor, tarih ve saat seçin.', 'warning')
       return
     }
     setPeerInviteSubmitting(true)
@@ -1427,25 +1427,34 @@ export default function DashboardPage() {
       const { collection, addDoc, updateDoc, doc, serverTimestamp } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
       const { generateJitsiRoomName } = await import('@/lib/appointmentUtils')
-      const tempRoom = `medi-analytica-temp-${Date.now()}`
-      const ref = await addDoc(collection(db, 'appointments'), {
-        userId: user.uid,
-        userEmail: user.email || '',
-        peerDoctorUserId,
-        doctorType: 'peer',
-        appointmentKind: 'doctor_peer',
-        status: 'pending_peer',
-        date,
-        time,
-        reason: reason.trim() || 'Meslektaş görüşmesi',
-        jitsiRoom: tempRoom,
-        createdAt: serverTimestamp(),
-      })
-      await updateDoc(doc(db, 'appointments', ref.id), {
-        jitsiRoom: generateJitsiRoomName(ref.id),
-      })
-      showToast('Doktor daveti gönderildi. Karşı taraf onayladığında görüşme kesinleşir.', 'success')
-      setPeerMeetingForm({ peerDoctorUserId: '', date: '', time: '', reason: '' })
+      await Promise.all(
+        peerDoctorUserIds.map(async (peerDoctorUserId, index) => {
+          const tempRoom = `medi-analytica-temp-${Date.now()}-${index}`
+          const ref = await addDoc(collection(db, 'appointments'), {
+            userId: user.uid,
+            userEmail: user.email || '',
+            peerDoctorUserId,
+            doctorType: 'peer',
+            appointmentKind: 'doctor_peer',
+            status: 'pending_peer',
+            date,
+            time,
+            reason: reason.trim() || 'Meslektaş görüşmesi',
+            jitsiRoom: tempRoom,
+            createdAt: serverTimestamp(),
+          })
+          await updateDoc(doc(db, 'appointments', ref.id), {
+            jitsiRoom: generateJitsiRoomName(ref.id),
+          })
+        })
+      )
+      showToast(
+        peerDoctorUserIds.length > 1
+          ? `${peerDoctorUserIds.length} doktora davet gönderildi.`
+          : 'Doktor daveti gönderildi. Karşı taraf onayladığında görüşme kesinleşir.',
+        'success'
+      )
+      setPeerMeetingForm({ peerDoctorUserIds: [], date: '', time: '', reason: '' })
       loadDoctorPeerMeetings()
     } catch (e: any) {
       console.error(e)
@@ -4191,15 +4200,16 @@ export default function DashboardPage() {
                 </h3>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Meslektaş</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Meslektaş(lar)</label>
                     <select
-                      value={peerMeetingForm.peerDoctorUserId}
-                      onChange={(e) =>
-                        setPeerMeetingForm((f) => ({ ...f, peerDoctorUserId: e.target.value }))
-                      }
+                      multiple
+                      value={peerMeetingForm.peerDoctorUserIds}
+                      onChange={(e) => {
+                        const selectedDoctorIds = Array.from(e.target.selectedOptions, (option) => option.value)
+                        setPeerMeetingForm((f) => ({ ...f, peerDoctorUserIds: selectedDoctorIds }))
+                      }}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
                     >
-                      <option value="">Doktor seçin…</option>
                       {peerDoctorsList.map((d) => (
                         <option key={d.id} value={d.id}>
                           Dr. {d.firstName || ''} {d.lastName || ''}
@@ -4207,6 +4217,7 @@ export default function DashboardPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1 text-xs text-gray-500">Birden fazla seçim için Ctrl (Mac'te Cmd) tuşunu basılı tutun.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tarih</label>
