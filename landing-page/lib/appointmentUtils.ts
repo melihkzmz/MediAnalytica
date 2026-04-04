@@ -40,6 +40,23 @@ export function isAppointmentStartMoment(appointment: {
 }
 
 /**
+ * Dashboard Randevularım: show Katıl / İptal on the appointment card from 15 minutes before
+ * through a short grace period after the scheduled start (aligned with join-window tail).
+ */
+export function isAppointmentJoinCancelActionsWindow(appointment: {
+  date: string
+  time: string
+}): boolean {
+  const now = new Date()
+  const appointmentDateTime = new Date(`${appointment.date}T${appointment.time}:00`)
+  const bufferBefore = 15 * 60 * 1000 // 15 minutes
+  const bufferAfter = 5 * 60 * 1000 // 5 minutes after start
+  const windowStart = appointmentDateTime.getTime() - bufferBefore
+  const windowEnd = appointmentDateTime.getTime() + bufferAfter
+  return now.getTime() >= windowStart && now.getTime() <= windowEnd
+}
+
+/**
  * Check if appointment time has passed (for history)
  */
 export function isAppointmentPast(appointment: {

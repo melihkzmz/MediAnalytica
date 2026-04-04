@@ -18,7 +18,7 @@ import {
 import Link from 'next/link'
 import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
 import MessagesSection from '@/components/MessagesSection'
-import { isAppointmentTime, isAppointmentStartMoment } from '@/lib/appointmentUtils'
+import { isAppointmentTime, isAppointmentJoinCancelActionsWindow } from '@/lib/appointmentUtils'
 import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 import { clearEmailVerificationDeferred, shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
@@ -3948,14 +3948,15 @@ export default function DashboardPage() {
                                     apt.userId === user.uid &&
                                     apt.date &&
                                     apt.time &&
-                                    isAppointmentStartMoment({
+                                    isAppointmentJoinCancelActionsWindow({
                                       date: String(apt.date),
                                       time: String(apt.time),
                                     }) ? (
                                       <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/90 p-4 space-y-3">
-                                        <p className="text-sm font-semibold text-gray-900">Randevu saati geldi</p>
+                                        <p className="text-sm font-semibold text-gray-900">Randevu yaklaşıyor</p>
                                         <p className="text-xs text-gray-600">
-                                          {apt.date} · {apt.time}
+                                          Görüşmeye katılabilir veya randevuyu iptal edebilirsiniz · {apt.date} ·{' '}
+                                          {apt.time}
                                         </p>
                                         {showCancelInputForAppointment[apt.id] ? (
                                           <div className="space-y-2">
@@ -4542,9 +4543,9 @@ export default function DashboardPage() {
                                 (appointment.appointmentKind === 'doctor_peer' &&
                                   appointment.userId === user.uid))
                             const hasDt = Boolean(appointment.date && appointment.time)
-                            const inStartMoment =
+                            const inJoinCancelWindow =
                               hasDt &&
-                              isAppointmentStartMoment({
+                              isAppointmentJoinCancelActionsWindow({
                                 date: appointment.date,
                                 time: appointment.time,
                               })
@@ -4557,11 +4558,12 @@ export default function DashboardPage() {
 
                             return (
                               <div className="mt-4 space-y-4">
-                                {eligible && inStartMoment ? (
+                                {eligible && inJoinCancelWindow ? (
                                   <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-4 space-y-3">
-                                    <p className="text-sm font-semibold text-gray-900">Randevu saati geldi</p>
+                                    <p className="text-sm font-semibold text-gray-900">Randevu yaklaşıyor</p>
                                     <p className="text-xs text-gray-600">
-                                      {appointment.date} · {appointment.time}
+                                      Görüşmeye katılabilir veya randevuyu iptal edebilirsiniz · {appointment.date}{' '}
+                                      · {appointment.time}
                                     </p>
                                     {showCancelInputForAppointment[appointment.id] ? (
                                       <div className="space-y-2">
@@ -4645,7 +4647,7 @@ export default function DashboardPage() {
                                   ) : (
                                     <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex">
                                       Randevu saati gelmeden tamamlandı olarak işaretlenemez. Katıl / İptal için
-                                      randevu saatinde bu sekmeye dönün.
+                                      randevudan en fazla 15 dakika önce bu sekmeye dönün.
                                     </p>
                                   )
                                 ) : null}
