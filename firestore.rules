@@ -280,7 +280,27 @@ service cloud.firestore {
          request.resource.data.doctorType == resource.data.doctorType &&
          request.resource.data.doctorId == resource.data.doctorId &&
          (!('peerDoctorUserId' in resource.data) || request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId) &&
-         (!('appointmentKind' in resource.data) || request.resource.data.appointmentKind == resource.data.appointmentKind))
+         (!('appointmentKind' in resource.data) || request.resource.data.appointmentKind == resource.data.appointmentKind)) ||
+        // Case 5b: Doctor–doctor peer organizer cancels approved meeting (userId is organizer; doctorId is invitee)
+        (isDoctor() &&
+         resource.data.status == 'approved' &&
+         resource.data.appointmentKind == 'doctor_peer' &&
+         resource.data.userId == request.auth.uid &&
+         request.resource.data.status == 'cancelled_by_doctor' &&
+         request.resource.data.cancelledByRole == 'doctor' &&
+         request.resource.data.cancelledByUid == request.auth.uid &&
+         request.resource.data.cancelReason is string &&
+         request.resource.data.cancelReason.size() > 0 &&
+         request.resource.data.cancelReason.size() <= 1000 &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.doctorId == resource.data.doctorId &&
+         (!('peerDoctorUserId' in resource.data) || request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId) &&
+         request.resource.data.appointmentKind == resource.data.appointmentKind)
       );
     }
     
