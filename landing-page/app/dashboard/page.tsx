@@ -21,6 +21,7 @@ import MessagesSection from '@/components/MessagesSection'
 import { isAppointmentTime, isAppointmentStartMoment } from '@/lib/appointmentUtils'
 import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
+import { clearEmailVerificationDeferred, shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
@@ -383,7 +384,7 @@ export default function DashboardPage() {
         router.push('/login')
         return
       }
-      if (!user.emailVerified) {
+      if (shouldRequireEmailVerification(user)) {
         setLoading(false)
         router.replace('/verify-email')
         return
@@ -2047,6 +2048,8 @@ export default function DashboardPage() {
 
   const handleLogout = async () => {
     try {
+      const uid = auth.currentUser?.uid
+      if (uid) clearEmailVerificationDeferred(uid)
       await signOut(auth)
       localStorage.removeItem('firebase_id_token')
       router.push('/login')

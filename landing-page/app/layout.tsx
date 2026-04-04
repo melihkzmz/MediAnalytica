@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { EmailVerificationReminder } from '@/components/EmailVerificationReminder'
 
 export const metadata: Metadata = {
   title: 'MediAnalytica - Yapay Zeka Destekli Tıbbi Görüntü Analizi',
@@ -14,6 +15,7 @@ export default function RootLayout({
   return (
     <html lang="tr" suppressHydrationWarning>
       <body suppressHydrationWarning>
+        <EmailVerificationReminder />
         {children}
       </body>
     </html>

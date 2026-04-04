@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { collection, addDoc, serverTimestamp, doc, getDoc, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { showToast } from '@/lib/utils'
+import { shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import {
   Calendar,
   Clock,
@@ -67,7 +68,7 @@ function AppointmentForm() {
         router.push('/login')
         return
       }
-      if (!u.emailVerified) {
+      if (shouldRequireEmailVerification(u)) {
         setLoading(false)
         router.replace('/verify-email')
         return

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
+import { clearEmailVerificationDeferred, shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment'
@@ -43,7 +44,7 @@ export default function AnalyzePage() {
         router.push('/login')
         return
       }
-      if (!user.emailVerified) {
+      if (shouldRequireEmailVerification(user)) {
         setLoading(false)
         router.replace('/verify-email')
         return
@@ -325,6 +326,8 @@ export default function AnalyzePage() {
 
   const handleLogout = async () => {
     try {
+      const uid = auth.currentUser?.uid
+      if (uid) clearEmailVerificationDeferred(uid)
       await signOut(auth)
       localStorage.removeItem('firebase_id_token')
       router.push('/login')

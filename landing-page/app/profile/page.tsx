@@ -6,6 +6,7 @@ import { onAuthStateChanged, updateProfile } from 'firebase/auth'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { auth, storage } from '@/lib/firebase'
 import { showToast } from '@/lib/utils'
+import { shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import { User, Mail, Calendar, Camera, Save, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -23,7 +24,7 @@ export default function ProfilePage() {
         router.push('/login')
         return
       }
-      if (!user.emailVerified) {
+      if (shouldRequireEmailVerification(user)) {
         setLoading(false)
         router.replace('/verify-email')
         return

@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth'
-import { sendVerificationEmail } from '@/lib/emailVerification'
 import { auth, db, storage } from '@/lib/firebase'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { showToast } from '@/lib/utils'
+import { shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import { Brain, Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, Zap, Users, User, Stethoscope, Phone, Briefcase, Award, FileText, Upload, X } from 'lucide-react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
@@ -35,13 +35,15 @@ export default function LoginPage() {
   const [bio, setBio] = useState('')
 
   useEffect(() => {
-    // Check if user is already logged in
+    // Keep email verification / defer rules identical for patient and doctor: any signed-in user who
+    // must verify is sent to /verify-email even if they are on the "Kayıt" tab.
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user && isLogin) {
-        if (!user.emailVerified) {
-          router.replace('/verify-email')
-          return
-        }
+      if (!user) return
+      if (shouldRequireEmailVerification(user)) {
+        router.replace('/verify-email')
+        return
+      }
+      if (isLogin) {
         router.push('/dashboard')
       }
     })
@@ -61,8 +63,8 @@ export default function LoginPage() {
         const token = await user.getIdToken()
         localStorage.setItem('firebase_id_token', token)
 
-        if (!user.emailVerified) {
-          showToast('Lütfen e-posta adresinizi doğrulayın.', 'warning')
+        if (shouldRequireEmailVerification(user)) {
+          showToast('Lütfen e-posta adresinizi doğrulayın veya doğrulama sayfasında şimdilik atlayın.', 'warning')
           router.replace('/verify-email')
           return
         }
@@ -101,16 +103,7 @@ export default function LoginPage() {
               
               await setDoc(doc(db, 'users', user.uid), userDoc)
 
-              try {
-                await sendVerificationEmail(user)
-                showToast('Kayıt oluşturuldu. E-postanızdaki doğrulama bağlantısına tıklayın.', 'success')
-              } catch (verifyErr) {
-                console.error(verifyErr)
-                showToast(
-                  'Hesap oluşturuldu; doğrulama e-postası gönderilemedi. Doğrulama sayfasından tekrar deneyin.',
-                  'warning'
-                )
-              }
+              showToast('Kayıt oluşturuldu. Doğrulama e-postasını bir sonraki adımda gönderebilirsiniz.', 'success')
               const token = await user.getIdToken()
               localStorage.setItem('firebase_id_token', token)
               router.replace('/verify-email')
@@ -234,16 +227,7 @@ export default function LoginPage() {
 
       await setDoc(doc(db, 'doctors', user.uid), doctorData)
 
-      try {
-        await sendVerificationEmail(user)
-        showToast('Kayıt oluşturuldu. E-postanızdaki doğrulama bağlantısına tıklayın.', 'success')
-      } catch (verifyErr) {
-        console.error(verifyErr)
-        showToast(
-          'Hesap oluşturuldu; doğrulama e-postası gönderilemedi. Doğrulama sayfasından tekrar deneyin.',
-          'warning'
-        )
-      }
+      showToast('Kayıt oluşturuldu. Doğrulama e-postasını bir sonraki adımda gönderebilirsiniz.', 'success')
       const token = await user.getIdToken()
       localStorage.setItem('firebase_id_token', token)
       router.replace('/verify-email')

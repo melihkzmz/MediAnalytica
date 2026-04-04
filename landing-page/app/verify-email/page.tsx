@@ -5,17 +5,19 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, signOut, reload } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { sendVerificationEmail } from '@/lib/emailVerification'
+import { clearEmailVerificationDeferred, setEmailVerificationDeferred } from '@/lib/emailVerificationPrefs'
 import { showToast } from '@/lib/utils'
 import Link from 'next/link'
-import { Mail, RefreshCw, LogOut, CheckCircle2, Loader2 } from 'lucide-react'
+import { Mail, LogOut, CheckCircle2, Loader2 } from 'lucide-react'
 
 export default function VerifyEmailPage() {
   const router = useRouter()
   const [email, setEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [resendLoading, setResendLoading] = useState(false)
+  const [sendLoading, setSendLoading] = useState(false)
   const [refreshLoading, setRefreshLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
+  const [verificationEmailSentOnce, setVerificationEmailSentOnce] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -24,6 +26,7 @@ export default function VerifyEmailPage() {
         return
       }
       if (user.emailVerified) {
+        clearEmailVerificationDeferred(user.uid)
         router.replace('/dashboard')
         return
       }
@@ -39,13 +42,18 @@ export default function VerifyEmailPage() {
     return () => clearInterval(t)
   }, [cooldown])
 
-  const handleResend = async () => {
+  const handleSendVerificationEmail = async () => {
     const user = auth.currentUser
     if (!user || cooldown > 0) return
-    setResendLoading(true)
+    setSendLoading(true)
     try {
       await sendVerificationEmail(user)
-      showToast('Doğrulama e-postası tekrar gönderildi. Gelen kutunuzu kontrol edin.', 'success')
+      if (!verificationEmailSentOnce) {
+        showToast('Doğrulama e-postası gönderildi. Gelen kutunuzu kontrol edin.', 'success')
+        setVerificationEmailSentOnce(true)
+      } else {
+        showToast('Doğrulama e-postası tekrar gönderildi. Gelen kutunuzu kontrol edin.', 'success')
+      }
       setCooldown(60)
     } catch (e: any) {
       console.error(e)
@@ -55,7 +63,7 @@ export default function VerifyEmailPage() {
         showToast('E-posta gönderilemedi. Lütfen tekrar deneyin.', 'error')
       }
     } finally {
-      setResendLoading(false)
+      setSendLoading(false)
     }
   }
 
@@ -66,6 +74,7 @@ export default function VerifyEmailPage() {
     try {
       await reload(user)
       if (auth.currentUser?.emailVerified) {
+        clearEmailVerificationDeferred(auth.currentUser.uid)
         showToast('E-posta doğrulandı!', 'success')
         router.replace('/dashboard')
       } else {
@@ -79,8 +88,18 @@ export default function VerifyEmailPage() {
     }
   }
 
+  const handleVerifyLater = () => {
+    const user = auth.currentUser
+    if (!user) return
+    setEmailVerificationDeferred(user.uid)
+    showToast('Panele yönlendiriliyorsunuz; doğrulamayı istediğiniz zaman tamamlayabilirsiniz.', 'info')
+    router.replace('/dashboard')
+  }
+
   const handleLogout = async () => {
     try {
+      const uid = auth.currentUser?.uid
+      if (uid) clearEmailVerificationDeferred(uid)
       await signOut(auth)
       localStorage.removeItem('firebase_id_token')
       router.replace('/login')
@@ -106,23 +125,39 @@ export default function VerifyEmailPage() {
             <Mail className="w-7 h-7 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">E-postanızı doğrulayın</h1>
+          <p className="text-xs text-gray-500">Hasta ve doktor hesapları için aynı adımlar geçerlidir.</p>
           <p className="text-sm text-gray-600 leading-relaxed">
-            Hesabınızı kullanmadan önce e-posta adresinizi doğrulamanız gerekir.{' '}
-            <span className="font-medium text-gray-800">{email}</span> adresine bir bağlantı gönderdik.
+            E-posta adresinizi doğrulamak için aşağıdan doğrulama mesajı gönderin (isteğe bağlı; şimdilik atlayıp
+            panele de geçebilirsiniz). Bağlantı şu adrese gidecek:{' '}
+            <span className="font-medium text-gray-800">{email}</span>
           </p>
         </div>
 
         <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs text-amber-900">
-          Gelen kutusu veya spam klasörünü kontrol edin. Bağlantıya tıkladıktan sonra aşağıdaki &quot;Doğruladım,
-          yenile&quot; düğmesine basın.
+          E-postayı gönderdikten sonra gelen kutusu veya spam klasörünü kontrol edin. Bağlantıya tıkladıktan sonra
+          &quot;Doğruladım, yenile&quot; düğmesine basın.
         </div>
 
         <div className="space-y-3">
           <button
             type="button"
+            onClick={handleSendVerificationEmail}
+            disabled={sendLoading || cooldown > 0}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+          >
+            {sendLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+            {cooldown > 0
+              ? `Tekrar gönderebilmek için bekleyin (${cooldown}s)`
+              : verificationEmailSentOnce
+                ? 'E-postayı tekrar gönder'
+                : 'Doğrulama e-postası gönder'}
+          </button>
+
+          <button
+            type="button"
             onClick={handleRecheck}
             disabled={refreshLoading}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-gray-200 text-gray-800 font-medium hover:bg-gray-50 disabled:opacity-50"
           >
             {refreshLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
             Doğruladım, yenile
@@ -130,12 +165,10 @@ export default function VerifyEmailPage() {
 
           <button
             type="button"
-            onClick={handleResend}
-            disabled={resendLoading || cooldown > 0}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-gray-200 text-gray-800 font-medium hover:bg-gray-50 disabled:opacity-50"
+            onClick={handleVerifyLater}
+            className="w-full py-3 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-medium border border-transparent hover:border-gray-200"
           >
-            {resendLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-            {cooldown > 0 ? `Tekrar gönder (${cooldown}s)` : 'E-postayı tekrar gönder'}
+            Şimdilik atla — panele git
           </button>
 
           <button

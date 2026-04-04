@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Brain, Menu, X, User, LogOut } from 'lucide-react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
+import { clearEmailVerificationDeferred } from '@/lib/emailVerificationPrefs'
 import { useRouter } from 'next/navigation'
 
 export default function Navbar() {
@@ -24,6 +25,8 @@ export default function Navbar() {
 
   const handleSignOut = async () => {
     try {
+      const uid = auth.currentUser?.uid
+      if (uid) clearEmailVerificationDeferred(uid)
       await signOut(auth)
       router.push('/')
     } catch (error) {

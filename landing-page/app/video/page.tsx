@@ -7,6 +7,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { Loader2, ArrowLeft, Video } from 'lucide-react'
 import Link from 'next/link'
+import { shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 
 function VideoConferenceContent() {
   const router = useRouter()
@@ -28,7 +29,7 @@ function VideoConferenceContent() {
         router.push('/login')
         return
       }
-      if (!currentUser.emailVerified) {
+      if (shouldRequireEmailVerification(currentUser)) {
         setLoading(false)
         router.replace('/verify-email')
         return
