@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { Video, X } from 'lucide-react'
 import Link from 'next/link'
+import { buildVideoMeetingHref } from '@/lib/videoMeetingUrl'
 
 interface AppointmentNotificationCardProps {
   appointment: {
@@ -18,12 +19,15 @@ interface AppointmentNotificationCardProps {
     userEmail?: string
   }
   isDoctor?: boolean
+  /** After leaving the call, user is sent here (default /dashboard). */
+  returnTo?: string
   onDismiss?: () => void
 }
 
 export default function AppointmentNotificationCard({
   appointment,
   isDoctor = false,
+  returnTo = '/dashboard',
   onDismiss
 }: AppointmentNotificationCardProps) {
   useEffect(() => {
@@ -38,7 +42,12 @@ export default function AppointmentNotificationCard({
   // Generate room name if not exists (for backward compatibility)
   // Note: jitsiRoom field name kept for backward compatibility, but now used for Daily.co
   const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
-  const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}&isDoctor=${isDoctor ? 'true' : 'false'}`
+  const videoUrl = buildVideoMeetingHref({
+    roomName,
+    appointmentId: appointment.id,
+    isDoctor: !!isDoctor,
+    returnTo,
+  })
 
   return (
     <div className="flex w-[360px] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-xl bg-white shadow-lg border border-gray-200 p-4">

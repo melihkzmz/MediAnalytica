@@ -230,6 +230,20 @@ service cloud.firestore {
          request.resource.data.doctorId == resource.data.doctorId &&
          (!('peerDoctorUserId' in resource.data) || request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId) &&
          (!('appointmentKind' in resource.data) || request.resource.data.appointmentKind == resource.data.appointmentKind)) ||
+        // Case 3b: Patient (booking owner) completes approved non–peer appointment (e.g. after video call)
+        (resource.data.status == 'approved' &&
+         request.resource.data.status == 'completed' &&
+         resource.data.userId == request.auth.uid &&
+         (!('appointmentKind' in resource.data) || resource.data.appointmentKind != 'doctor_peer') &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.userEmail == resource.data.userEmail &&
+         request.resource.data.date == resource.data.date &&
+         request.resource.data.time == resource.data.time &&
+         request.resource.data.reason == resource.data.reason &&
+         request.resource.data.doctorType == resource.data.doctorType &&
+         request.resource.data.doctorId == resource.data.doctorId &&
+         (!('peerDoctorUserId' in resource.data) || request.resource.data.peerDoctorUserId == resource.data.peerDoctorUserId) &&
+         (!('appointmentKind' in resource.data) || request.resource.data.appointmentKind == resource.data.appointmentKind)) ||
         // Case 4: Patient cancels own approved appointment with a reason
         (resource.data.status == 'approved' &&
          resource.data.userId == request.auth.uid &&

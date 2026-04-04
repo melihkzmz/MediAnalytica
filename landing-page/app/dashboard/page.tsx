@@ -22,6 +22,7 @@ import { isAppointmentTime, isAppointmentStartMoment } from '@/lib/appointmentUt
 import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 import { clearEmailVerificationDeferred, shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
+import { buildVideoMeetingHref } from '@/lib/videoMeetingUrl'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
 type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
@@ -111,10 +112,10 @@ export default function DashboardPage() {
   const [myAppointments, setMyAppointments] = useState<any[]>([])
   const [appointmentHistory, setAppointmentHistory] = useState<any[]>([])
   const [patientAppointmentHistory, setPatientAppointmentHistory] = useState<any[]>([])
+  const [patientAppointmentsRefreshKey, setPatientAppointmentsRefreshKey] = useState(0)
   const [myPatients, setMyPatients] = useState<any[]>([])
   const [loadingAppointments, setLoadingAppointments] = useState(false)
   const [activeAppointments, setActiveAppointments] = useState<any[]>([])
-  const [startMomentAppointments, setStartMomentAppointments] = useState<any[]>([])
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
   const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false)
   const [hasMessageIndicator, setHasMessageIndicator] = useState(false)
@@ -559,7 +560,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [user, isDoctor, currentSection])
+  }, [user, isDoctor, currentSection, patientAppointmentsRefreshKey])
 
   // Check for active appointments (appointments that are happening now)
   useEffect(() => {
@@ -613,7 +614,6 @@ export default function DashboardPage() {
         }
 
         const active: any[] = []
-        const startNow: any[] = []
 
         for (const appointmentDoc of mergedDocs) {
           const appointmentData = appointmentDoc.data()
@@ -655,16 +655,9 @@ export default function DashboardPage() {
             active.push(appointment)
           }
 
-          if (appointment.date && appointment.time && isAppointmentStartMoment({
-            date: appointment.date,
-            time: appointment.time
-          })) {
-            startNow.push(appointment)
-          }
         }
 
         setActiveAppointments(active)
-        setStartMomentAppointments(startNow)
       } catch (error) {
         console.error('Error checking active appointments:', error)
       }
@@ -1571,7 +1564,12 @@ export default function DashboardPage() {
 
   const joinAppointmentFromPopup = (appointment: any) => {
     const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
-    const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}&isDoctor=${isDoctor ? 'true' : 'false'}`
+    const videoUrl = buildVideoMeetingHref({
+      roomName,
+      appointmentId: appointment.id,
+      isDoctor,
+      returnTo: `/dashboard#${currentSection}`,
+    })
     router.push(videoUrl)
   }
 
@@ -1599,16 +1597,11 @@ export default function DashboardPage() {
       showToast('Randevu iptal edildi.', 'info')
       setShowCancelInputForAppointment((prev) => ({ ...prev, [appointment.id]: false }))
       setCancelReasonByAppointment((prev) => ({ ...prev, [appointment.id]: '' }))
-      setStartMomentAppointments((prev) => prev.filter((x) => x.id !== appointment.id))
       if (isDoctor) {
         loadMyAppointments()
         loadAppointmentHistory()
       } else {
-        // keep patient lists fresh in appointment sections
-        if (currentSection === 'patient-appointment-history' || currentSection === 'my-appointments-patient') {
-          // data is loaded by section effect; force immediate refresh by moving hash-triggered section state
-          setCurrentSection((s) => s)
-        }
+        setPatientAppointmentsRefreshKey((k) => k + 1)
       }
     } catch (error) {
       console.error('Error cancelling appointment:', error)
@@ -2556,7 +2549,12 @@ export default function DashboardPage() {
                             .map((appointment) => {
                               const isUnread = !dismissedNotifications.has(appointment.id)
                               const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
-                              const videoUrl = `/video?room=${encodeURIComponent(roomName)}&appointmentId=${appointment.id}&isDoctor=${isDoctor ? 'true' : 'false'}`
+                              const videoUrl = buildVideoMeetingHref({
+                                roomName,
+                                appointmentId: appointment.id,
+                                isDoctor,
+                                returnTo: `/dashboard#${currentSection}`,
+                              })
                               return (
                                 <div
                                   key={appointment.id}
@@ -2746,67 +2744,6 @@ export default function DashboardPage() {
       </nav>
 
       <div className="pt-16">
-        <div className="fixed top-20 right-6 z-50 flex flex-col gap-3 items-end">
-          {/* Exact-time persistent join/cancel cards */}
-          {startMomentAppointments.map((appointment) => {
-            const showReasonInput = Boolean(showCancelInputForAppointment[appointment.id])
-            const cancelReason = cancelReasonByAppointment[appointment.id] || ''
-            const isCancelling = Boolean(cancelSubmittingForAppointment[appointment.id])
-            return (
-              <div key={appointment.id} className="w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-blue-200 bg-white shadow-lg p-4">
-                <p className="text-sm font-semibold text-gray-900 mb-1">Randevu saati geldi</p>
-                <p className="text-xs text-gray-500 mb-3">{appointment.date} - {appointment.time}</p>
-
-                {showReasonInput ? (
-                  <div className="space-y-2">
-                    <textarea
-                      value={cancelReason}
-                      onChange={(e) =>
-                        setCancelReasonByAppointment((prev) => ({ ...prev, [appointment.id]: e.target.value }))
-                      }
-                      rows={3}
-                      placeholder="İptal nedeninizi yazın..."
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => cancelApprovedAppointmentWithReason(appointment)}
-                        disabled={isCancelling}
-                        className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60"
-                      >
-                        {isCancelling ? 'Gönderiliyor...' : 'İptali Onayla'}
-                      </button>
-                      <button
-                        onClick={() => setShowCancelInputForAppointment((prev) => ({ ...prev, [appointment.id]: false }))}
-                        className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
-                      >
-                        Vazgeç
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => joinAppointmentFromPopup(appointment)}
-                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-                    >
-                      Katıl
-                    </button>
-                    <button
-                      onClick={() =>
-                        setShowCancelInputForAppointment((prev) => ({ ...prev, [appointment.id]: true }))
-                      }
-                      className="flex-1 px-3 py-2 border border-red-300 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50"
-                    >
-                      İptal et
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
         <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end">
           {/* Pre-appointment reminder toasts */}
           {activeAppointments
@@ -2816,6 +2753,7 @@ export default function DashboardPage() {
                 key={appointment.id}
                 appointment={appointment}
                 isDoctor={isDoctor}
+                returnTo={`/dashboard#${currentSection}`}
                 onDismiss={() => {
                   setDismissedNotifications(prev => new Set(prev).add(appointment.id))
                 }}
@@ -4005,6 +3943,86 @@ export default function DashboardPage() {
                                       <span className="font-medium">Doktor:</span>{' '}
                                       {apt.doctor ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : 'Henüz atanmadı'}
                                     </p>
+                                    {apt.status === 'approved' &&
+                                    user &&
+                                    apt.userId === user.uid &&
+                                    apt.date &&
+                                    apt.time &&
+                                    isAppointmentStartMoment({
+                                      date: String(apt.date),
+                                      time: String(apt.time),
+                                    }) ? (
+                                      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/90 p-4 space-y-3">
+                                        <p className="text-sm font-semibold text-gray-900">Randevu saati geldi</p>
+                                        <p className="text-xs text-gray-600">
+                                          {apt.date} · {apt.time}
+                                        </p>
+                                        {showCancelInputForAppointment[apt.id] ? (
+                                          <div className="space-y-2">
+                                            <label className="text-xs font-medium text-gray-700">İptal notu</label>
+                                            <textarea
+                                              value={cancelReasonByAppointment[apt.id] || ''}
+                                              onChange={(e) =>
+                                                setCancelReasonByAppointment((prev) => ({
+                                                  ...prev,
+                                                  [apt.id]: e.target.value,
+                                                }))
+                                              }
+                                              rows={3}
+                                              placeholder="İptal nedeninizi yazın..."
+                                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                            />
+                                            <div className="flex flex-col sm:flex-row gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => cancelApprovedAppointmentWithReason(apt)}
+                                                disabled={Boolean(cancelSubmittingForAppointment[apt.id])}
+                                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+                                              >
+                                                {cancelSubmittingForAppointment[apt.id]
+                                                  ? 'Gönderiliyor...'
+                                                  : 'İptali onayla'}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setShowCancelInputForAppointment((prev) => ({
+                                                    ...prev,
+                                                    [apt.id]: false,
+                                                  }))
+                                                }
+                                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                                              >
+                                                Vazgeç
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="flex flex-col sm:flex-row gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => joinAppointmentFromPopup(apt)}
+                                              className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
+                                            >
+                                              <Video className="w-4 h-4 shrink-0" />
+                                              Katıl
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setShowCancelInputForAppointment((prev) => ({
+                                                  ...prev,
+                                                  [apt.id]: true,
+                                                }))
+                                              }
+                                              className="flex-1 px-4 py-2.5 border-2 border-red-300 text-red-700 rounded-xl text-sm font-semibold hover:bg-red-50"
+                                            >
+                                              İptal et
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </div>
                               </div>
@@ -4517,28 +4535,123 @@ export default function DashboardPage() {
                               </span>
                             </div>
                           </div>
-                          {appointment.date && appointment.time && isAppointmentTime({
-                            date: appointment.date,
-                            time: appointment.time
-                          }) &&
-                          user &&
-                          (appointment.doctorId === user.uid ||
-                            (appointment.appointmentKind === 'doctor_peer' &&
-                              appointment.userId === user.uid)) ? (
-                            <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                              <button
-                                onClick={() => completeAppointment(appointment.id)}
-                                className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
-                              >
-                                <CheckCircle className="w-5 h-5" />
-                                <span>Tamamlandı Olarak İşaretle</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex">
-                              Randevu saati gelmeden tamamlandı olarak işaretlenemez.
-                            </p>
-                          )}
+                          {(() => {
+                            const eligible =
+                              !!user &&
+                              (appointment.doctorId === user.uid ||
+                                (appointment.appointmentKind === 'doctor_peer' &&
+                                  appointment.userId === user.uid))
+                            const hasDt = Boolean(appointment.date && appointment.time)
+                            const inStartMoment =
+                              hasDt &&
+                              isAppointmentStartMoment({
+                                date: appointment.date,
+                                time: appointment.time,
+                              })
+                            const inTimeWindow =
+                              hasDt &&
+                              isAppointmentTime({
+                                date: appointment.date,
+                                time: appointment.time,
+                              })
+
+                            return (
+                              <div className="mt-4 space-y-4">
+                                {eligible && inStartMoment ? (
+                                  <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-4 space-y-3">
+                                    <p className="text-sm font-semibold text-gray-900">Randevu saati geldi</p>
+                                    <p className="text-xs text-gray-600">
+                                      {appointment.date} · {appointment.time}
+                                    </p>
+                                    {showCancelInputForAppointment[appointment.id] ? (
+                                      <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-700">İptal notu</label>
+                                        <textarea
+                                          value={cancelReasonByAppointment[appointment.id] || ''}
+                                          onChange={(e) =>
+                                            setCancelReasonByAppointment((prev) => ({
+                                              ...prev,
+                                              [appointment.id]: e.target.value,
+                                            }))
+                                          }
+                                          rows={3}
+                                          placeholder="İptal nedeninizi yazın..."
+                                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => cancelApprovedAppointmentWithReason(appointment)}
+                                            disabled={Boolean(cancelSubmittingForAppointment[appointment.id])}
+                                            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+                                          >
+                                            {cancelSubmittingForAppointment[appointment.id]
+                                              ? 'Gönderiliyor...'
+                                              : 'İptali onayla'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setShowCancelInputForAppointment((prev) => ({
+                                                ...prev,
+                                                [appointment.id]: false,
+                                              }))
+                                            }
+                                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                                          >
+                                            Vazgeç
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col sm:flex-row gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => joinAppointmentFromPopup(appointment)}
+                                          className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
+                                        >
+                                          <Video className="w-4 h-4 shrink-0" />
+                                          Katıl
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setShowCancelInputForAppointment((prev) => ({
+                                              ...prev,
+                                              [appointment.id]: true,
+                                            }))
+                                          }
+                                          className="flex-1 px-4 py-2.5 border-2 border-red-300 text-red-700 rounded-xl text-sm font-semibold hover:bg-red-50"
+                                        >
+                                          İptal et
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : null}
+
+                                {eligible ? (
+                                  inTimeWindow ? (
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => completeAppointment(appointment.id)}
+                                        className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                                      >
+                                        <CheckCircle className="w-5 h-5" />
+                                        <span>Tamamlandı Olarak İşaretle</span>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex">
+                                      Randevu saati gelmeden tamamlandı olarak işaretlenemez. Katıl / İptal için
+                                      randevu saatinde bu sekmeye dönün.
+                                    </p>
+                                  )
+                                ) : null}
+                              </div>
+                            )
+                          })()}
                         </div>
                       </div>
                     </div>
