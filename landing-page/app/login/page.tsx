@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth'
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+  updateProfile,
+} from 'firebase/auth'
 import { auth, db, storage } from '@/lib/firebase'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -106,6 +112,7 @@ export default function LoginPage() {
               }
               
               await setDoc(doc(db, 'users', user.uid), userDoc)
+              await updateProfile(user, { displayName: display })
 
               showToast('Kayıt oluşturuldu. Doğrulama e-postasını bir sonraki adımda gönderebilirsiniz.', 'success')
               const token = await user.getIdToken()
@@ -230,6 +237,7 @@ export default function LoginPage() {
       }
 
       await setDoc(doc(db, 'doctors', user.uid), doctorData)
+      await updateProfile(user, { displayName: name.trim() || email.split('@')[0] })
 
       showToast('Kayıt oluşturuldu. Doğrulama e-postasını bir sonraki adımda gönderebilirsiniz.', 'success')
       const token = await user.getIdToken()

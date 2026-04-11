@@ -6,7 +6,14 @@ import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { auth, storage } from '@/lib/firebase'
 import { config } from '@/lib/config'
-import { showToast, validateImageFile, compressImage, isDicomFile, splitFullName } from '@/lib/utils'
+import {
+  showToast,
+  validateImageFile,
+  compressImage,
+  isDicomFile,
+  splitFullName,
+  userDocDisplayLabel,
+} from '@/lib/utils'
 import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
@@ -134,8 +141,29 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return
-    setProfileDisplayName(user.displayName || '')
     setProfilePhotoURL(user.photoURL || '')
+    const fromAuth = (user.displayName || '').trim()
+    if (fromAuth) {
+      setProfileDisplayName(fromAuth)
+      return
+    }
+    setProfileDisplayName('')
+    let cancelled = false
+    void (async () => {
+      try {
+        const { getDoc, doc } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const snap = await getDoc(doc(db, 'users', user.uid))
+        if (cancelled || !snap.exists()) return
+        const label = userDocDisplayLabel(snap.data() as Record<string, unknown>, user.uid)
+        if (label) setProfileDisplayName(label)
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [user?.uid, user?.displayName, user?.photoURL])
 
   // Messages indicator: show dot when there is new chat activity or pending incoming request.
