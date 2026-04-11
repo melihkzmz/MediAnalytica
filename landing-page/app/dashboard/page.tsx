@@ -140,6 +140,8 @@ export default function DashboardPage() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [patientApptNavOpen, setPatientApptNavOpen] = useState(false)
   const [mobilePatientApptOpen, setMobilePatientApptOpen] = useState(false)
+  const [patientAnalyzeNavOpen, setPatientAnalyzeNavOpen] = useState(false)
+  const [mobilePatientAnalyzeOpen, setMobilePatientAnalyzeOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -2309,6 +2311,13 @@ export default function DashboardPage() {
   const patientAppointmentSectionIds = patientAppointmentNavItems.map((x) => x.id)
   const isPatientAppointmentSectionActive = patientAppointmentSectionIds.includes(currentSection)
 
+  const patientAnalyzeNavItems: { id: Section; label: string }[] = [
+    { id: 'analyze', label: 'Analiz Yap' },
+    { id: 'history', label: 'Analiz Geçmişi' },
+  ]
+  const isPatientAnalyzeSectionActive =
+    currentSection === 'analyze' || currentSection === 'history'
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navbar */}
@@ -2366,11 +2375,66 @@ export default function DashboardPage() {
                   </button>
                 ))
               ) : (
-                // Patient tabs (randevu alt menüsü)
+                // Patient tabs (analiz + randevu alt menüleri)
                 <>
+                  <div
+                    className="relative"
+                    onMouseEnter={() => setPatientAnalyzeNavOpen(true)}
+                    onMouseLeave={() => setPatientAnalyzeNavOpen(false)}
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={patientAnalyzeNavOpen}
+                      aria-haspopup="true"
+                      onClick={() => setPatientAnalyzeNavOpen((o) => !o)}
+                      className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
+                        isPatientAnalyzeSectionActive
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Brain className="w-4 h-4 shrink-0" />
+                      <span>Analiz</span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 transition-transform ${patientAnalyzeNavOpen ? 'rotate-180' : ''}`}
+                        aria-hidden
+                      />
+                    </button>
+                    <div
+                      className={`absolute left-0 top-full z-40 pt-1 min-w-[14rem] transition-all duration-150 ${
+                        patientAnalyzeNavOpen
+                          ? 'visible opacity-100 pointer-events-auto'
+                          : 'invisible opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      <div className="rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                        {patientAnalyzeNavItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setCurrentSection(item.id)
+                              window.location.hash = item.id
+                              setPatientAnalyzeNavOpen(false)
+                            }}
+                            className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
+                              currentSection === item.id
+                                ? 'bg-blue-50 font-medium text-blue-700'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {item.id === 'analyze' ? (
+                              <Upload className="w-4 h-4 shrink-0 text-gray-500" />
+                            ) : (
+                              <History className="w-4 h-4 shrink-0 text-gray-500" />
+                            )}
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   {[
-                    { id: 'analyze' as const, label: 'Analiz Yap' },
-                    { id: 'history' as const, label: 'Analiz Geçmişi' },
                     { id: 'favorites' as const, label: 'Favoriler' },
                     { id: 'stats' as const, label: 'İstatistikler' },
                   ].map((item) => (
@@ -2579,9 +2643,55 @@ export default function DashboardPage() {
                   ))
                 ) : (
                   <>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setMobilePatientAnalyzeOpen((o) => !o)}
+                        className={`w-full px-4 py-2 rounded-xl text-left transition-colors flex items-center justify-between gap-2 ${
+                          isPatientAnalyzeSectionActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Brain className="w-4 h-4 shrink-0" />
+                          Analiz
+                        </span>
+                        <ChevronDown
+                          className={`w-4 h-4 shrink-0 transition-transform ${mobilePatientAnalyzeOpen ? 'rotate-180' : ''}`}
+                          aria-hidden
+                        />
+                      </button>
+                      {mobilePatientAnalyzeOpen && (
+                        <div className="ml-3 flex flex-col gap-1 border-l-2 border-blue-100 pl-3">
+                          {patientAnalyzeNavItems.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setCurrentSection(item.id)
+                                window.location.hash = item.id
+                                setMobileMenuOpen(false)
+                                setMobilePatientAnalyzeOpen(false)
+                              }}
+                              className={`px-3 py-2 rounded-lg text-left text-sm transition-colors flex items-center gap-2 ${
+                                currentSection === item.id
+                                  ? 'bg-blue-50 text-blue-600 font-medium'
+                                  : 'text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              {item.id === 'analyze' ? (
+                                <Upload className="w-4 h-4 shrink-0" />
+                              ) : (
+                                <History className="w-4 h-4 shrink-0" />
+                              )}
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     {[
-                      { id: 'analyze' as const, label: 'Analiz Yap' },
-                      { id: 'history' as const, label: 'Analiz Geçmişi' },
                       { id: 'favorites' as const, label: 'Favoriler' },
                       { id: 'stats' as const, label: 'İstatistikler' },
                     ].map((item) => (
