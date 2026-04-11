@@ -51,7 +51,7 @@ export default function Navbar({
                     <div className="text-right hidden sm:block pr-1">
                         <p className="text-[12px] font-bold text-slate-800 leading-none group-hover:text-indigo-600 transition-colors uppercase">{userName}</p>
                         <p className="text-[9px] font-semibold text-slate-400 mt-1 tracking-wider uppercase">
-                            {userRole === 'doktor' ? 'Doktor' : 'Standart Üye'}
+                            {userRole === 'doktor' ? 'Doktor' : 'Üye'}
                         </p>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-inner ring-2 ring-white group-hover:ring-slate-100 transition-all overflow-hidden relative">

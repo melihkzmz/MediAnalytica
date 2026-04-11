@@ -11,7 +11,7 @@ export default function LoginPage() {
     const { login } = useAuth();
     const router = useRouter();
     const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
-    const [role, setRole] = useState<'hasta' | 'doktor'>('hasta');
+    const [role, setRole] = useState<'Üye' | 'doktor'>('Üye');
 
     const [loginEmail, setLoginEmail] = useState('');
     const [loginPassword, setLoginPassword] = useState('');
@@ -26,17 +26,17 @@ export default function LoginPage() {
             toast.success('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
             setView('login');
         } else if (view === 'login') {
-            const storeKey = role === 'hasta' ? 'registeredPatients' : 'registeredDoctors';
+            const storeKey = role === 'Üye' ? 'registeredPatients' : 'registeredDoctors';
             const users = JSON.parse(localStorage.getItem(storeKey) || '[]');
-            const user = users.find((u: { email: string; password: string; role: string }) => u.email === loginEmail && u.password === loginPassword);
+            const user = users.find((u: { email: string; password: string; role: any }) => u.email === loginEmail && u.password === loginPassword);
             if (user) {
                 toast.success('Giriş başarılı! Yönlendiriliyorsunuz...');
                 login(user);
             } else {
-                toast.error(`${role === 'hasta' ? 'Hasta' : 'Doktor'} hesabı bulunamadı. Lütfen bilgilerinizi kontrol edin.`);
+                toast.error(`${role === 'Üye' ? 'Üye' : 'Doktor'} hesabı bulunamadı. Lütfen bilgilerinizi kontrol edin.`);
             }
         } else if (view === 'register') {
-            const storeKey = role === 'hasta' ? 'registeredPatients' : 'registeredDoctors';
+            const storeKey = role === 'Üye' ? 'registeredPatients' : 'registeredDoctors';
             const users = JSON.parse(localStorage.getItem(storeKey) || '[]');
             const exists = users.find((u: { email: string }) => u.email === registerEmail);
             if (exists) {
@@ -111,10 +111,10 @@ export default function LoginPage() {
 
                             <button
                                 type="button"
-                                onClick={() => setRole('hasta')}
-                                className={`flex-1 relative z-10 py-2.5 text-sm font-bold rounded-full transition-colors duration-300 ${role === 'hasta' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                                onClick={() => setRole('Üye')}
+                                className={`flex-1 relative z-10 py-2.5 text-sm font-bold rounded-full transition-colors duration-300 ${role === 'Üye' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}
                             >
-                                Hasta
+                                Üye
                             </button>
                             <button
                                 type="button"
@@ -178,7 +178,7 @@ export default function LoginPage() {
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
 
                                 {/* PATIENT REGISTRATION */}
-                                {role === 'hasta' && (
+                                {role === 'Üye' && (
                                     <div className="space-y-5">
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-bold text-slate-300">Ad Soyad</label>
@@ -202,7 +202,7 @@ export default function LoginPage() {
                                             </div>
                                         </div>
                                         <button type="submit" className="w-full py-3.5 mt-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/30 hover:bg-blue-500 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
-                                            Kayıt Ol <CheckCircle2 size={18} />
+                                            Üye Ol <CheckCircle2 size={18} />
                                         </button>
                                     </div>
                                 )}

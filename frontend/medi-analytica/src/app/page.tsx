@@ -198,7 +198,7 @@ export default function LandingPage() {
                             <p className="text-base text-slate-500 font-medium leading-relaxed max-w-xl">
                                 Güvenilir, hızlı ve akıllı tıbbi görüntü analizi ile klinik teşhis süreçlerinizi saniyelere indirin. Yeni nesil sağlık teknolojisini bugün keşfedin.
                             </p>
-                            <Link href="/login" className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-full text-base font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-1 transition-all">
+                            <Link href={isLoggedIn ? "/dashboard/analiz-et" : "/login"} className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-full text-base font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-1 transition-all">
                                 Platformu Şimdi İncele <ArrowRight size={18} />
                             </Link>
                         </div>
@@ -332,7 +332,7 @@ export default function LandingPage() {
                         Nasıl Çalışır?
                     </h2>
                     <p className="text-base text-slate-400 font-medium max-w-2xl mx-auto mb-10">
-                        Sistemimizi kullanmak sadece 4 basit adımdan ibarettir.
+                        Sistemimizi kullanmak sadece 4 basit adımdan ibarettir. <span className="block mt-2 text-sm text-slate-500 font-bold">Kredi kartı veya herhangi bir ön ödeme bilgisi gerekmez.</span>
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -390,7 +390,7 @@ export default function LandingPage() {
                         <p className="text-sm font-medium text-slate-300 mb-5">
                             Sağlığınız için hemen harekete geçin, ücretsiz analiz yapın ve uzman doktorlarımızla görüşün.
                         </p>
-                        <Link href="/login" className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-blue-600 text-white rounded-full text-sm font-bold shadow-lg shadow-blue-500/25 hover:bg-blue-700 hover:-translate-y-0.5 transition-all active:scale-95">
+                        <Link href={isLoggedIn ? "/dashboard/analiz-et" : "/login"} className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-blue-600 text-white rounded-full text-sm font-bold shadow-lg shadow-blue-500/25 hover:bg-blue-700 hover:-translate-y-0.5 transition-all active:scale-95">
                             <Activity size={18} /> Ücretsiz Analize Başla
                         </Link>
                     </div>
