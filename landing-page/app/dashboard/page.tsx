@@ -6,7 +6,7 @@ import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { auth, storage } from '@/lib/firebase'
 import { config } from '@/lib/config'
-import { showToast, validateImageFile, compressImage, isDicomFile } from '@/lib/utils'
+import { showToast, validateImageFile, compressImage, isDicomFile, splitFullName } from '@/lib/utils'
 import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
@@ -2211,6 +2211,21 @@ export default function DashboardPage() {
         displayName: profileDisplayName,
         photoURL: profilePhotoURL || undefined,
       })
+      const { doc, setDoc, serverTimestamp } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const { firstName, lastName } = splitFullName(profileDisplayName)
+      const displayName =
+        profileDisplayName.trim() || user.email?.split('@')[0] || user.displayName || ''
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          displayName,
+          firstName,
+          lastName,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      )
       showToast('Profil güncellendi!', 'success')
     } catch {
       showToast('Profil güncellenirken bir hata oluştu.', 'error')

@@ -17,7 +17,7 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { showToast } from '@/lib/utils'
+import { showToast, userDocDisplayLabel } from '@/lib/utils'
 import { MessageSquare, Send, User, Stethoscope, Check, X, Loader2 } from 'lucide-react'
 
 const MAX_MESSAGE = 4000
@@ -133,8 +133,13 @@ export default function MessagesSection({ user, isDoctor }: Props) {
       const { getDoc } = await import('firebase/firestore')
       const u = await getDoc(doc(db, 'users', uid))
       if (u.exists()) {
-        const d = u.data() as { displayName?: string; email?: string }
-        const label = d.displayName || d.email?.split('@')[0] || uid.slice(0, 8)
+        const d = u.data() as {
+          firstName?: string
+          lastName?: string
+          displayName?: string
+          email?: string
+        }
+        const label = userDocDisplayLabel(d, uid)
         setUserNames((prev) => ({ ...prev, [uid]: label }))
       } else {
         setUserNames((prev) => ({ ...prev, [uid]: 'Kullanıcı' }))

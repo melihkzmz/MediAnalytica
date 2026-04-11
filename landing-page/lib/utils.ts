@@ -156,3 +156,30 @@ export const compressImage = async (file: File, maxWidth: number = 1920, quality
   })
 }
 
+/** Split a single "Ad Soyad" string (first token / rest), aligned with doctor registration. */
+export function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const trimmed = fullName.trim()
+  if (!trimmed) return { firstName: '', lastName: '' }
+  const parts = trimmed.split(/\s+/)
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ') || '',
+  }
+}
+
+/** Prefer Firestore first+last name, then displayName, then email local part. */
+export function userDocDisplayLabel(
+  d: { firstName?: unknown; lastName?: unknown; displayName?: unknown; email?: unknown },
+  uidFallback: string
+): string {
+  const fn = String(d.firstName ?? '').trim()
+  const ln = String(d.lastName ?? '').trim()
+  const combined = `${fn} ${ln}`.trim()
+  if (combined) return combined
+  const dn = String(d.displayName ?? '').trim()
+  if (dn) return dn
+  const em = typeof d.email === 'string' ? d.email.split('@')[0] : ''
+  if (em) return em
+  return uidFallback.slice(0, 8)
+}
+

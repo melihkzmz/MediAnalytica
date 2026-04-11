@@ -6,7 +6,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswor
 import { auth, db, storage } from '@/lib/firebase'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { showToast } from '@/lib/utils'
+import { showToast, splitFullName } from '@/lib/utils'
 import { shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import { Brain, Mail, Lock, Eye, EyeOff, ArrowLeft, Shield, Zap, Users, User, Stethoscope, Phone, Briefcase, Award, FileText, Upload, X } from 'lucide-react'
 import Link from 'next/link'
@@ -89,9 +89,13 @@ export default function LoginPage() {
 
             // Save basic user data to Firestore
             try {
+              const display = name.trim() || email.split('@')[0]
+              const { firstName, lastName } = splitFullName(name)
               const userDoc = {
                 email: email,
-                displayName: name || email.split('@')[0],
+                displayName: display,
+                firstName,
+                lastName,
                 userType: 'patient',
                 createdAt: serverTimestamp(),
                 lastLogin: serverTimestamp(),

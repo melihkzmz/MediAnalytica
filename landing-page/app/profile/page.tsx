@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { onAuthStateChanged, updateProfile } from 'firebase/auth'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { auth, storage } from '@/lib/firebase'
-import { showToast } from '@/lib/utils'
+import { auth, db, storage } from '@/lib/firebase'
+import { showToast, splitFullName } from '@/lib/utils'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import { User, Mail, Calendar, Camera, Save, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
@@ -66,6 +67,18 @@ export default function ProfilePage() {
         displayName: name,
         photoURL: photoURL || undefined
       })
+      const { firstName, lastName } = splitFullName(name)
+      const displayName = name.trim() || user.email?.split('@')[0] || ''
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          displayName,
+          firstName,
+          lastName,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      )
       showToast('Profil güncellendi!', 'success')
     } catch (error) {
       showToast('Profil güncellenirken bir hata oluştu.', 'error')
