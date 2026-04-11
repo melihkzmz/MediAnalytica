@@ -422,6 +422,11 @@ export default function MessagesSection({ user, isDoctor }: Props) {
     (r) => r.status === 'pending' && r.fromUserId === user.uid
   )
 
+  /** Onaylanan istekler sohbet listesinde; tekrar göstermeyelim. */
+  const patientRequestsForStatusSection = !isDoctor
+    ? requests.filter((r) => r.status !== 'approved')
+    : []
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -697,27 +702,32 @@ export default function MessagesSection({ user, isDoctor }: Props) {
 
               {patientTab === 'chats' && (
                 <div className="space-y-3">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">İstek durumu</p>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {requests.length === 0 ? (
-                      <p className="text-sm text-gray-500">İstek yok.</p>
-                    ) : (
-                      requests.map((r) => (
-                        <div
-                          key={r.id}
-                          className="text-xs p-2 rounded-lg bg-gray-50 border border-gray-100"
-                        >
-                          <div className="font-medium">{doctorDisplay(r.toDoctorUserId)}</div>
-                          <div className="text-gray-600">
-                            {r.status === 'pending' && 'Beklemede'}
-                            {r.status === 'approved' && 'Onaylandı — sohbetlerden açın'}
-                            {r.status === 'rejected' && 'Reddedildi'}
+                  {patientRequestsForStatusSection.length > 0 && (
+                    <>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">İstek durumu</p>
+                      <div className="max-h-40 overflow-y-auto space-y-2">
+                        {patientRequestsForStatusSection.map((r) => (
+                          <div
+                            key={r.id}
+                            className="text-xs p-2 rounded-lg bg-gray-50 border border-gray-100"
+                          >
+                            <div className="font-medium">{doctorDisplay(r.toDoctorUserId)}</div>
+                            <div className="text-gray-600">
+                              {r.status === 'pending' && 'Beklemede'}
+                              {r.status === 'rejected' && 'Reddedildi'}
+                            </div>
                           </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide pt-2">Sohbetler</p>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <p
+                    className={`text-xs font-medium text-gray-500 uppercase tracking-wide ${
+                      patientRequestsForStatusSection.length > 0 ? 'pt-2' : ''
+                    }`}
+                  >
+                    Sohbetler
+                  </p>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {conversations.map((c) => (
                       <button
