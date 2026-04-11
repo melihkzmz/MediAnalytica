@@ -10,13 +10,12 @@ import { showToast, validateImageFile, compressImage, isDicomFile } from '@/lib/
 import { assessImageForAnalysis, IMAGE_QUALITY_REJECT_MESSAGE } from '@/lib/imageQuality'
 import { 
   Brain, Upload, History, Heart, BarChart3, Video, 
-  Settings, LogOut, User, Home, HelpCircle, Mail, Building, Camera, Save, Bell,
+  Settings, LogOut, User, Home, HelpCircle, Mail, Building, Camera, Save,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
   Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope,
   HeartPulse, ClipboardList, AlertTriangle
 } from 'lucide-react'
 import Link from 'next/link'
-import AppointmentNotificationCard from '@/components/AppointmentNotificationCard'
 import MessagesSection from '@/components/MessagesSection'
 import { isAppointmentTime, isAppointmentJoinCancelActionsWindow } from '@/lib/appointmentUtils'
 import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
@@ -115,9 +114,6 @@ export default function DashboardPage() {
   const [patientAppointmentsRefreshKey, setPatientAppointmentsRefreshKey] = useState(0)
   const [myPatients, setMyPatients] = useState<any[]>([])
   const [loadingAppointments, setLoadingAppointments] = useState(false)
-  const [activeAppointments, setActiveAppointments] = useState<any[]>([])
-  const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(new Set())
-  const [notificationsMenuOpen, setNotificationsMenuOpen] = useState(false)
   const [hasMessageIndicator, setHasMessageIndicator] = useState(false)
   const [pendingAppointmentAlertCount, setPendingAppointmentAlertCount] = useState(0)
   const [doctorUpcomingAppointmentAlertCount, setDoctorUpcomingAppointmentAlertCount] = useState(0)
@@ -141,28 +137,6 @@ export default function DashboardPage() {
     setProfileDisplayName(user.displayName || '')
     setProfilePhotoURL(user.photoURL || '')
   }, [user?.uid, user?.displayName, user?.photoURL])
-
-  // Persist read/unread state for reminder notifications per user
-  useEffect(() => {
-    if (!user?.uid) return
-    const key = `dismissedAppointmentNotifs_${user.uid}`
-    const raw = localStorage.getItem(key)
-    if (!raw) return
-    try {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) {
-        setDismissedNotifications(new Set(parsed.filter((x) => typeof x === 'string')))
-      }
-    } catch {
-      // ignore corrupted localStorage
-    }
-  }, [user?.uid])
-
-  useEffect(() => {
-    if (!user?.uid) return
-    const key = `dismissedAppointmentNotifs_${user.uid}`
-    localStorage.setItem(key, JSON.stringify([...dismissedNotifications]))
-  }, [dismissedNotifications, user?.uid])
 
   // Messages indicator: show dot when there is new chat activity or pending incoming request.
   useEffect(() => {
@@ -561,116 +535,6 @@ export default function DashboardPage() {
       cancelled = true
     }
   }, [user, isDoctor, currentSection, patientAppointmentsRefreshKey])
-
-  // Check for active appointments (appointments that are happening now)
-  useEffect(() => {
-    if (!user) return
-
-    const checkActiveAppointments = async () => {
-      try {
-        const { collection, query, where, getDocs, doc, getDoc } = await import('firebase/firestore')
-        const { db } = await import('@/lib/firebase')
-        
-        let appointmentsQuery
-        
-        if (isDoctor) {
-          // For doctors: check approved appointments assigned to them
-          appointmentsQuery = query(
-            collection(db, 'appointments'),
-            where('status', '==', 'approved'),
-            where('doctorId', '==', user.uid)
-          )
-        } else {
-          // For patients: check their approved appointments
-          appointmentsQuery = query(
-            collection(db, 'appointments'),
-            where('status', '==', 'approved'),
-            where('userId', '==', user.uid)
-          )
-        }
-
-        const querySnapshot = await getDocs(appointmentsQuery)
-        const seenIds = new Set<string>()
-        const mergedDocs: typeof querySnapshot.docs = []
-        for (const d of querySnapshot.docs) {
-          seenIds.add(d.id)
-          mergedDocs.push(d)
-        }
-        if (isDoctor) {
-          const peerOrganizerSnap = await getDocs(
-            query(
-              collection(db, 'appointments'),
-              where('status', '==', 'approved'),
-              where('userId', '==', user.uid)
-            )
-          )
-          for (const d of peerOrganizerSnap.docs) {
-            const raw = d.data() as Record<string, unknown>
-            if (raw.appointmentKind === 'doctor_peer' && !seenIds.has(d.id)) {
-              seenIds.add(d.id)
-              mergedDocs.push(d)
-            }
-          }
-        }
-
-        const active: any[] = []
-
-        for (const appointmentDoc of mergedDocs) {
-          const appointmentData = appointmentDoc.data()
-          const appointment: any = {
-            id: appointmentDoc.id,
-            ...appointmentData
-          }
-
-          if (isDoctor && appointment.userId) {
-            try {
-              if (appointment.appointmentKind === 'doctor_peer') {
-                const otherUid =
-                  appointment.userId === user.uid ? appointment.doctorId : appointment.userId
-                if (otherUid) {
-                  const ddoc = await getDoc(doc(db, 'doctors', otherUid))
-                  if (ddoc.exists()) {
-                    const o = ddoc.data() as Record<string, unknown>
-                    appointment.peerDoctorLabel =
-                      `Dr. ${String(o.firstName || '').trim()} ${String(o.lastName || '').trim()}`.trim()
-                  }
-                }
-              } else {
-                const userRef = doc(db, 'users', appointment.userId)
-                const userDoc = await getDoc(userRef)
-                if (userDoc.exists()) {
-                  appointment.patient = userDoc.data()
-                }
-              }
-            } catch (error) {
-              console.error('Error fetching appointment counterparty:', error)
-            }
-          }
-
-          // Check if appointment has required fields and time has arrived
-          if (appointment.date && appointment.time && isAppointmentTime({
-            date: appointment.date,
-            time: appointment.time
-          })) {
-            active.push(appointment)
-          }
-
-        }
-
-        setActiveAppointments(active)
-      } catch (error) {
-        console.error('Error checking active appointments:', error)
-      }
-    }
-
-    // Check immediately
-    checkActiveAppointments()
-
-    // Check every minute
-    const interval = setInterval(checkActiveAppointments, 60000)
-
-    return () => clearInterval(interval)
-  }, [user, isDoctor])
 
   // Reset form state when analyze section is activated
   useEffect(() => {
@@ -2494,123 +2358,6 @@ export default function DashboardPage() {
               >
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
-              <div className="relative">
-                <button
-                  onClick={() => setNotificationsMenuOpen(!notificationsMenuOpen)}
-                  className="relative p-2 rounded-xl hover:bg-gray-100 transition-colors"
-                  aria-label="Bildirimler"
-                >
-                  <Bell className="w-5 h-5 text-gray-600" />
-                  {activeAppointments.some((apt) => !dismissedNotifications.has(apt.id)) && (
-                    <span
-                      className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white"
-                      aria-hidden="true"
-                    />
-                  )}
-                </button>
-
-                {notificationsMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setNotificationsMenuOpen(false)}
-                    ></div>
-                    <div className="absolute right-0 mt-2 w-[360px] bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden">
-                      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                        <span className="font-semibold text-gray-900">Bildirimler</span>
-                        <button
-                          className="text-xs text-blue-600 hover:underline"
-                          onClick={() => {
-                            setDismissedNotifications((prev) => {
-                              const next = new Set(prev)
-                              activeAppointments.forEach((apt) => next.add(apt.id))
-                              return next
-                            })
-                          }}
-                          disabled={!activeAppointments.length}
-                        >
-                          Tümü okundu
-                        </button>
-                      </div>
-
-                      {activeAppointments.length === 0 ? (
-                        <div className="px-4 py-6 text-sm text-gray-500">
-                          Aktif randevu bildirimi yok.
-                        </div>
-                      ) : (
-                        <div className="max-h-[60vh] overflow-auto">
-                          {[...activeAppointments]
-                            .sort((a, b) => {
-                              const da = String(a.date ?? '')
-                              const db = String(b.date ?? '')
-                              if (da !== db) return db.localeCompare(da)
-                              return String(b.time ?? '').localeCompare(String(a.time ?? ''))
-                            })
-                            .map((appointment) => {
-                              const isUnread = !dismissedNotifications.has(appointment.id)
-                              const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
-                              const videoUrl = buildVideoMeetingHref({
-                                roomName,
-                                appointmentId: appointment.id,
-                                isDoctor,
-                                returnTo: `/dashboard#${currentSection}`,
-                              })
-                              return (
-                                <div
-                                  key={appointment.id}
-                                  className="px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                >
-                                  <div className="flex items-start gap-3">
-                                    {isUnread && (
-                                      <span className="mt-2 w-2.5 h-2.5 rounded-full bg-blue-600" aria-hidden="true" />
-                                    )}
-
-                                    <div className="min-w-0 flex-1">
-                                      <Link
-                                        href={videoUrl}
-                                        className="block text-sm font-semibold text-blue-700 hover:underline"
-                                        onClick={() => {
-                                          if (!isUnread) return
-                                          setDismissedNotifications((prev) => {
-                                            const next = new Set(prev)
-                                            next.add(appointment.id)
-                                            return next
-                                          })
-                                          setNotificationsMenuOpen(false)
-                                        }}
-                                      >
-                                        Randevu saatiniz yaklaştı, erkenden katılmak için tıklayın.
-                                      </Link>
-                                      <div className="mt-1 text-xs text-gray-500">
-                                        {appointment.date} - {appointment.time}
-                                      </div>
-                                    </div>
-
-                                    {isUnread && (
-                                      <button
-                                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
-                                        onClick={() => {
-                                          setDismissedNotifications((prev) => {
-                                            const next = new Set(prev)
-                                            next.add(appointment.id)
-                                            return next
-                                          })
-                                          setNotificationsMenuOpen(false)
-                                        }}
-                                      >
-                                        Okundu
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )
-                            })}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
 
               <div className="relative">
                 <button 
@@ -2744,23 +2491,6 @@ export default function DashboardPage() {
       </nav>
 
       <div className="pt-16">
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 items-end">
-          {/* Pre-appointment reminder toasts */}
-          {activeAppointments
-            .filter(apt => !dismissedNotifications.has(apt.id))
-            .map((appointment) => (
-              <AppointmentNotificationCard
-                key={appointment.id}
-                appointment={appointment}
-                isDoctor={isDoctor}
-                returnTo={`/dashboard#${currentSection}`}
-                onDismiss={() => {
-                  setDismissedNotifications(prev => new Set(prev).add(appointment.id))
-                }}
-              />
-            ))}
-        </div>
-
         {/* Main Content */}
         <main className="p-6 md:p-8">
           {currentSection === 'dashboard' && (

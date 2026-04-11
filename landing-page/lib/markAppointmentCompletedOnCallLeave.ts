@@ -3,7 +3,7 @@ import { auth, db } from '@/lib/firebase'
 
 /**
  * When the user leaves the video call, mark the appointment completed so dashboard
- * queries (`status == 'approved'`) no longer surface join / reminder notifications.
+ * queries (`status == 'approved'`) no longer surface join actions on appointment cards.
  * Firestore rules allow this for the assigned doctor, peer participants, and the patient (non–peer).
  */
 export async function markAppointmentCompletedOnCallLeave(appointmentId: string): Promise<void> {
