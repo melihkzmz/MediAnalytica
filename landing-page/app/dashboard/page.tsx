@@ -142,6 +142,8 @@ export default function DashboardPage() {
   const [mobilePatientApptOpen, setMobilePatientApptOpen] = useState(false)
   const [patientAnalyzeNavOpen, setPatientAnalyzeNavOpen] = useState(false)
   const [mobilePatientAnalyzeOpen, setMobilePatientAnalyzeOpen] = useState(false)
+  const [doctorApptNavOpen, setDoctorApptNavOpen] = useState(false)
+  const [mobileDoctorApptOpen, setMobileDoctorApptOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -2318,6 +2320,19 @@ export default function DashboardPage() {
   const isPatientAnalyzeSectionActive =
     currentSection === 'analyze' || currentSection === 'history'
 
+  const doctorAppointmentNavItems: { id: Section; label: string }[] = [
+    { id: 'pending-appointments', label: 'Bekleyen Randevularım' },
+    { id: 'my-appointments', label: 'Randevularım' },
+    { id: 'appointment-history', label: 'Randevu Geçmişi' },
+  ]
+  const isDoctorAppointmentSectionActive =
+    currentSection === 'pending-appointments' ||
+    currentSection === 'my-appointments' ||
+    currentSection === 'appointment-history'
+  const doctorApptNavHasAlert =
+    (pendingAppointmentAlertCount > 0 && currentSection !== 'pending-appointments') ||
+    (doctorUpcomingAppointmentAlertCount > 0 && currentSection !== 'my-appointments')
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navbar */}
@@ -2334,46 +2349,121 @@ export default function DashboardPage() {
             {/* Center Menu - Desktop */}
             <div className="hidden md:flex items-center space-x-1 flex-1 justify-center">
               {isDoctor ? (
-                // Doctor tabs
-                [
-                  { id: 'pending-appointments', label: 'Bekleyen Randevularım' },
-                  { id: 'doctor-peer-meetings', label: 'Doktor görüşmeleri' },
-                  { id: 'my-appointments', label: 'Randevularım' },
-                  { id: 'appointment-history', label: 'Randevu Geçmişi' },
-                  { id: 'my-patients', label: 'Hastalarım' },
-                  { id: 'messages', label: 'Mesajlar' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentSection(item.id as Section)
-                      window.location.hash = item.id
-                    }}
-                    className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
-                      currentSection === item.id
-                        ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
+                // Doctor tabs (randevu alt menüsü)
+                <>
+                  <div
+                    className="relative"
+                    onMouseEnter={() => setDoctorApptNavOpen(true)}
+                    onMouseLeave={() => setDoctorApptNavOpen(false)}
                   >
-                    {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
-                    {item.id === 'doctor-peer-meetings' ? <Users className="w-4 h-4 shrink-0" /> : null}
-                    <span className="relative">
-                      {item.label}
-                      {item.id === 'my-appointments' && currentSection !== 'my-appointments' && doctorUpcomingAppointmentAlertCount > 0 && (
-                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
-                      )}
-                      {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
-                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
-                      )}
-                      {item.id === 'doctor-peer-meetings' && currentSection !== 'doctor-peer-meetings' && doctorPeerInviteAlertCount > 0 && (
-                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-violet-500" />
-                      )}
-                      {item.id === 'messages' && hasMessageIndicator && (
-                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
-                      )}
-                    </span>
-                  </button>
-                ))
+                    <button
+                      type="button"
+                      aria-expanded={doctorApptNavOpen}
+                      aria-haspopup="true"
+                      onClick={() => setDoctorApptNavOpen((o) => !o)}
+                      className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
+                        isDoctorAppointmentSectionActive
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Calendar className="w-4 h-4 shrink-0" />
+                      <span className="relative">
+                        Randevular
+                        {doctorApptNavHasAlert && (
+                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                        )}
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 transition-transform ${doctorApptNavOpen ? 'rotate-180' : ''}`}
+                        aria-hidden
+                      />
+                    </button>
+                    <div
+                      className={`absolute left-0 top-full z-40 pt-1 min-w-[15rem] transition-all duration-150 ${
+                        doctorApptNavOpen
+                          ? 'visible opacity-100 pointer-events-auto'
+                          : 'invisible opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      <div className="rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                        {doctorAppointmentNavItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setCurrentSection(item.id)
+                              window.location.hash = item.id
+                              setDoctorApptNavOpen(false)
+                            }}
+                            className={`relative flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
+                              currentSection === item.id
+                                ? 'bg-blue-50 font-medium text-blue-700'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {item.id === 'pending-appointments' ? (
+                              <ClipboardList className="w-4 h-4 shrink-0 text-gray-500" />
+                            ) : null}
+                            {item.id === 'my-appointments' ? (
+                              <Calendar className="w-4 h-4 shrink-0 text-gray-500" />
+                            ) : null}
+                            {item.id === 'appointment-history' ? (
+                              <History className="w-4 h-4 shrink-0 text-gray-500" />
+                            ) : null}
+                            <span className="relative pr-3">
+                              {item.label}
+                              {item.id === 'pending-appointments' &&
+                                currentSection !== 'pending-appointments' &&
+                                pendingAppointmentAlertCount > 0 && (
+                                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" />
+                                )}
+                              {item.id === 'my-appointments' &&
+                                currentSection !== 'my-appointments' &&
+                                doctorUpcomingAppointmentAlertCount > 0 && (
+                                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" />
+                                )}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  {[
+                    { id: 'doctor-peer-meetings' as const, label: 'Doktor görüşmeleri' },
+                    { id: 'my-patients' as const, label: 'Hastalarım' },
+                    { id: 'messages' as const, label: 'Mesajlar' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setCurrentSection(item.id)
+                        window.location.hash = item.id
+                      }}
+                      className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
+                        currentSection === item.id
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                      {item.id === 'doctor-peer-meetings' ? <Users className="w-4 h-4 shrink-0" /> : null}
+                      {item.id === 'my-patients' ? <Stethoscope className="w-4 h-4 shrink-0" /> : null}
+                      <span className="relative">
+                        {item.label}
+                        {item.id === 'doctor-peer-meetings' &&
+                          currentSection !== 'doctor-peer-meetings' &&
+                          doctorPeerInviteAlertCount > 0 && (
+                            <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-violet-500" />
+                          )}
+                        {item.id === 'messages' && hasMessageIndicator && (
+                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </>
               ) : (
                 // Patient tabs (analiz + randevu alt menüleri)
                 <>
@@ -2600,47 +2690,110 @@ export default function DashboardPage() {
             <div className="md:hidden border-t border-gray-200 py-4">
               <div className="flex flex-col space-y-2">
                 {isDoctor ? (
-                  // Doctor tabs
-                  [
-                    { id: 'pending-appointments', label: 'Bekleyen Randevularım' },
-                    { id: 'doctor-peer-meetings', label: 'Doktor görüşmeleri' },
-                    { id: 'my-appointments', label: 'Randevularım' },
-                    { id: 'appointment-history', label: 'Randevu Geçmişi' },
-                    { id: 'my-patients', label: 'Hastalarım' },
-                    { id: 'messages', label: 'Mesajlar' },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentSection(item.id as Section)
-                        window.location.hash = item.id
-                        setMobileMenuOpen(false)
-                      }}
-                      className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
-                        currentSection === item.id
-                          ? 'bg-blue-50 text-blue-600 font-medium'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
-                      {item.id === 'doctor-peer-meetings' ? <Users className="w-4 h-4 shrink-0" /> : null}
-                      <span className="relative">
-                        {item.label}
-                        {item.id === 'my-appointments' && currentSection !== 'my-appointments' && doctorUpcomingAppointmentAlertCount > 0 && (
-                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
-                        )}
-                        {item.id === 'pending-appointments' && currentSection !== 'pending-appointments' && pendingAppointmentAlertCount > 0 && (
-                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
-                        )}
-                        {item.id === 'doctor-peer-meetings' && currentSection !== 'doctor-peer-meetings' && doctorPeerInviteAlertCount > 0 && (
-                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-violet-500" />
-                        )}
-                        {item.id === 'messages' && hasMessageIndicator && (
-                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
-                        )}
-                      </span>
-                    </button>
-                  ))
+                  <>
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setMobileDoctorApptOpen((o) => !o)}
+                        className={`w-full px-4 py-2 rounded-xl text-left transition-colors flex items-center justify-between gap-2 ${
+                          isDoctorAppointmentSectionActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="flex flex-1 min-w-0 items-center gap-2">
+                          <Calendar className="w-4 h-4 shrink-0" />
+                          <span className="relative">
+                            Randevular
+                            {doctorApptNavHasAlert && (
+                              <span className="absolute -top-1 -right-3 w-2 h-2 rounded-full bg-red-500" />
+                            )}
+                          </span>
+                        </span>
+                        <ChevronDown
+                          className={`w-4 h-4 shrink-0 transition-transform ${mobileDoctorApptOpen ? 'rotate-180' : ''}`}
+                          aria-hidden
+                        />
+                      </button>
+                      {mobileDoctorApptOpen && (
+                        <div className="ml-3 flex flex-col gap-1 border-l-2 border-blue-100 pl-3">
+                          {doctorAppointmentNavItems.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setCurrentSection(item.id)
+                                window.location.hash = item.id
+                                setMobileMenuOpen(false)
+                                setMobileDoctorApptOpen(false)
+                              }}
+                              className={`px-3 py-2 rounded-lg text-left text-sm transition-colors flex items-center gap-2 ${
+                                currentSection === item.id
+                                  ? 'bg-blue-50 text-blue-600 font-medium'
+                                  : 'text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              {item.id === 'pending-appointments' ? (
+                                <ClipboardList className="w-4 h-4 shrink-0" />
+                              ) : item.id === 'appointment-history' ? (
+                                <History className="w-4 h-4 shrink-0" />
+                              ) : (
+                                <Calendar className="w-4 h-4 shrink-0" />
+                              )}
+                              <span className="relative">
+                                {item.label}
+                                {item.id === 'pending-appointments' &&
+                                  currentSection !== 'pending-appointments' &&
+                                  pendingAppointmentAlertCount > 0 && (
+                                    <span className="absolute -top-0.5 -right-2.5 w-1.5 h-1.5 rounded-full bg-red-500" />
+                                  )}
+                                {item.id === 'my-appointments' &&
+                                  currentSection !== 'my-appointments' &&
+                                  doctorUpcomingAppointmentAlertCount > 0 && (
+                                    <span className="absolute -top-0.5 -right-2.5 w-1.5 h-1.5 rounded-full bg-red-500" />
+                                  )}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {[
+                      { id: 'doctor-peer-meetings' as const, label: 'Doktor görüşmeleri' },
+                      { id: 'my-patients' as const, label: 'Hastalarım' },
+                      { id: 'messages' as const, label: 'Mesajlar' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setCurrentSection(item.id)
+                          window.location.hash = item.id
+                          setMobileMenuOpen(false)
+                        }}
+                        className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
+                          currentSection === item.id
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
+                        {item.id === 'doctor-peer-meetings' ? <Users className="w-4 h-4 shrink-0" /> : null}
+                        {item.id === 'my-patients' ? <Stethoscope className="w-4 h-4 shrink-0" /> : null}
+                        <span className="relative">
+                          {item.label}
+                          {item.id === 'doctor-peer-meetings' &&
+                            currentSection !== 'doctor-peer-meetings' &&
+                            doctorPeerInviteAlertCount > 0 && (
+                              <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-violet-500" />
+                            )}
+                          {item.id === 'messages' && hasMessageIndicator && (
+                            <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </>
                 ) : (
                   <>
                     <div className="space-y-1">
