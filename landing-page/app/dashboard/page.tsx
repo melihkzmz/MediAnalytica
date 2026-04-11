@@ -19,7 +19,7 @@ import {
   Brain, Upload, History, Heart, BarChart3, Video, 
   Settings, LogOut, User, Home, HelpCircle, Mail, Building, Camera, Save,
   X, CheckCircle2, Loader2, Image as ImageIcon, Menu, FileText, Download,
-  Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope,
+  Clock, Calendar, Users, AlertCircle, CheckCircle, MessageSquare, Stethoscope, ChevronDown,
   HeartPulse, ClipboardList, AlertTriangle
 } from 'lucide-react'
 import Link from 'next/link'
@@ -138,6 +138,8 @@ export default function DashboardPage() {
   const [profilePhotoURL, setProfilePhotoURL] = useState('')
   const [profileUploading, setProfileUploading] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
+  const [patientApptNavOpen, setPatientApptNavOpen] = useState(false)
+  const [mobilePatientApptOpen, setMobilePatientApptOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -2299,6 +2301,14 @@ export default function DashboardPage() {
     { value: 'brain', label: 'Beyin Hastalıkları', icon: '🧠' },
   ]
 
+  const patientAppointmentNavItems: { id: Section; label: string }[] = [
+    { id: 'appointment', label: 'Randevu Talep' },
+    { id: 'my-appointments-patient', label: 'Randevularım' },
+    { id: 'patient-appointment-history', label: 'Randevu Geçmişi' },
+  ]
+  const patientAppointmentSectionIds = patientAppointmentNavItems.map((x) => x.id)
+  const isPatientAppointmentSectionActive = patientAppointmentSectionIds.includes(currentSection)
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navbar */}
@@ -2356,40 +2366,112 @@ export default function DashboardPage() {
                   </button>
                 ))
               ) : (
-                // Patient tabs
-                [
-                { id: 'analyze', label: 'Analiz Yap' },
-                { id: 'history', label: 'Analiz Geçmişi' },
-                { id: 'favorites', label: 'Favoriler' },
-                { id: 'stats', label: 'İstatistikler' },
-                { id: 'appointment', label: 'Randevu Talep' },
-                { id: 'my-appointments-patient', label: 'Randevularım' },
-                { id: 'patient-appointment-history', label: 'Randevu Geçmişi' },
-                { id: 'messages', label: 'Mesajlar' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setCurrentSection(item.id as Section)
-                    window.location.hash = item.id
-                  }}
-                  className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
-                    currentSection === item.id
-                      ? 'bg-blue-50 text-blue-600 font-medium'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
-                  {item.id === 'my-appointments-patient' ? <Calendar className="w-4 h-4 shrink-0" /> : null}
-                  {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
-                  <span className="relative">
-                    {item.label}
-                    {item.id === 'messages' && hasMessageIndicator && (
-                      <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
-                    )}
-                  </span>
-                </button>
-                ))
+                // Patient tabs (randevu alt menüsü)
+                <>
+                  {[
+                    { id: 'analyze' as const, label: 'Analiz Yap' },
+                    { id: 'history' as const, label: 'Analiz Geçmişi' },
+                    { id: 'favorites' as const, label: 'Favoriler' },
+                    { id: 'stats' as const, label: 'İstatistikler' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setCurrentSection(item.id)
+                        window.location.hash = item.id
+                      }}
+                      className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
+                        currentSection === item.id
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                  <div
+                    className="relative"
+                    onMouseEnter={() => setPatientApptNavOpen(true)}
+                    onMouseLeave={() => setPatientApptNavOpen(false)}
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={patientApptNavOpen}
+                      aria-haspopup="true"
+                      onClick={() => setPatientApptNavOpen((o) => !o)}
+                      className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
+                        isPatientAppointmentSectionActive
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Calendar className="w-4 h-4 shrink-0" />
+                      <span>Randevular</span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 transition-transform ${patientApptNavOpen ? 'rotate-180' : ''}`}
+                        aria-hidden
+                      />
+                    </button>
+                    <div
+                      className={`absolute left-0 top-full z-40 pt-1 min-w-[14rem] transition-all duration-150 ${
+                        patientApptNavOpen
+                          ? 'visible opacity-100 pointer-events-auto'
+                          : 'invisible opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      <div className="rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                        {patientAppointmentNavItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setCurrentSection(item.id)
+                              window.location.hash = item.id
+                              setPatientApptNavOpen(false)
+                            }}
+                            className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
+                              currentSection === item.id
+                                ? 'bg-blue-50 font-medium text-blue-700'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {item.id === 'appointment' ? (
+                              <Calendar className="w-4 h-4 shrink-0 text-gray-500" />
+                            ) : null}
+                            {item.id === 'my-appointments-patient' ? (
+                              <Calendar className="w-4 h-4 shrink-0 text-gray-500" />
+                            ) : null}
+                            {item.id === 'patient-appointment-history' ? (
+                              <History className="w-4 h-4 shrink-0 text-gray-500" />
+                            ) : null}
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentSection('messages')
+                      window.location.hash = 'messages'
+                    }}
+                    className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
+                      currentSection === 'messages'
+                        ? 'bg-blue-50 text-blue-600 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4 shrink-0" />
+                    <span className="relative">
+                      Mesajlar
+                      {hasMessageIndicator && (
+                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                      )}
+                    </span>
+                  </button>
+                </>
               )}
             </div>
 
@@ -2496,41 +2578,100 @@ export default function DashboardPage() {
                     </button>
                   ))
                 ) : (
-                  // Patient tabs
-                  [
-                  { id: 'analyze', label: 'Analiz Yap' },
-                  { id: 'history', label: 'Analiz Geçmişi' },
-                  { id: 'favorites', label: 'Favoriler' },
-                  { id: 'stats', label: 'İstatistikler' },
-                  { id: 'appointment', label: 'Randevu Talep' },
-                  { id: 'my-appointments-patient', label: 'Randevularım' },
-                  { id: 'patient-appointment-history', label: 'Randevu Geçmişi' },
-                  { id: 'messages', label: 'Mesajlar' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentSection(item.id as Section)
-                      window.location.hash = item.id
-                      setMobileMenuOpen(false)
-                    }}
-                    className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
-                      currentSection === item.id
-                        ? 'bg-blue-50 text-blue-600 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {item.id === 'messages' ? <MessageSquare className="w-4 h-4 shrink-0" /> : null}
-                    {item.id === 'my-appointments-patient' ? <Calendar className="w-4 h-4 shrink-0" /> : null}
-                    {item.id === 'patient-appointment-history' ? <History className="w-4 h-4 shrink-0" /> : null}
-                    <span className="relative">
-                      {item.label}
-                      {item.id === 'messages' && hasMessageIndicator && (
-                        <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                  <>
+                    {[
+                      { id: 'analyze' as const, label: 'Analiz Yap' },
+                      { id: 'history' as const, label: 'Analiz Geçmişi' },
+                      { id: 'favorites' as const, label: 'Favoriler' },
+                      { id: 'stats' as const, label: 'İstatistikler' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setCurrentSection(item.id)
+                          window.location.hash = item.id
+                          setMobileMenuOpen(false)
+                        }}
+                        className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
+                          currentSection === item.id
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setMobilePatientApptOpen((o) => !o)}
+                        className={`w-full px-4 py-2 rounded-xl text-left transition-colors flex items-center justify-between gap-2 ${
+                          isPatientAppointmentSectionActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 shrink-0" />
+                          Randevular
+                        </span>
+                        <ChevronDown
+                          className={`w-4 h-4 shrink-0 transition-transform ${mobilePatientApptOpen ? 'rotate-180' : ''}`}
+                          aria-hidden
+                        />
+                      </button>
+                      {mobilePatientApptOpen && (
+                        <div className="ml-3 flex flex-col gap-1 border-l-2 border-blue-100 pl-3">
+                          {patientAppointmentNavItems.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setCurrentSection(item.id)
+                                window.location.hash = item.id
+                                setMobileMenuOpen(false)
+                                setMobilePatientApptOpen(false)
+                              }}
+                              className={`px-3 py-2 rounded-lg text-left text-sm transition-colors flex items-center gap-2 ${
+                                currentSection === item.id
+                                  ? 'bg-blue-50 text-blue-600 font-medium'
+                                  : 'text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              {item.id === 'patient-appointment-history' ? (
+                                <History className="w-4 h-4 shrink-0" />
+                              ) : (
+                                <Calendar className="w-4 h-4 shrink-0" />
+                              )}
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
                       )}
-                    </span>
-                  </button>
-                  ))
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentSection('messages')
+                        window.location.hash = 'messages'
+                        setMobileMenuOpen(false)
+                      }}
+                      className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
+                        currentSection === 'messages'
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <MessageSquare className="w-4 h-4 shrink-0" />
+                      <span className="relative">
+                        Mesajlar
+                        {hasMessageIndicator && (
+                          <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
+                        )}
+                      </span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>
