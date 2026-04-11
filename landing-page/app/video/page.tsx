@@ -58,6 +58,8 @@ function VideoConferenceContent() {
   returnPathRef.current = returnPath
   const appointmentIdRef = useRef(appointmentId)
   appointmentIdRef.current = appointmentId
+  const isDoctorRef = useRef(isDoctor)
+  isDoctorRef.current = isDoctor
 
   const leaveMeeting = useCallback(async () => {
     if (didLeaveRedirectRef.current) return
@@ -76,6 +78,9 @@ function VideoConferenceContent() {
       } catch (e) {
         console.error('Could not mark appointment completed after call:', e)
       }
+      const historyHash = isDoctorRef.current ? 'appointment-history' : 'patient-appointment-history'
+      navigateAfterMeeting(router, `/dashboard#${historyHash}`)
+      return
     }
 
     navigateAfterMeeting(router, returnPathRef.current)
