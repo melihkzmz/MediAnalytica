@@ -11,7 +11,7 @@ import {
     ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
-import { getUserKeys } from '@/lib/userStorage';
+import { getUserKeys, ALL_APPOINTMENTS_KEY } from '@/lib/userStorage';
 
 interface PatientAppointment {
     id: number;
@@ -34,37 +34,23 @@ export default function PatientDashboardPage() {
     useEffect(() => {
         const loadDashboardData = () => {
             const userJson = localStorage.getItem('currentUser');
+            let userEmail = 'guest';
             if (userJson) {
                 const user = JSON.parse(userJson);
                 setPatientName(user.name);
+                if (user.email) userEmail = user.email;
             }
 
-            const { historyKey, appointmentsKey } = getUserKeys();
+            const { historyKey } = getUserKeys();
             const storedData = localStorage.getItem(historyKey);
             if (storedData) {
                 const history = JSON.parse(storedData);
                 setHistoryCount(history.length);
             }
 
-            const storedAppointments = localStorage.getItem(appointmentsKey);
-            if (storedAppointments) {
-                setAppointments(JSON.parse(storedAppointments));
-            } else {
-                const tDate = new Date();
-                const monthNames = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"];
-                setAppointments([{
-                    id: 999,
-                    doctor: "Prof. Dr. Ertuğrul",
-                    branch: "Ortopedi",
-                    title: "Kemik Taraması Analizi",
-                    dateMonth: monthNames[tDate.getMonth()],
-                    dateDay: tDate.getDate().toString().padStart(2, '0'),
-                    time: "10:00",
-                    location: "Online Görüşme",
-                    status: "approved",
-                    timestamp: tDate.getTime(),
-                }]);
-            }
+            const allApps = JSON.parse(localStorage.getItem(ALL_APPOINTMENTS_KEY) || '[]');
+            const myApps = allApps.filter((a: any) => a.patientEmail === userEmail);
+            setAppointments(myApps);
         };
 
         const timeout = setTimeout(() => {

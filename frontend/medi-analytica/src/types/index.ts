@@ -9,6 +9,7 @@ export interface User {
     gender?: string;
     birthDate?: string;
     profileImage?: string;
+    specialty?: string;
 }
 
 export interface AnalysisItem {
@@ -18,6 +19,7 @@ export interface AnalysisItem {
     result: string;
     confidence: number;
     isFavorite: boolean;
+    image?: string;
 }
 
 export interface Appointment {
@@ -34,3 +36,15 @@ export interface Appointment {
     status: 'approved' | 'pending' | 'cancelled' | 'rejected';
     timestamp: number;
 }
+
+export interface Message {
+    id: number;
+    senderEmail: string;
+    senderName: string;
+    senderRole: 'Üye' | 'doktor';
+    receiverEmail: string;
+    content: string;
+    timestamp: number;
+    isRead: boolean;
+}
+

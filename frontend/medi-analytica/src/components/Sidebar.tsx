@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, History, Star, Calendar, Menu, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, BarChart2, History, Star, Calendar, Menu, Settings, LogOut, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
 
 export default function Sidebar() {
     const { user, logout } = useAuth();
@@ -16,6 +17,7 @@ export default function Sidebar() {
         return true;
     });
     const [mounted, setMounted] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     if (!user) return null;
 
@@ -24,12 +26,14 @@ export default function Sidebar() {
     const menuItems = isDoctor ? [
         { name: 'Genel Bakış', href: '/doctor-dashboard', icon: <LayoutDashboard size={23} /> },
         { name: 'Randevular', href: '/doctor-dashboard/randevular', icon: <Calendar size={23} /> },
+        { name: 'Mesajlar', href: '/doctor-dashboard/mesajlar', icon: <MessageSquare size={23} /> },
     ] : [
         { name: 'Genel Bakış', href: '/dashboard', icon: <LayoutDashboard size={23} /> },
         { name: 'Analiz Et', href: '/dashboard/analiz-et', icon: <BarChart2 size={23} /> },
         { name: 'Analiz Geçmişi', href: '/dashboard/analiz-gecmisi', icon: <History size={23} /> },
         { name: 'Yıldızlı Analizler', href: '/dashboard/yildizli-analiz', icon: <Star size={23} /> },
         { name: 'Randevular', href: '/dashboard/randevular', icon: <Calendar size={23} /> },
+        { name: 'Mesajlar', href: '/dashboard/mesajlar', icon: <MessageSquare size={23} /> },
     ];
 
     useEffect(() => {
@@ -44,6 +48,20 @@ export default function Sidebar() {
         }, 0);
         return () => clearTimeout(timeout);
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!user) return;
+        
+        const fetchUnread = async () => {
+            const msgs = await api.getMessages(user.email);
+            const unread = msgs.filter(m => m.receiverEmail === user.email && m.senderRole !== user.role && !m.isRead).length;
+            setUnreadCount(unread);
+        };
+
+        fetchUnread();
+        const interval = setInterval(fetchUnread, 2000);
+        return () => clearInterval(interval);
+    }, [user]);
 
     const toggle = () => {
         const next = !isOpen;
@@ -114,8 +132,20 @@ export default function Sidebar() {
                                         : 'text-slate-400 hover:bg-slate-800/80 hover:text-white'}
                                 `}
                             >
-                                {item.icon}
-                                {isOpen && <span className="ml-3.5 text-[15px] font-semibold tracking-wide">{item.name}</span>}
+                                <div className="relative flex items-center justify-center">
+                                    {item.icon}
+                                    {!isOpen && item.name === 'Mesajlar' && unreadCount > 0 && (
+                                        <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-bold min-w-4 h-4 px-1 flex items-center justify-center rounded-full shadow-sm border border-[#0f172a]">
+                                            {unreadCount}
+                                        </span>
+                                    )}
+                                </div>
+                                {isOpen && <span className="ml-3.5 text-[15px] font-semibold tracking-wide flex-1">{item.name}</span>}
+                                {isOpen && item.name === 'Mesajlar' && unreadCount > 0 && (
+                                     <span className="bg-rose-500 text-white text-[10px] font-bold min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full shadow-sm">
+                                         {unreadCount}
+                                     </span>
+                                )}
                             </Link>
                         )
                     })}

@@ -1,14 +1,25 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-import { UploadCloud, CheckCircle2, Activity, Sparkles, X, FileScan, Brain, Eye, Bone, Layers } from 'lucide-react';
+import { UploadCloud, CheckCircle2, Activity, Sparkles, X, FileScan, Brain, Eye, Bone, Layers, Stethoscope, Info, AlertTriangle, User, Calendar } from 'lucide-react';
 import Image from 'next/image';
 import { getUserKeys } from '@/lib/userStorage';
+import { notify } from '@/lib/notifications';
+import { getSymptomHintsWithFallback, DiseaseType } from '@/lib/analysisSymptom';
+import { storage } from '@/lib/firebase';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { compressImage } from '@/lib/utils';
+import { generateAnalysisPDF } from '@/lib/pdfGenerator';
 
-interface AnalysisResultData {
+interface AnalysisPossibility {
     prediction: string;
     confidence: number;
+}
+
+interface AnalysisResultData {
+    possibilities: AnalysisPossibility[];
 }
 
 interface AnalysisItem {
@@ -18,6 +29,7 @@ interface AnalysisItem {
     result: string;
     confidence: number;
     isFavorite: boolean;
+    image?: string;
 }
 
 export default function AnalizEtPage() {
@@ -26,21 +38,46 @@ export default function AnalizEtPage() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<AnalysisResultData | null>(null);
+    const [patientEmail, setPatientEmail] = useState('');
+
+    useEffect(() => {
+        const userStr = localStorage.getItem('currentUser');
+        if (userStr) {
+            try {
+                const user = JSON.parse(userStr);
+                setPatientEmail(user.email || '');
+            } catch (e) { }
+        }
+    }, []);
 
     const diseases = [
-        { id: 'deri', name: 'Deri', icon: <Layers size={20} /> },
-        { id: 'akciger', name: 'Akciğer', icon: <Activity size={20} /> },
-        { id: 'kemik', name: 'Kemik', icon: <Bone size={20} /> },
-        { id: 'beyin', name: 'Beyin', icon: <Brain size={20} /> },
-        { id: 'goz', name: 'Göz', icon: <Eye size={20} /> }
+        { id: 'deri', name: 'Deri', icon: <Layers size={20} />, type: 'skin' as DiseaseType },
+        { id: 'akciger', name: 'Akciğer', icon: <Activity size={20} />, type: 'lung' as DiseaseType },
+        { id: 'kemik', name: 'Kemik', icon: <Bone size={20} />, type: 'bone' as DiseaseType },
+        { id: 'beyin', name: 'Beyin', icon: <Brain size={20} />, type: 'brain' as DiseaseType },
+        { id: 'goz', name: 'Göz', icon: <Eye size={20} />, type: 'eye' as DiseaseType }
     ];
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            setSelectedFile(file);
-            setPreviewUrl(URL.createObjectURL(file));
-            setResult(null);
+            try {
+                const compressedFile = await compressImage(file, 800, 0.7);
+                setSelectedFile(compressedFile);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setPreviewUrl(reader.result as string);
+                };
+                reader.readAsDataURL(compressedFile);
+                setResult(null);
+            } catch (error) {
+                console.error("Görüntü sıkıştırma hatası:", error);
+                setSelectedFile(file);
+                const reader = new FileReader();
+                reader.onloadend = () => setPreviewUrl(reader.result as string);
+                reader.readAsDataURL(file);
+                setResult(null);
+            }
         }
     };
 
@@ -51,24 +88,35 @@ export default function AnalizEtPage() {
         setSelected(''); // opsiyonel olarak seçimi de silebiliriz, ama kalsın derseniz bu satırı çıkarabilirsiniz.
     };
 
-    const saveToHistory = (analysisResult: AnalysisResultData) => {
+    const saveToHistory = (analysisResult: AnalysisResultData, imageUrl?: string) => {
         const { historyKey } = getUserKeys();
         const storedData = localStorage.getItem(historyKey);
         let history: AnalysisItem[] = [];
         if (storedData) history = JSON.parse(storedData);
 
+        const mainResult = analysisResult.possibilities[0];
         const selectedCategoryName = diseases.find(d => d.id === selected)?.name || "Bilinmeyen Tarama";
-        const newRecord = {
+
+        const newRecord: AnalysisItem = {
             id: Date.now(),
             createdAt: new Date().toISOString(),
             category: selectedCategoryName,
-            result: analysisResult.prediction || "Analiz Sonucu",
-            confidence: analysisResult.confidence || 0,
+            result: mainResult.prediction || "Analiz Sonucu",
+            confidence: mainResult.confidence || 0,
             isFavorite: false,
+            image: imageUrl || undefined
         };
 
         history.unshift(newRecord);
-        localStorage.setItem(historyKey, JSON.stringify(history));
+        try {
+            localStorage.setItem(historyKey, JSON.stringify(history));
+        } catch (e) {
+            console.error("Local Storage Kotası Dolu:", e);
+            // Eğer resim çok büyükse resmi söküp kaydetmeyi dene
+            const reducedHistory = history.map((item, idx) => idx === 0 ? { ...item, image: undefined } : item);
+            localStorage.setItem(historyKey, JSON.stringify(reducedHistory));
+            notify.warning("Görüntü boyutu çok büyük olduğu için geçmişe resimsiz kaydedildi.");
+        }
     };
 
     const handleStartAnalysis = async () => {
@@ -78,34 +126,86 @@ export default function AnalizEtPage() {
         formData.append('file', selectedFile);
         formData.append('type', selected);
 
+        let finalImageUrl = "";
+
         try {
+            // Firebase Storage'a yükleme işlemi
+            if (previewUrl) {
+                try {
+                    const storageRef = ref(storage, `analysis/img_${Date.now()}`);
+                    const uploadTask = await uploadString(storageRef, previewUrl, 'data_url');
+                    finalImageUrl = await getDownloadURL(uploadTask.ref);
+                } catch (storageError) {
+                    console.error("Firebase Storage Hatası:", storageError);
+                    finalImageUrl = previewUrl; // Hata olursa base64 kullan
+                }
+            }
+
             const response = await fetch('http://localhost:8080/api/analyze', {
                 method: 'POST',
                 body: formData,
             });
             if (response.ok) {
                 const data = await response.json();
-                setResult(data);
-                saveToHistory(data);
+                const normalizedData = data.possibilities ? data : { possibilities: [data] };
+                setResult(normalizedData);
+                saveToHistory(normalizedData, finalImageUrl);
+                setLoading(false);
+                notify.analysisComplete('success', 'Analiz sonuçlarınız başarıyla hazırlandı.');
             } else {
-                // Eğer sunucu açık değilse demo amaçlı sahte sonuç üret (tasarımın görülmesi için)
+                // Eğer sunucu açık değilse demo amaçlı sahte sonuç üret
                 setTimeout(() => {
-                    const fakeResult = { prediction: "Belirgin Hücresel Anomali", confidence: 91.4 };
+                    let prediction = "Bilinmeyen Durum";
+                    if (selected === 'deri') prediction = "mel";
+                    else if (selected === 'akciger') prediction = "COVID-19";
+                    else if (selected === 'kemik') prediction = "Fracture";
+                    else if (selected === 'beyin') prediction = "glioma";
+                    else if (selected === 'goz') prediction = "DME";
+
+                    const fakeResult: AnalysisResultData = {
+                        possibilities: [
+                            { prediction: prediction, confidence: 92.4 },
+                            { prediction: "Benign Doku Formasyonu", confidence: 5.2 },
+                            { prediction: "Diğer", confidence: 2.4 }
+                        ]
+                    };
+
                     setResult(fakeResult);
-                    saveToHistory(fakeResult);
+                    saveToHistory(fakeResult, finalImageUrl);
                     setLoading(false);
-                }, 2500);
+                    notify.analysisComplete('success', 'Analiz sonuçlarınız hazırlandı (Demo Modu).');
+                }, 2000);
             }
         } catch (error) {
             console.error("Analiz Hatası:", error);
-            // Eğer sunucuya ulaşılamıyorsa da tasarımı sergilemek adına demo beklemesi
             setTimeout(() => {
-                const demoResult = { prediction: "Plevral Efüzyon / Nodül (Örnek Teşhis)", confidence: 88.5 };
+                let prediction = "Bilinmeyen Durum";
+                if (selected === 'deri') prediction = "mel";
+                else if (selected === 'akciger') prediction = "Non-COVID";
+                else if (selected === 'kemik') prediction = "Malignant_Tumor";
+                else if (selected === 'beyin') prediction = "meningioma";
+                else if (selected === 'goz') prediction = "CNV";
+
+                const demoResult: AnalysisResultData = {
+                    possibilities: [
+                        { prediction: prediction, confidence: 88.5 },
+                        { prediction: "Vasküler Konjesyon", confidence: 8.3 },
+                        { prediction: "Kalsifikasyon Belirtileri", confidence: 3.2 }
+                    ]
+                };
                 setResult(demoResult);
-                saveToHistory(demoResult);
+                saveToHistory(demoResult, finalImageUrl);
                 setLoading(false);
-            }, 2500);
+                notify.analysisComplete('success', 'Analiz sonuçlarınız hazırlandı (Demo Modu).');
+            }, 2000);
         }
+    };
+
+    const handleDownloadPDF = async () => {
+        if (!result || !selected) return;
+        const diseaseInfo = diseases.find(d => d.id === selected);
+        const diseaseName = diseaseInfo?.name || selected;
+        await generateAnalysisPDF(result, diseaseName, diseaseInfo?.type, patientEmail, notify);
     };
 
     return (
@@ -119,7 +219,7 @@ export default function AnalizEtPage() {
                     <p className="text-slate-500 mt-2 font-medium">Biyomedikal görselleri analiz edin ve saniyeler içinde anında teşhis destek raporu alın.</p>
                 </header>
 
-                <div className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 pb-10">
+                <div id="pdf-content" className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 pb-10">
 
                     {/* SOL KOLON: Giriş & Ayarlar */}
                     <div className="lg:col-span-7 space-y-8">
@@ -194,13 +294,19 @@ export default function AnalizEtPage() {
                                 )}
                             </div>
                         </section>
+
+                        {/* DESKTOP BİLGİLENDİRME: Adım 2'nin hemen altında */}
+                        {result && (
+                            <div className="hidden lg:block">
+                                <InfoSection selected={selected} result={result} />
+                            </div>
+                        )}
                     </div>
 
                     {/* SAĞ KOLON: Önizleme & Sonuç Raporu */}
-                    <div className="lg:col-span-5">
+                    <div className="lg:col-span-5 lg:row-span-2">
+                        {/* ... (AI Panel içeriği aynı kalacak) ... */}
                         <div className="bg-[#0f172a] rounded-[40px] p-8 h-full min-h-[500px] flex flex-col relative overflow-hidden shadow-2xl border border-slate-800">
-
-                            {/* Dekoratif Arka Plan Işıkları */}
                             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
                             <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none"></div>
 
@@ -209,7 +315,6 @@ export default function AnalizEtPage() {
                                     <Sparkles size={18} className="text-blue-400" /> YAPAY ZEKA PANELİ
                                 </h3>
 
-                                {/* Büyük Görüntü Önizleme Alanı */}
                                 <div className="w-full aspect-square bg-slate-900/80 rounded-3xl border border-slate-700/50 mb-8 relative overflow-hidden flex items-center justify-center shadow-inner">
                                     {!previewUrl ? (
                                         <div className="text-center text-slate-600 p-6 flex flex-col items-center">
@@ -225,7 +330,6 @@ export default function AnalizEtPage() {
                                                 <Image src={previewUrl} alt="Preview" fill className="object-contain z-0 transition-all duration-700" />
                                                 {loading && (
                                                     <div className="absolute inset-0 bg-blue-900/30 z-10 backdrop-blur-[1px]">
-                                                        {/* Lazer Tarama Animasyonu */}
                                                         <div className="w-full h-[2px] bg-cyan-400 shadow-[0_0_20px_3px_rgba(34,211,238,0.8)] absolute top-0 animate-[scan_2.5s_ease-in-out_infinite]" />
                                                     </div>
                                                 )}
@@ -234,7 +338,6 @@ export default function AnalizEtPage() {
                                     )}
                                 </div>
 
-                                {/* Analiz Butonu / Sonuç Alanı */}
                                 <div className="mt-auto">
                                     {!result ? (
                                         <button
@@ -252,43 +355,204 @@ export default function AnalizEtPage() {
                                                     <span className="w-4 h-4 rounded-full border-2 border-t-blue-300 border-r-blue-300 border-b-transparent border-l-transparent animate-spin"></span>
                                                     ANALİZ EDİLİYOR...
                                                 </span>
-                                            ) : 'YAPAY ZEKA ANALİZİNİ BAŞLAT'}
+                                            ) : 'ANALİZİ BAŞLAT'}
                                         </button>
                                     ) : (
-                                        <div className="bg-slate-800/80 backdrop-blur-xl rounded-3xl p-6 border border-emerald-500/20 animate-in fade-in slide-in-from-bottom-6 shadow-2xl shadow-emerald-900/20">
-                                            <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-5">
-                                                <div>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-500" /> Yapay Zeka Teşhisi</p>
-                                                    <p className="text-lg md:text-xl font-black text-white leading-tight">{result.prediction}</p>
-                                                </div>
-                                                <div className="bg-emerald-500/10 px-4 py-2.5 rounded-2xl border border-emerald-500/20 text-center min-w-[80px]">
-                                                    <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-0.5">Güven</p>
-                                                    <p className="text-lg font-black text-emerald-300">%{result.confidence}</p>
-                                                </div>
+                                        <div className="bg-slate-800/80 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50 animate-in fade-in slide-in-from-bottom-6 shadow-2xl relative overflow-hidden">
+                                            <div className="flex items-center gap-2 mb-6 text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px]">
+                                                <Activity size={14} className="text-blue-400" /> Tahmini Teşhis Listesi
                                             </div>
-                                            <button onClick={() => { setResult(null); clearSelection(); }} className="w-full py-3.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-sm transition-colors border border-slate-600">
-                                                Yeni Bir Görüntü İncele
-                                            </button>
+
+                                            <div className="space-y-4 mb-8">
+                                                {[...result.possibilities].sort((a, b) => b.confidence - a.confidence).map((p, index) => (
+                                                    <div
+                                                        key={index}
+                                                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${index === 0
+                                                            ? 'bg-blue-600/10 border-blue-500/30 ring-1 ring-blue-500/20'
+                                                            : 'bg-slate-900/50 border-slate-800'
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center gap-4 overflow-hidden">
+                                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-black text-xs ${index === 0 ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/40' : 'bg-slate-800 text-slate-500'
+                                                                }`}>
+                                                                {index + 1}.
+                                                            </div>
+                                                            <p className={`text-sm font-bold truncate ${index === 0 ? 'text-white' : 'text-slate-300'}`}>
+                                                                {p.prediction}
+                                                            </p>
+                                                        </div>
+                                                        <div className={`text-right shrink-0 ml-4 flex flex-col items-end gap-1`}>
+
+                                                            <span className={`text-[9px] font-bold uppercase tracking-tighter px-1 ${index === 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                                                {(() => {
+                                                                    if (index === 0) return 'YÜKSEK OLASILIK';
+                                                                    const val = p.confidence > 1 ? p.confidence : p.confidence * 100;
+                                                                    if (val < 5) return 'ÇOK DÜŞÜK OLASILIK';
+                                                                    if (val < 15) return 'DÜŞÜK OLASILIK';
+                                                                    if (val < 49) return 'ORTA İHTİMAL';
+                                                                    return 'YÜKSEK OLASILIK';
+                                                                })()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex gap-3">
+                                                <button
+                                                    onClick={() => { setResult(null); clearSelection(); }}
+                                                    className="flex-1 py-4 bg-white/10 hover:bg-white/20 text-white font-black rounded-2xl text-[11px] tracking-widest transition-all border border-white/10 uppercase"
+                                                >
+                                                    YENİ ANALİZ BAŞLAT
+                                                </button>
+                                                <button
+                                                    onClick={handleDownloadPDF}
+                                                    className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl text-[11px] tracking-widest transition-all shadow-[0_10px_30px_-10px_rgba(16,185,129,0.5)] hover:shadow-[0_15px_40px_-10px_rgba(16,185,129,0.7)] hover:-translate-y-1 uppercase flex items-center justify-center gap-2"
+                                                >
+                                                    <UploadCloud size={14} className="rotate-180" /> PDF İNDİR
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
-
                             </div>
                         </div>
                     </div>
+
+                    {/* MOBILE BİLGİLENDİRME: Mobilde en altta görünür */}
+                    {result && (
+                        <div className="lg:hidden">
+                            <InfoSection selected={selected} result={result} />
+                        </div>
+                    )}
                 </div>
             </main>
 
-            {/* CSS Animasyonu */}
-            <style dangerouslySetInnerHTML={{
-                __html: `
-                @keyframes scan {
-                    0% { top: 0; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0; }
-                }
-            `}} />
+        </div>
+    );
+}
+
+// Bilgilendirme Bölümü Bileşeni (Tekrarı önlemek için)
+function InfoSection({ selected, result }: { selected: string, result: AnalysisResultData }) {
+    const router = useRouter();
+    const [registeredDocs, setRegisteredDocs] = useState<any[]>([]);
+
+    useEffect(() => {
+        const docs = JSON.parse(localStorage.getItem('registeredDoctors') || '[]');
+        setRegisteredDocs(docs);
+    }, []);
+
+    const diseases = [
+        { id: 'deri', name: 'Deri', type: 'skin' as DiseaseType, fullName: 'Deri (Lezyon / Ben)' },
+        { id: 'akciger', name: 'Akciğer', type: 'lung' as DiseaseType, fullName: 'Akciğer (BT / X-Ray)' },
+        { id: 'kemik', name: 'Kemik', type: 'bone' as DiseaseType, fullName: 'Kemik (Röntgen / Tarama)' },
+        { id: 'beyin', name: 'Beyin', type: 'brain' as DiseaseType, fullName: 'Beyin (MR / BT)' },
+        { id: 'goz', name: 'Göz', type: 'eye' as DiseaseType, fullName: 'Göz (Retina / Tarama)' }
+    ];
+
+    const sortedPossibilities = [...result.possibilities].sort((a, b) => b.confidence - a.confidence);
+    const topResult = sortedPossibilities[0];
+    const diseaseInfo = diseases.find(d => d.id === selected);
+    const hints = getSymptomHintsWithFallback(diseaseInfo?.type, topResult.prediction);
+
+    // Branş eşleştirmesi
+    const branchMap: Record<string, string> = {
+        'deri': 'Dermatoloji',
+        'akciger': 'Göğüs Hastalıkları',
+        'kemik': 'Ortopedi',
+        'beyin': 'Nöroloji',
+        'goz': 'Göz Hastalıkları'
+    };
+
+    const currentBranch = branchMap[selected] || 'Genel Cerrahi';
+
+    // Kayıtlı doktorları filtrele
+    const recommendedDoctors = registeredDocs
+        .filter(doc => doc.specialty && (doc.specialty.toLowerCase().includes(currentBranch.toLowerCase()) || currentBranch.toLowerCase().includes(doc.specialty.toLowerCase())))
+        .map(doc => ({ name: doc.name, branch: doc.specialty }));
+
+    const handleQuickAppointment = (docName: string, branch: string) => {
+        const analysisName = diseaseInfo?.fullName || "";
+        const encodedDoc = encodeURIComponent(`${docName} (${branch})`);
+        const encodedAnalysis = encodeURIComponent(analysisName);
+        router.push(`/dashboard/randevular?doctor=${encodedDoc}&analysis=${encodedAnalysis}`);
+    };
+
+    return (
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-10">
+            {/* General Information */}
+            <div className="bg-rose-500/10 rounded-[24px] p-5 border border-rose-500/20 shadow-sm">
+                <h4 className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <AlertTriangle size={16} /> Bilgilendirme
+                </h4>
+                <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                    Aşağıdaki maddeler yalnızca genel bilgilendirme amaçlıdır; tıbbi tanı veya tedavi önerisi değildir.
+                    Metinler, en yüksek olasılıklı tahmin (<strong>{hints.title}</strong>) dikkate alınarak üretilmiştir.
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Symptoms */}
+                <div className="bg-blue-500/5 rounded-[24px] p-5 border border-blue-500/10 shadow-sm">
+                    <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Stethoscope size={16} /> Olası Belirtiler
+                    </h4>
+                    <ul className="space-y-2">
+                        {hints.symptoms.map((s, i) => (
+                            <li key={i} className="flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed font-medium">
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                                {s}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                {/* Pre-check Recommendations */}
+                <div className="bg-emerald-500/5 rounded-[24px] p-5 border border-emerald-500/10 shadow-sm">
+                    <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <CheckCircle2 size={16} /> Ön Kontrol Önerileri
+                    </h4>
+                    <ul className="space-y-2">
+                        {hints.tips.map((t, i) => (
+                            <li key={i} className="flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed font-medium">
+                                <div className="w-1.5 h-1.5 rounded-full border border-emerald-500/50 mt-1.5 shrink-0" />
+                                {t}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
+
+            {/* Recommended Doctors */}
+            <div className="bg-white rounded-[24px] p-5 border border-slate-200 shadow-sm">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <Stethoscope size={16} className="text-blue-500" /> İlgİlİ Uzman Görüşü Alın
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {recommendedDoctors.map((doc, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-all group">
+                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-blue-600 shrink-0 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                <User size={20} />
+                            </div>
+                            <div className="overflow-hidden">
+                                <p className="text-[11px] font-black text-slate-800 truncate">{doc.name}</p>
+                                <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tighter">{doc.branch}</p>
+                            </div>
+                            <button
+                                onClick={() => handleQuickAppointment(doc.name, doc.branch)}
+                                className="ml-auto px-3 py-1.5 rounded-full bg-white border border-slate-200 text-[10px] font-black text-slate-500 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm flex items-center gap-1.5"
+                            >
+                                <Calendar size={12} /> RANDEVU AL
+                            </button>
+                        </div>
+                    ))}
+                    {recommendedDoctors.length === 0 && (
+                        <p className="text-xs text-slate-500 font-medium col-span-2 py-4 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                            Bu branşta ({currentBranch}) henüz kayıtlı bir uzman doktor bulunmamaktadır.
+                        </p>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }

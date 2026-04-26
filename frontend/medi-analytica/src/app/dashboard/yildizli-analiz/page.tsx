@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearch } from "@/contexts/SearchContext";
 import { getUserKeys } from "@/lib/userStorage";
+import { notify } from '@/lib/notifications';
 import { AnalysisItem } from '@/types';
 import {
     Activity,
@@ -24,6 +25,15 @@ export default function YildizliAnalizler() {
 
     const toggleFavorite = (id: number) => {
         setHistory(prev => {
+            const itemToToggle = prev.find(item => item.id === id);
+            if (itemToToggle) {
+                if (itemToToggle.isFavorite) {
+                    notify.info("Yıldızlı analizlerden çıkarıldı");
+                } else {
+                    notify.success("Yıldızlı analizlere eklendi");
+                }
+            }
+
             const newHistory = prev.map(item =>
                 item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
             );

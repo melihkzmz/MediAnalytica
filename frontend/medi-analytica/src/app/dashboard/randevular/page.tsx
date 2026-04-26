@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useSearchParams } from 'next/navigation';
 
 import {
     CalendarCheck,
@@ -27,8 +28,17 @@ import { Appointment, User as Doctor } from '@/types';
 
 
 export default function RandevularPage() {
+    return (
+        <Suspense fallback={<div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-indigo-600" size={48} /></div>}>
+            <RandevularContent />
+        </Suspense>
+    );
+}
+
+function RandevularContent() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
+    const searchParams = useSearchParams();
 
     // Modallar
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -41,6 +51,18 @@ export default function RandevularPage() {
     const [selectedDate, setSelectedDate] = useState("");
     const [selectedTime, setSelectedTime] = useState("");
     const [isSubmitted, setIsSubmitted] = useState(false);
+
+    // URL'den gelen parametreleri kontrol et
+    useEffect(() => {
+        const doctorParam = searchParams.get('doctor');
+        const analysisParam = searchParams.get('analysis');
+
+        if (doctorParam || analysisParam) {
+            if (doctorParam) setSelectedDoctor(doctorParam);
+            if (analysisParam) setSelectedAnalysis(analysisParam);
+            setIsBookingModalOpen(true);
+        }
+    }, [searchParams]);
 
     // Query: Doktorlar
     const { data: registeredDoctors = [] } = useQuery({
@@ -233,27 +255,36 @@ export default function RandevularPage() {
                                         >
                                             <option value="" disabled>{selectedAnalysis ? "Doktor seçin" : "Önce yukarıdan tahlil türünü belirleyin"}</option>
 
-                                            {/* Hardcoded varsayılan doktorlar */}
-                                            {selectedAnalysis === "Kemik (Röntgen / Tarama)" && (
-                                                <option value="Prof. Dr. Ertuğrul (Ortopedi)">Prof. Dr. Ertuğrul (Ortopedi)</option>
-                                            )}
-                                            {selectedAnalysis === "Akciğer (BT / X-Ray)" && (
-                                                <option value="Uzm. Dr. Mehmet K. (Göğüs Hastalıkları)">Uzm. Dr. Mehmet K. (Göğüs Hastalıkları)</option>
-                                            )}
-                                            {selectedAnalysis === "Deri (Lezyon / Ben)" && (
-                                                <option value="Doç. Dr. Ayşe Y. (Dermatoloji)">Doç. Dr. Ayşe Y. (Dermatoloji)</option>
-                                            )}
-                                            {selectedAnalysis === "Beyin (MR / BT)" && (
-                                                <option value="Prof. Dr. Selçuk (Nöroloji)">Prof. Dr. Selçuk (Nöroloji)</option>
-                                            )}
-                                            {selectedAnalysis === "Göz (Retina / Tarama)" && (
-                                                <option value="Doç. Dr. Canan (Oftalmoloji)">Doç. Dr. Canan (Oftalmoloji)</option>
-                                            )}
+                                            {/* Sisteme kayıtlı doktorları analize göre filtreleyerek göster */}
+                                            {registeredDoctors
+                                                .filter((doc: any) => {
+                                                    if (!selectedAnalysis) return true;
+                                                    const specialty = (doc.specialty || "").toLowerCase();
+                                                    if (selectedAnalysis.includes("Kemik") && specialty.includes("ortopedi")) return true;
+                                                    if (selectedAnalysis.includes("Akciğer") && specialty.includes("göğüs")) return true;
+                                                    if (selectedAnalysis.includes("Deri") && specialty.includes("dermatoloji")) return true;
+                                                    if (selectedAnalysis.includes("Beyin") && specialty.includes("nöroloji")) return true;
+                                                    if (selectedAnalysis.includes("Göz") && specialty.includes("göz")) return true;
+                                                    return false;
+                                                })
+                                                .map((doc: Doctor, i: number) => (
+                                                    <option key={i} value={`${doc.name} (${doc.specialty})`}>
+                                                        {doc.name} - {doc.specialty}
+                                                    </option>
+                                                ))
+                                            }
 
-                                            {/* Sisteme kayıtlı doktorlar */}
-                                            {registeredDoctors.map((doc: Doctor, i: number) => (
-                                                <option key={i} value={`${doc.name}`}>{doc.name}</option>
-                                            ))}
+                                            {registeredDoctors.length > 0 && selectedAnalysis && registeredDoctors.filter((doc: any) => {
+                                                const specialty = (doc.specialty || "").toLowerCase();
+                                                if (selectedAnalysis.includes("Kemik") && specialty.includes("ortopedi")) return true;
+                                                if (selectedAnalysis.includes("Akciğer") && specialty.includes("göğüs")) return true;
+                                                if (selectedAnalysis.includes("Deri") && specialty.includes("dermatoloji")) return true;
+                                                if (selectedAnalysis.includes("Beyin") && specialty.includes("nöroloji")) return true;
+                                                if (selectedAnalysis.includes("Göz") && specialty.includes("göz")) return true;
+                                                return false;
+                                            }).length === 0 && (
+                                                <option disabled>Bu branşta kayıtlı uzman bulunamadı</option>
+                                            )}
                                         </select>
                                     </div>
                                 </div>
@@ -393,10 +424,10 @@ export default function RandevularPage() {
                                             </div>
 
                                             {/* Action Buttons */}
-                                            {app.status === 'approved' && (
+                                            {(app.status === 'approved' || app.status === 'pending') && (
                                                 <div className="mt-6 pt-5 border-t border-slate-100 flex justify-end gap-3">
 
-                                                    {timeHasCome && (
+                                                    {app.status === 'approved' && timeHasCome && (
                                                         <button
                                                             onClick={() => joinMeeting(app.id)}
                                                             className="flex-1 px-5 py-3 rounded-xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)] transform hover:-translate-y-1"
@@ -413,7 +444,7 @@ export default function RandevularPage() {
                                                         onClick={() => cancelAppointment(app.id)}
                                                         className="px-5 py-3 rounded-xl text-xs font-bold text-rose-500 bg-rose-50 hover:bg-rose-500 hover:text-white transition-colors flex items-center justify-center gap-2 border border-rose-100 hover:border-transparent shrink-0"
                                                     >
-                                                        <Trash2 size={14} /> İptal Et
+                                                        <Trash2 size={14} /> Randevuyu İptal Et
                                                     </button>
                                                 </div>
                                             )}
