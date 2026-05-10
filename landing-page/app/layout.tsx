@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { EmailVerificationReminder } from '@/components/EmailVerificationReminder'
+import FloatingHelpBot from '@/components/FloatingHelpBot'
 
 export const metadata: Metadata = {
   title: 'MediAnalytica - Yapay Zeka Destekli Tıbbi Görüntü Analizi',
@@ -17,6 +18,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <EmailVerificationReminder />
         {children}
+        <FloatingHelpBot />
       </body>
     </html>
   )
