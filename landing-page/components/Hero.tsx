@@ -31,7 +31,7 @@ export default function Hero() {
             {/* Buttons */}
             <div className="flex flex-col sm:flex-row gap-4">
             <Link
-              href="/dashboard#analyze"
+              href="/dashboard/analyze"
               className="bg-primary hover:bg-primary-dark text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               Ücretsiz Analiz Başlat

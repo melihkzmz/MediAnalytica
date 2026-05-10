@@ -17,7 +17,7 @@ export default function CTA() {
         {/* Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
             <Link
-              href="/dashboard#analyze"
+              href="/dashboard/analyze"
               className="bg-white text-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-semibold text-lg transition-all shadow-lg hover:shadow-xl"
             >
               Ücretsiz Analiz Başlat

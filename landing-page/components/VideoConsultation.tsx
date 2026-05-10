@@ -76,7 +76,7 @@ export default function VideoConsultation() {
             {/* Buttons */}
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
-                href="/dashboard#appointment"
+                href="/dashboard/appointment"
                 className="bg-primary hover:bg-primary-dark text-white px-8 py-4 rounded-xl font-semibold text-center transition-all shadow-lg hover:shadow-xl"
               >
                 Randevu Al

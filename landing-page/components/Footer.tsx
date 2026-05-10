@@ -31,7 +31,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard#analyze" className="hover:text-white transition-colors">
+                <Link href="/dashboard/analyze" className="hover:text-white transition-colors">
                   Analiz Yap
                 </Link>
               </li>

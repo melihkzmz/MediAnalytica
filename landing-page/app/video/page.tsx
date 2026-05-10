@@ -10,6 +10,8 @@ import Link from 'next/link'
 import { shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import { sanitizeVideoReturnTo } from '@/lib/videoMeetingUrl'
 import { markAppointmentCompletedOnCallLeave } from '@/lib/markAppointmentCompletedOnCallLeave'
+import { sectionToPath } from '@/app/dashboard/dashboardRoutes'
+import { isSection, type Section } from '@/app/dashboard/sections'
 
 declare global {
   interface Window {
@@ -30,12 +32,11 @@ function navigateAfterMeeting(router: ReturnType<typeof useRouter>, returnPath: 
   }
   const pathname = returnPath.slice(0, hashIndex) || '/dashboard'
   const hash = returnPath.slice(hashIndex + 1)
-  router.replace(pathname)
-  if (typeof window !== 'undefined' && hash) {
-    queueMicrotask(() => {
-      window.location.hash = hash
-    })
+  if ((pathname === '/dashboard' || pathname === '/dashboard/') && hash && isSection(hash)) {
+    router.replace(sectionToPath(hash as Section))
+    return
   }
+  router.replace(pathname || '/dashboard')
 }
 
 function VideoConferenceContent() {
@@ -78,8 +79,8 @@ function VideoConferenceContent() {
       } catch (e) {
         console.error('Could not mark appointment completed after call:', e)
       }
-      const historyHash = isDoctorRef.current ? 'appointment-history' : 'patient-appointment-history'
-      navigateAfterMeeting(router, `/dashboard#${historyHash}`)
+      const historySection = (isDoctorRef.current ? 'appointment-history' : 'patient-appointment-history') as Section
+      router.replace(sectionToPath(historySection))
       return
     }
 

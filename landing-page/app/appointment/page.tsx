@@ -261,7 +261,7 @@ function AppointmentForm() {
       setPreferredDoctor(null)
       setAnalysisId(null)
       setAnalysisImageUrl(null)
-      router.push('/dashboard#patient-appointment-history')
+      router.push('/dashboard/patient-appointment-history')
     } catch (error: any) {
       console.error('Error creating appointment:', error)
       if (error.code === 'permission-denied') {

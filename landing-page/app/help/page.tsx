@@ -186,7 +186,7 @@ export default function HelpPage() {
                   <ArrowRight className="w-4 h-4 text-gray-400 ml-auto group-hover:text-blue-600" />
                 </Link>
                 <Link
-                  href="/dashboard#appointment"
+                  href="/dashboard/appointment"
                   className="flex items-center space-x-2 p-3 bg-white rounded-xl hover:shadow-md transition-all group"
                 >
                   <Calendar className="w-5 h-5 text-green-600" />

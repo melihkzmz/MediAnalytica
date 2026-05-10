@@ -51,19 +51,19 @@ export default function Navbar() {
             <Link href="/" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
               Ana Menü
             </Link>
-            <Link href="/dashboard#analyze" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
+            <Link href="/dashboard/analyze" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
               Analiz Yap
             </Link>
-            <Link href="/dashboard#history" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
+            <Link href="/dashboard/history" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
               Analiz Geçmişi
             </Link>
-            <Link href="/dashboard#favorites" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
+            <Link href="/dashboard/favorites" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
               Favoriler
             </Link>
-            <Link href="/dashboard#stats" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
+            <Link href="/dashboard/stats" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
               İstatistikler
             </Link>
-            <Link href="/dashboard#appointment" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
+            <Link href="/dashboard/appointment" className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium">
               Randevu Talep
             </Link>
           </div>
@@ -122,35 +122,35 @@ export default function Navbar() {
                 Ana Menü
               </Link>
               <Link 
-                href="/dashboard#analyze" 
+                href="/dashboard/analyze" 
                 className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Analiz Yap
               </Link>
               <Link 
-                href="/dashboard#history" 
+                href="/dashboard/history" 
                 className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Analiz Geçmişi
               </Link>
               <Link 
-                href="/dashboard#favorites" 
+                href="/dashboard/favorites" 
                 className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Favoriler
               </Link>
               <Link 
-                href="/dashboard#stats" 
+                href="/dashboard/stats" 
                 className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 İstatistikler
               </Link>
               <Link 
-                href="/dashboard#appointment" 
+                href="/dashboard/appointment" 
                 className="px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >

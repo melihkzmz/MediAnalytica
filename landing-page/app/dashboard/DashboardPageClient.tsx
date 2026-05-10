@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -29,12 +29,25 @@ import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
 import { clearEmailVerificationDeferred, shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import { buildVideoMeetingHref } from '@/lib/videoMeetingUrl'
+import { Section, isDoctorOnlySection, isPatientOnlySection } from './sections'
+import { useDashboardSectionNavigation } from './useDashboardSectionNavigation'
+import { sectionToPath } from './dashboardRoutes'
+import DashboardHomeSection from './_sections/DashboardHomeSection'
+import HistorySection from './_sections/HistorySection'
+import FavoritesSection from './_sections/FavoritesSection'
+import StatsSection from './_sections/StatsSection'
+import AppointmentSection from './_sections/AppointmentSection'
+import PatientAppointmentsSection from './_sections/PatientAppointmentsSection'
+import PatientAppointmentHistorySection from './_sections/PatientAppointmentHistorySection'
+import PendingAppointmentsSection from './_sections/PendingAppointmentsSection'
+import MyAppointmentsSection from './_sections/MyAppointmentsSection'
+import AppointmentHistorySection from './_sections/AppointmentHistorySection'
+import MyPatientsSection from './_sections/MyPatientsSection'
+import ProfileSection from './_sections/ProfileSection'
+import DoctorPeerMeetingsSection from './_sections/DoctorPeerMeetingsSection'
+import { DashboardSectionLink } from './_components/DashboardSectionLink'
 
 type DiseaseType = 'skin' | 'bone' | 'lung' | 'eye' | 'brain'
-type Section = 'dashboard' | 'analyze' | 'history' | 'favorites' | 'stats' | 'appointment' | 'profile' | 'messages' |
-               'my-appointments-patient' | 'patient-appointment-history' |
-               'pending-appointments' | 'my-appointments' | 'appointment-history' | 'my-patients' |
-               'doctor-peer-meetings'
 
 /** Maps analyze modality to appointment `doctorType` / doctors.specialty slug */
 const DISEASE_TO_DOCTOR_TYPE: Record<DiseaseType, string> = {
@@ -60,43 +73,13 @@ function doctorInitials(firstName?: string, lastName?: string): string {
   return '?'
 }
 
-export default function DashboardPage() {
+export function DashboardPageClient({ initialSection = 'dashboard' }: { initialSection?: Section }) {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [currentSection, setCurrentSection] = useState<Section>('dashboard')
+  const { currentSection } = useDashboardSectionNavigation(initialSection)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
-  // Initialize section from URL hash
-  useEffect(() => {
-    const hash = window.location.hash.replace('#', '')
-    const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
-                          'my-appointments-patient',
-                          'patient-appointment-history',
-                          'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients',
-                          'doctor-peer-meetings']
-    if (hash && validSections.includes(hash)) {
-      setCurrentSection(hash as Section)
-    }
-  }, [])
-
-  // Listen for hash changes
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '')
-      const validSections = ['dashboard', 'analyze', 'history', 'favorites', 'stats', 'appointment', 'profile', 'messages',
-                            'my-appointments-patient',
-                            'patient-appointment-history',
-                            'pending-appointments', 'my-appointments', 'appointment-history', 'my-patients',
-                            'doctor-peer-meetings']
-      if (hash && validSections.includes(hash)) {
-        setCurrentSection(hash as Section)
-      }
-    }
-    window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [])
   const [selectedDisease, setSelectedDisease] = useState<DiseaseType | null>(null)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -421,6 +404,19 @@ export default function DashboardPage() {
     })
     return () => unsubscribe()
   }, [router])
+
+  useEffect(() => {
+    if (loading || !user) return
+    if (isDoctorOnlySection(currentSection) && !isDoctor) {
+      showToast('Bu bölüm yalnızca doktor hesapları içindir.', 'warning')
+      router.replace(sectionToPath('dashboard'))
+      return
+    }
+    if (isPatientOnlySection(currentSection) && isDoctor) {
+      showToast('Bu bölüm yalnızca hasta hesapları içindir.', 'warning')
+      router.replace(sectionToPath('dashboard'))
+    }
+  }, [loading, user, isDoctor, currentSection, router])
 
   // MVP presence: heartbeat so other users can see Çevrimiçi / son görülme
   useEffect(() => {
@@ -1466,7 +1462,7 @@ export default function DashboardPage() {
       roomName,
       appointmentId: appointment.id,
       isDoctor,
-      returnTo: `/dashboard#${currentSection}`,
+      returnTo: sectionToPath(currentSection),
     })
     router.push(videoUrl)
   }
@@ -2388,14 +2384,11 @@ export default function DashboardPage() {
                     >
                       <div className="rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
                         {doctorAppointmentNavItems.map((item) => (
-                          <button
+                          <DashboardSectionLink
                             key={item.id}
-                            type="button"
-                            onClick={() => {
-                              setCurrentSection(item.id)
-                              window.location.hash = item.id
-                              setDoctorApptNavOpen(false)
-                            }}
+                            section={item.id}
+                            active={currentSection === item.id}
+                            onClick={() => setDoctorApptNavOpen(false)}
                             className={`relative flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
                               currentSection === item.id
                                 ? 'bg-blue-50 font-medium text-blue-700'
@@ -2424,7 +2417,7 @@ export default function DashboardPage() {
                                   <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" />
                                 )}
                             </span>
-                          </button>
+                          </DashboardSectionLink>
                         ))}
                       </div>
                     </div>
@@ -2434,13 +2427,10 @@ export default function DashboardPage() {
                     { id: 'my-patients' as const, label: 'Hastalarım' },
                     { id: 'messages' as const, label: 'Mesajlar' },
                   ].map((item) => (
-                    <button
+                    <DashboardSectionLink
                       key={item.id}
-                      type="button"
-                      onClick={() => {
-                        setCurrentSection(item.id)
-                        window.location.hash = item.id
-                      }}
+                      section={item.id}
+                      active={currentSection === item.id}
                       className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
                         currentSection === item.id
                           ? 'bg-blue-50 text-blue-600 font-medium'
@@ -2461,7 +2451,7 @@ export default function DashboardPage() {
                           <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                         )}
                       </span>
-                    </button>
+                    </DashboardSectionLink>
                   ))}
                 </>
               ) : (
@@ -2499,14 +2489,11 @@ export default function DashboardPage() {
                     >
                       <div className="rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
                         {patientAnalyzeNavItems.map((item) => (
-                          <button
+                          <DashboardSectionLink
                             key={item.id}
-                            type="button"
-                            onClick={() => {
-                              setCurrentSection(item.id)
-                              window.location.hash = item.id
-                              setPatientAnalyzeNavOpen(false)
-                            }}
+                            section={item.id}
+                            active={currentSection === item.id}
+                            onClick={() => setPatientAnalyzeNavOpen(false)}
                             className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
                               currentSection === item.id
                                 ? 'bg-blue-50 font-medium text-blue-700'
@@ -2519,7 +2506,7 @@ export default function DashboardPage() {
                               <History className="w-4 h-4 shrink-0 text-gray-500" />
                             )}
                             {item.label}
-                          </button>
+                          </DashboardSectionLink>
                         ))}
                       </div>
                     </div>
@@ -2528,13 +2515,10 @@ export default function DashboardPage() {
                     { id: 'favorites' as const, label: 'Favoriler' },
                     { id: 'stats' as const, label: 'İstatistikler' },
                   ].map((item) => (
-                    <button
+                    <DashboardSectionLink
                       key={item.id}
-                      type="button"
-                      onClick={() => {
-                        setCurrentSection(item.id)
-                        window.location.hash = item.id
-                      }}
+                      section={item.id}
+                      active={currentSection === item.id}
                       className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
                         currentSection === item.id
                           ? 'bg-blue-50 text-blue-600 font-medium'
@@ -2542,7 +2526,7 @@ export default function DashboardPage() {
                       }`}
                     >
                       <span>{item.label}</span>
-                    </button>
+                    </DashboardSectionLink>
                   ))}
                   <div
                     className="relative"
@@ -2576,14 +2560,11 @@ export default function DashboardPage() {
                     >
                       <div className="rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
                         {patientAppointmentNavItems.map((item) => (
-                          <button
+                          <DashboardSectionLink
                             key={item.id}
-                            type="button"
-                            onClick={() => {
-                              setCurrentSection(item.id)
-                              window.location.hash = item.id
-                              setPatientApptNavOpen(false)
-                            }}
+                            section={item.id}
+                            active={currentSection === item.id}
+                            onClick={() => setPatientApptNavOpen(false)}
                             className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors ${
                               currentSection === item.id
                                 ? 'bg-blue-50 font-medium text-blue-700'
@@ -2600,17 +2581,14 @@ export default function DashboardPage() {
                               <History className="w-4 h-4 shrink-0 text-gray-500" />
                             ) : null}
                             {item.label}
-                          </button>
+                          </DashboardSectionLink>
                         ))}
                       </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCurrentSection('messages')
-                      window.location.hash = 'messages'
-                    }}
+                  <DashboardSectionLink
+                    section="messages"
+                    active={currentSection === 'messages'}
                     className={`px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 ${
                       currentSection === 'messages'
                         ? 'bg-blue-50 text-blue-600 font-medium'
@@ -2624,7 +2602,7 @@ export default function DashboardPage() {
                         <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                       )}
                     </span>
-                  </button>
+                  </DashboardSectionLink>
                 </>
               )}
             </div>
@@ -2658,17 +2636,14 @@ export default function DashboardPage() {
                       onClick={() => setProfileMenuOpen(false)}
                     ></div>
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-20">
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false)
-                          setCurrentSection('profile')
-                          window.location.hash = 'profile'
-                        }}
+                      <DashboardSectionLink
+                        section="profile"
+                        onClick={() => setProfileMenuOpen(false)}
                         className="block w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
                       >
                         <Settings className="w-4 h-4" />
                         <span>Profil Ayarları</span>
-                      </button>
+                      </DashboardSectionLink>
                       <button 
                         onClick={() => {
                           setProfileMenuOpen(false)
@@ -2718,12 +2693,11 @@ export default function DashboardPage() {
                       {mobileDoctorApptOpen && (
                         <div className="ml-3 flex flex-col gap-1 border-l-2 border-blue-100 pl-3">
                           {doctorAppointmentNavItems.map((item) => (
-                            <button
+                            <DashboardSectionLink
                               key={item.id}
-                              type="button"
+                              section={item.id}
+                              active={currentSection === item.id}
                               onClick={() => {
-                                setCurrentSection(item.id)
-                                window.location.hash = item.id
                                 setMobileMenuOpen(false)
                                 setMobileDoctorApptOpen(false)
                               }}
@@ -2753,7 +2727,7 @@ export default function DashboardPage() {
                                     <span className="absolute -top-0.5 -right-2.5 w-1.5 h-1.5 rounded-full bg-red-500" />
                                   )}
                               </span>
-                            </button>
+                            </DashboardSectionLink>
                           ))}
                         </div>
                       )}
@@ -2763,14 +2737,11 @@ export default function DashboardPage() {
                       { id: 'my-patients' as const, label: 'Hastalarım' },
                       { id: 'messages' as const, label: 'Mesajlar' },
                     ].map((item) => (
-                      <button
+                      <DashboardSectionLink
                         key={item.id}
-                        type="button"
-                        onClick={() => {
-                          setCurrentSection(item.id)
-                          window.location.hash = item.id
-                          setMobileMenuOpen(false)
-                        }}
+                        section={item.id}
+                        active={currentSection === item.id}
+                        onClick={() => setMobileMenuOpen(false)}
                         className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
                           currentSection === item.id
                             ? 'bg-blue-50 text-blue-600 font-medium'
@@ -2791,7 +2762,7 @@ export default function DashboardPage() {
                             <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                           )}
                         </span>
-                      </button>
+                      </DashboardSectionLink>
                     ))}
                   </>
                 ) : (
@@ -2818,12 +2789,11 @@ export default function DashboardPage() {
                       {mobilePatientAnalyzeOpen && (
                         <div className="ml-3 flex flex-col gap-1 border-l-2 border-blue-100 pl-3">
                           {patientAnalyzeNavItems.map((item) => (
-                            <button
+                            <DashboardSectionLink
                               key={item.id}
-                              type="button"
+                              section={item.id}
+                              active={currentSection === item.id}
                               onClick={() => {
-                                setCurrentSection(item.id)
-                                window.location.hash = item.id
                                 setMobileMenuOpen(false)
                                 setMobilePatientAnalyzeOpen(false)
                               }}
@@ -2839,7 +2809,7 @@ export default function DashboardPage() {
                                 <History className="w-4 h-4 shrink-0" />
                               )}
                               {item.label}
-                            </button>
+                            </DashboardSectionLink>
                           ))}
                         </div>
                       )}
@@ -2848,14 +2818,11 @@ export default function DashboardPage() {
                       { id: 'favorites' as const, label: 'Favoriler' },
                       { id: 'stats' as const, label: 'İstatistikler' },
                     ].map((item) => (
-                      <button
+                      <DashboardSectionLink
                         key={item.id}
-                        type="button"
-                        onClick={() => {
-                          setCurrentSection(item.id)
-                          window.location.hash = item.id
-                          setMobileMenuOpen(false)
-                        }}
+                        section={item.id}
+                        active={currentSection === item.id}
+                        onClick={() => setMobileMenuOpen(false)}
                         className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
                           currentSection === item.id
                             ? 'bg-blue-50 text-blue-600 font-medium'
@@ -2863,7 +2830,7 @@ export default function DashboardPage() {
                         }`}
                       >
                         {item.label}
-                      </button>
+                      </DashboardSectionLink>
                     ))}
                     <div className="space-y-1">
                       <button
@@ -2887,12 +2854,11 @@ export default function DashboardPage() {
                       {mobilePatientApptOpen && (
                         <div className="ml-3 flex flex-col gap-1 border-l-2 border-blue-100 pl-3">
                           {patientAppointmentNavItems.map((item) => (
-                            <button
+                            <DashboardSectionLink
                               key={item.id}
-                              type="button"
+                              section={item.id}
+                              active={currentSection === item.id}
                               onClick={() => {
-                                setCurrentSection(item.id)
-                                window.location.hash = item.id
                                 setMobileMenuOpen(false)
                                 setMobilePatientApptOpen(false)
                               }}
@@ -2908,18 +2874,15 @@ export default function DashboardPage() {
                                 <Calendar className="w-4 h-4 shrink-0" />
                               )}
                               {item.label}
-                            </button>
+                            </DashboardSectionLink>
                           ))}
                         </div>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCurrentSection('messages')
-                        window.location.hash = 'messages'
-                        setMobileMenuOpen(false)
-                      }}
+                    <DashboardSectionLink
+                      section="messages"
+                      active={currentSection === 'messages'}
+                      onClick={() => setMobileMenuOpen(false)}
                       className={`px-4 py-2 rounded-xl text-left transition-colors flex items-center gap-2 ${
                         currentSection === 'messages'
                           ? 'bg-blue-50 text-blue-600 font-medium'
@@ -2933,7 +2896,7 @@ export default function DashboardPage() {
                           <span className="absolute -top-1 -right-3 w-2.5 h-2.5 rounded-full bg-red-500" />
                         )}
                       </span>
-                    </button>
+                    </DashboardSectionLink>
                   </>
                 )}
               </div>
@@ -2945,34 +2908,7 @@ export default function DashboardPage() {
       <div className="pt-16">
         {/* Main Content */}
         <main className="p-6 md:p-8">
-          {currentSection === 'dashboard' && (
-            <div className="space-y-8">
-              <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-12 text-white text-center">
-                <h1 className="text-4xl font-bold mb-4">MediAnalytica'ya Hoş Geldiniz</h1>
-                <p className="text-xl mb-8">Sağlığınız için yapay zeka destekli çözümler sunuyoruz</p>
-                <div className="flex gap-4 justify-center">
-                  <button
-                    onClick={() => {
-                      setCurrentSection('analyze')
-                      window.location.hash = 'analyze'
-                    }}
-                    className="bg-white text-blue-600 px-8 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
-                  >
-                    Analiz Yap
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCurrentSection('history')
-                      window.location.hash = 'history'
-                    }}
-                    className="bg-transparent border-2 border-white text-white px-8 py-3 rounded-xl font-semibold hover:bg-white/10 transition-all"
-                  >
-                    Geçmişim
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {currentSection === 'dashboard' && <DashboardHomeSection />}
 
           {currentSection === 'analyze' && (
             <div className="max-w-5xl mx-auto space-y-6">
@@ -3423,16 +3359,13 @@ export default function DashboardPage() {
                       </button>
                       )
                     })()}
-                    <button
-                      onClick={() => {
-                        setCurrentSection('history')
-                        window.location.hash = 'history'
-                      }}
+                    <DashboardSectionLink
+                      section="history"
                       className="flex-1 bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 text-blue-600 py-4 rounded-2xl font-bold transition-all flex items-center justify-center space-x-2 border-2 border-blue-200 hover:border-blue-300 hover:shadow-lg transform hover:scale-[1.02]"
                     >
                       <History className="w-5 h-5" />
                       <span>Geçmişe Git</span>
-                    </button>
+                    </DashboardSectionLink>
                   </div>
                 </div>
               )}
@@ -3440,1575 +3373,100 @@ export default function DashboardPage() {
           )}
 
           {currentSection === 'history' && (
-            <div className="max-w-6xl mx-auto">
-              {/* Header */}
-              <div className="text-center space-y-2 mb-8">
-                <div className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium mb-2">
-                  <History className="w-3 h-3 mr-2" />
-                  Analiz Geçmişiniz
-                </div>
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-                  Analiz{' '}
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                    Geçmişi
-                  </span>
-                </h1>
-                <p className="text-base text-gray-600 max-w-2xl mx-auto">
-                  Yaptığınız tüm analizleri buradan görüntüleyebilir ve yönetebilirsiniz.
-                </p>
-              </div>
-
-              {loadingHistory ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl flex items-center justify-center mb-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                  </div>
-                  <p className="text-gray-600 font-medium">Analizler yükleniyor...</p>
-                </div>
-              ) : analyses.length === 0 ? (
-                <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-2xl p-16 shadow-lg border border-gray-200 text-center">
-                  <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-md">
-                    <History className="w-12 h-12 text-blue-600" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-3">Henüz Analiz Geçmişiniz Yok</h3>
-                  <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                    İlk analizinizi yaparak başlayın ve sonuçlarınızı burada görüntüleyin.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setCurrentSection('analyze')
-                      window.location.hash = 'analyze'
-                    }}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-xl transition-all transform hover:scale-105 flex items-center space-x-2 mx-auto"
-                  >
-                    <Brain className="w-5 h-5" />
-                    <span>İlk Analizinizi Yapın</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {analyses.map((analysis: any, index: number) => (
-                    <div 
-                      key={analysis.id} 
-                      className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 hover:shadow-xl transition-all transform hover:scale-[1.02] group"
-                    >
-                      {/* Image */}
-                      {analysis.imageUrl && (
-                        <div className="relative w-full h-48 mb-4 rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
-                          <img 
-                            src={analysis.imageUrl} 
-                            alt="Analysis" 
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                          {(() => {
-                            const { isFavorite } = isAnalysisFavorite(analysis.id)
-                            return (
-                          <button
-                                onClick={() => toggleFavorite(analysis.id)}
-                                title={isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
-                                className={`absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all shadow-lg opacity-0 group-hover:opacity-100 ${
-                                  isFavorite
-                                    ? 'text-red-500 hover:text-red-600 hover:bg-white'
-                                    : 'text-gray-400 hover:text-red-500 hover:bg-white'
-                                }`}
-                          >
-                                <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
-                          </button>
-                            )
-                          })()}
-                        </div>
-                      )}
-
-                      {/* Content */}
-                      <div className="space-y-3">
-                        {/* Disease Type & Date */}
-                        <div className="flex items-center justify-between">
-                          <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-                            analysis.diseaseType === 'skin' ? 'bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700' :
-                            analysis.diseaseType === 'bone' ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700' :
-                            analysis.diseaseType === 'lung' ? 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700' :
-                            analysis.diseaseType === 'eye' ? 'bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700' :
-                            analysis.diseaseType === 'brain' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {analysis.diseaseType === 'skin' ? '✨ Deri' :
-                             analysis.diseaseType === 'bone' ? '🦴 Kemik' :
-                             analysis.diseaseType === 'lung' ? '🫁 Akciğer' :
-                             analysis.diseaseType === 'eye' ? '👁️ Göz' :
-                             analysis.diseaseType === 'brain' ? '🧠 Beyin' : analysis.diseaseType}
-                          </span>
-                          <span className="text-xs text-gray-500 font-medium">
-                            {analysis.createdAt ? (() => {
-                              // Handle different timestamp formats
-                              let date: Date
-                              if (analysis.createdAt instanceof Date) {
-                                date = analysis.createdAt
-                              } else if (typeof analysis.createdAt === 'number') {
-                                // If it's already milliseconds, use directly; if seconds, multiply by 1000
-                                date = new Date(analysis.createdAt > 1000000000000 ? analysis.createdAt : analysis.createdAt * 1000)
-                              } else if (analysis.createdAt?.toDate) {
-                                date = analysis.createdAt.toDate()
-                              } else if (analysis.createdAt?.seconds) {
-                                date = new Date(analysis.createdAt.seconds * 1000)
-                              } else {
-                                return 'Tarih yok'
-                              }
-                              return date.toLocaleDateString('tr-TR', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric'
-                              })
-                            })() : 'Tarih yok'}
-                          </span>
-                        </div>
-
-                        {/* Prediction */}
-                        <div>
-                          <p className="text-xs font-medium text-gray-500 mb-1">Tahmin Edilen</p>
-                          <h3 className="text-lg font-bold text-gray-900 line-clamp-1">
-                            {formatDiseaseClassName(analysis.topPrediction, analysis.diseaseType)}
-                          </h3>
-                        </div>
-
-                        {/* Results Preview */}
-                        {analysis.results && analysis.results.length > 0 && (
-                          <div className="pt-3 border-t border-gray-100">
-                            <p className="text-xs font-medium text-gray-500 mb-2">Güven Oranları</p>
-                            <div className="space-y-2">
-                              {analysis.results.slice(0, 2).map((result: any, idx: number) => (
-                                <div key={idx} className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-600 truncate flex-1 mr-2">
-                                    {formatDiseaseClassName(result.class, analysis.diseaseType)}
-                                  </span>
-                                  <div className="flex items-center space-x-2">
-                                    <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                                      <div 
-                                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-1.5 rounded-full"
-                                        style={{ width: `${(result.confidence || 0) * 100}%` }}
-                                      ></div>
-                                    </div>
-                                    <span className="text-xs font-bold text-gray-700 w-12 text-right">
-                                      %{((result.confidence || 0) * 100).toFixed(0)}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <HistorySection
+              loadingHistory={loadingHistory}
+              analyses={analyses}
+              isAnalysisFavorite={isAnalysisFavorite}
+              toggleFavorite={toggleFavorite}
+            />
           )}
 
           {currentSection === 'favorites' && (
-            <div className="max-w-6xl mx-auto">
-              {/* Header */}
-              <div className="text-center space-y-2 mb-8">
-                <div className="inline-flex items-center px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium mb-2">
-                  <Heart className="w-3 h-3 mr-2 fill-current" />
-                  Favori Analizleriniz
-                </div>
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-pink-600">
-                    Favoriler
-                  </span>
-                </h1>
-                <p className="text-base text-gray-600 max-w-2xl mx-auto">
-                  Önemli bulduğunuz analizleri favorilere ekleyerek kolayca erişebilirsiniz.
-                </p>
-              </div>
-
-              {loadingFavorites ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-pink-100 rounded-2xl flex items-center justify-center mb-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-red-600" />
-                  </div>
-                  <p className="text-gray-600 font-medium">Favoriler yükleniyor...</p>
-                </div>
-              ) : favorites.length === 0 ? (
-                <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-2xl p-16 shadow-lg border border-red-200 text-center">
-                  <div className="w-24 h-24 bg-gradient-to-br from-red-100 to-pink-100 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-md">
-                    <Heart className="w-12 h-12 text-red-600 fill-current" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-3">Henüz Favori Analiziniz Yok</h3>
-                  <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                    Önemli bulduğunuz analizleri favorilere ekleyerek burada görüntüleyebilirsiniz.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setCurrentSection('history')
-                      window.location.hash = 'history'
-                    }}
-                    className="bg-gradient-to-r from-red-600 to-pink-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-xl transition-all transform hover:scale-105 flex items-center space-x-2 mx-auto"
-                  >
-                    <History className="w-5 h-5" />
-                    <span>Analiz Geçmişine Git</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {favorites.map((favorite: any, index: number) => (
-                    <div 
-                      key={favorite.id} 
-                      className="bg-white rounded-2xl p-6 shadow-lg border-2 border-red-200 hover:border-red-300 hover:shadow-xl transition-all transform hover:scale-[1.02] group relative overflow-hidden"
-                    >
-                      {/* Favorite Badge */}
-                      <div className="absolute top-4 right-4 z-10">
-                        <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg">
-                          <Heart className="w-5 h-5 text-white fill-white" />
-                        </div>
-                      </div>
-
-                      {/* Decorative Gradient */}
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-red-100/30 to-pink-100/30 rounded-full blur-2xl -z-0"></div>
-
-                      {/* Image */}
-                      {favorite.analysis?.imageUrl && (
-                        <div className="relative w-full h-48 mb-4 rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 z-10">
-                          <img 
-                            src={favorite.analysis.imageUrl} 
-                            alt="Favorite Analysis" 
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        </div>
-                      )}
-
-                      {/* Content */}
-                      <div className="space-y-3 relative z-10">
-                        {/* Disease Type & Date */}
-                        <div className="flex items-center justify-between">
-                          <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-                            favorite.analysis?.diseaseType === 'skin' ? 'bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700' :
-                            favorite.analysis?.diseaseType === 'bone' ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700' :
-                            favorite.analysis?.diseaseType === 'lung' ? 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700' :
-                            favorite.analysis?.diseaseType === 'eye' ? 'bg-gradient-to-r from-teal-100 to-cyan-100 text-teal-700' :
-                            favorite.analysis?.diseaseType === 'brain' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {favorite.analysis?.diseaseType === 'skin' ? '✨ Deri' :
-                             favorite.analysis?.diseaseType === 'bone' ? '🦴 Kemik' :
-                             favorite.analysis?.diseaseType === 'lung' ? '🫁 Akciğer' :
-                             favorite.analysis?.diseaseType === 'eye' ? '👁️ Göz' :
-                             favorite.analysis?.diseaseType === 'brain' ? '🧠 Beyin' : favorite.analysis?.diseaseType || 'Bilinmiyor'}
-                          </span>
-                          {favorite.analysis?.createdAt && (
-                            <span className="text-xs text-gray-500 font-medium">
-                              {(() => {
-                                // Handle different timestamp formats
-                                let date: Date
-                                const createdAt = favorite.analysis.createdAt
-                                if (createdAt instanceof Date) {
-                                  date = createdAt
-                                } else if (typeof createdAt === 'number') {
-                                  // If it's already milliseconds, use directly; if seconds, multiply by 1000
-                                  date = new Date(createdAt > 1000000000000 ? createdAt : createdAt * 1000)
-                                } else if (createdAt?.toDate) {
-                                  date = createdAt.toDate()
-                                } else if (createdAt?.seconds) {
-                                  date = new Date(createdAt.seconds * 1000)
-                                } else {
-                                  return 'Tarih yok'
-                                }
-                                return date.toLocaleDateString('tr-TR', {
-                                day: 'numeric',
-                                month: 'short'
-                                })
-                              })()}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Prediction */}
-                        <div>
-                          <p className="text-xs font-medium text-gray-500 mb-1">Tahmin Edilen</p>
-                          <h3 className="text-lg font-bold text-gray-900 line-clamp-1">
-                            {formatDiseaseClassName(favorite.analysis?.topPrediction, favorite.analysis?.diseaseType)}
-                          </h3>
-                        </div>
-
-                        {/* Results Preview */}
-                        {favorite.analysis?.results && favorite.analysis.results.length > 0 && (
-                          <div className="pt-3 border-t border-gray-100">
-                            <p className="text-xs font-medium text-gray-500 mb-2">Güven Oranları</p>
-                            <div className="space-y-2">
-                              {favorite.analysis.results.slice(0, 2).map((result: any, idx: number) => (
-                                <div key={idx} className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-600 truncate flex-1 mr-2">
-                                    {formatDiseaseClassName(result.class, favorite.analysis?.diseaseType)}
-                                  </span>
-                                  <div className="flex items-center space-x-2">
-                                    <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                                      <div 
-                                        className="bg-gradient-to-r from-red-500 to-pink-500 h-1.5 rounded-full"
-                                        style={{ width: `${(result.confidence || 0) * 100}%` }}
-                                      ></div>
-                                    </div>
-                                    <span className="text-xs font-bold text-gray-700 w-12 text-right">
-                                      %{((result.confidence || 0) * 100).toFixed(0)}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2 pt-3 border-t border-gray-100">
-                          <button
-                            onClick={() => {
-                              setCurrentSection('analyze')
-                              window.location.hash = 'analyze'
-                            }}
-                            className="flex-1 bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 text-blue-600 py-2 rounded-xl font-semibold transition-all border border-blue-200 hover:border-blue-300 flex items-center justify-center space-x-1 text-xs"
-                          >
-                            <FileText className="w-3 h-3" />
-                            <span>Detaylar</span>
-                          </button>
-                          <button
-                            onClick={() => removeFromFavorites(favorite.id)}
-                            className="flex-1 bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 text-red-600 py-2 rounded-xl font-semibold transition-all border border-red-200 hover:border-red-300 flex items-center justify-center space-x-1 text-xs"
-                          >
-                            <Heart className="w-3 h-3 fill-current" />
-                            <span>Kaldır</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <FavoritesSection
+              loadingFavorites={loadingFavorites}
+              favorites={favorites}
+              removeFromFavorites={removeFromFavorites}
+            />
           )}
 
-          {currentSection === 'stats' && (
-            <div className="max-w-6xl mx-auto">
-              {/* Header */}
-              <div className="text-center space-y-2 mb-8">
-                <div className="inline-flex items-center px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium mb-2">
-                  <BarChart3 className="w-3 h-3 mr-2" />
-                  İstatistikleriniz
-                </div>
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-600">
-                    İstatistikler
-                  </span>
-                </h1>
-                <p className="text-base text-gray-600 max-w-2xl mx-auto">
-                  Analiz geçmişinizin detaylı istatistiklerini buradan görüntüleyebilirsiniz.
-                </p>
-              </div>
+          {currentSection === 'stats' && <StatsSection loadingStats={loadingStats} stats={stats} />}
 
-              {loadingStats ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-blue-100 rounded-2xl flex items-center justify-center mb-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-                  </div>
-                  <p className="text-gray-600 font-medium">İstatistikler yükleniyor...</p>
-                </div>
-              ) : stats ? (
-                <div className="space-y-6">
-                  {/* Main Stats Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Total Analyses */}
-                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-6 shadow-lg border-2 border-blue-200 hover:shadow-xl transition-all transform hover:scale-105 group">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                          <BarChart3 className="w-6 h-6 text-white" />
-                        </div>
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-200/30 to-cyan-200/30 rounded-full blur-2xl -z-0"></div>
-                      </div>
-                      <div className="text-sm font-semibold text-gray-600 mb-1">Toplam Analiz</div>
-                      <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                        {stats.totalAnalyses || 0}
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">Tüm zamanlar</div>
-                    </div>
-
-                    {/* Skin Analyses */}
-                    <div className="bg-gradient-to-br from-pink-50 to-rose-50 rounded-2xl p-6 shadow-lg border-2 border-pink-200 hover:shadow-xl transition-all transform hover:scale-105 group">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-pink-500 to-rose-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                          <span className="text-2xl">✨</span>
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold text-gray-600 mb-1">Deri Analizleri</div>
-                      <div className="text-4xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
-                        {stats.diseaseCounts?.skin || 0}
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">
-                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.skin || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
-                      </div>
-                    </div>
-
-                    {/* Bone Analyses */}
-                    <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 shadow-lg border-2 border-amber-200 hover:shadow-xl transition-all transform hover:scale-105 group">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                          <span className="text-2xl">🦴</span>
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold text-gray-600 mb-1">Kemik Analizleri</div>
-                      <div className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-                        {stats.diseaseCounts?.bone || 0}
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">
-                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.bone || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
-                      </div>
-                    </div>
-
-                    {/* Lung Analyses */}
-                    <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-2xl p-6 shadow-lg border-2 border-cyan-200 hover:shadow-xl transition-all transform hover:scale-105 group">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                          <span className="text-2xl">🫁</span>
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold text-gray-600 mb-1">Akciğer Analizleri</div>
-                      <div className="text-4xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-                        {stats.diseaseCounts?.lung || 0}
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">
-                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.lung || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
-                      </div>
-                    </div>
-
-                    {/* Eye Analyses */}
-                    <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-6 shadow-lg border-2 border-teal-200 hover:shadow-xl transition-all transform hover:scale-105 group">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                          <span className="text-2xl">👁️</span>
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold text-gray-600 mb-1">Göz Analizleri</div>
-                      <div className="text-4xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-                        {stats.diseaseCounts?.eye || 0}
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">
-                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.eye || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
-                      </div>
-                    </div>
-
-                    {/* Brain Analyses */}
-                    <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-2xl p-6 shadow-lg border-2 border-purple-200 hover:shadow-xl transition-all transform hover:scale-105 group">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-fuchsia-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                          <span className="text-2xl">🧠</span>
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold text-gray-600 mb-1">Beyin Analizleri</div>
-                      <div className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
-                        {stats.diseaseCounts?.brain || 0}
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">
-                        {stats.totalAnalyses ? `${((stats.diseaseCounts?.brain || 0) / stats.totalAnalyses * 100).toFixed(0)}%` : '0%'} toplam
-                      </div>
-                    </div>
-                  </div>
-
-
-                  {/* Most Analyzed - Featured Card */}
-                  {stats.mostAnalyzed && (
-                    <div className="bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-600 rounded-2xl p-8 shadow-2xl text-white relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-                      <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl"></div>
-                      <div className="relative z-10">
-                        <div className="flex items-center space-x-3 mb-4">
-                          <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-                            <BarChart3 className="w-8 h-8 text-white" />
-                          </div>
-                          <div>
-                            <div className="text-sm font-medium text-white/90 mb-1">En Çok Analiz Edilen</div>
-                            <div className="text-3xl font-bold">
-                              {stats.mostAnalyzed === 'skin' ? '✨ Deri Hastalıkları' :
-                               stats.mostAnalyzed === 'bone' ? '🦴 Kemik Hastalıkları' :
-                               stats.mostAnalyzed === 'lung' ? '🫁 Akciğer Hastalıkları' :
-                               stats.mostAnalyzed === 'eye' ? '👁️ Göz Hastalıkları' :
-                               stats.mostAnalyzed === 'brain' ? '🧠 Beyin Hastalıkları' : stats.mostAnalyzed}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-4 pt-4 border-t border-white/20">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-white/80">Toplam analizlerinizin</span>
-                            <span className="text-2xl font-bold">
-                              {stats.totalAnalyses && stats.diseaseCounts?.[stats.mostAnalyzed] 
-                                ? `${((stats.diseaseCounts[stats.mostAnalyzed] / stats.totalAnalyses) * 100).toFixed(0)}%`
-                                : '0%'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-2xl p-12 shadow-lg border border-gray-200 text-center">
-                  <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <BarChart3 className="w-10 h-10 text-gray-400" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">İstatistikler Yüklenemedi</h3>
-                  <p className="text-gray-600">Lütfen daha sonra tekrar deneyin.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {currentSection === 'appointment' && (
-            <div className="max-w-4xl mx-auto">
-              {/* Header */}
-              <div className="text-center space-y-2 mb-8">
-                <div className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium mb-2">
-                  <Video className="w-3 h-3 mr-2" />
-                  Online Konsültasyon
-                </div>
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">
-                    Randevu Talep
-                  </span>
-                </h1>
-                <p className="text-base text-gray-600 max-w-2xl mx-auto">
-                  Uzman doktorlarımızla görüntülü konsültasyon için randevu talep edin.
-                </p>
-              </div>
-
-              {/* Info Cards */}
-              <div className="grid md:grid-cols-3 gap-4 mb-8">
-                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
-                      <Video className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">Görüntülü</p>
-                      <p className="text-sm font-bold text-gray-900">Konsültasyon</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
-                      <CheckCircle2 className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">Hızlı</p>
-                      <p className="text-sm font-bold text-gray-900">Onay</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                      <User className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-600">Uzman</p>
-                      <p className="text-sm font-bold text-gray-900">Doktorlar</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Appointment Form Card */}
-              <div className="bg-white rounded-2xl p-8 shadow-xl border border-gray-200">
-                <div className="text-center mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Randevu Formu</h3>
-                  <p className="text-gray-600">Lütfen aşağıdaki bilgileri doldurun</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-xl p-6 mb-6 border border-green-200">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <CheckCircle2 className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 mb-1">Randevu Süreci</p>
-                      <p className="text-sm text-gray-600">
-                        Randevu talebiniz alındıktan sonra, en kısa sürede size dönüş yapılacak.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <Link
-                  href={buildAppointmentUrl()}
-                  className="block w-full bg-gradient-to-r from-green-600 via-blue-600 to-purple-600 text-white py-5 rounded-2xl font-bold text-lg hover:shadow-2xl transition-all flex items-center justify-center space-x-3 transform hover:scale-[1.02] active:scale-[0.98] bg-[length:200%_100%] hover:bg-[position:100%_0] transition-all duration-500"
-                >
-                  <Video className="w-6 h-6" />
-                  <span>Randevu Talep Formunu Aç</span>
-                </Link>
-
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <div className="grid md:grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center space-x-2 text-gray-600">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>7/24 Randevu Talebi</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-gray-600">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>Hızlı Onay Süreci</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-gray-600">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>Güvenli Görüntülü Görüşme</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-gray-600">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>Uzman Doktor Kadrosu</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {currentSection === 'appointment' && <AppointmentSection appointmentHref={buildAppointmentUrl()} />}
 
           {currentSection === 'my-appointments-patient' && !isDoctor && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              <div className="flex items-center gap-3">
-                <Calendar className="w-8 h-8 text-blue-600" />
-                <div>
-                  <h2 className="text-3xl font-bold text-gray-900">Randevularım</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Yaklaşan ve tamamlanan randevularınızı burada görebilirsiniz.
-                  </p>
-                </div>
-              </div>
-
-              {loadingAppointments ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center border border-gray-100">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Randevular yükleniyor...</p>
-                </div>
-              ) : (
-                (() => {
-                  const upcomingAppointments = patientAppointmentHistory.filter((apt: any) =>
-                    apt.status === 'pending' || apt.status === 'approved'
-                  )
-                  const completedAppointments = patientAppointmentHistory.filter((apt: any) =>
-                    apt.status === 'completed'
-                  )
-
-                  return (
-                    <div className="space-y-8">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-xl font-bold text-gray-900">Yaklaşan Randevular</h3>
-                          <span className="text-sm text-gray-500">{upcomingAppointments.length} kayıt</span>
-                        </div>
-                        {upcomingAppointments.length === 0 ? (
-                          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-gray-600">
-                            Yaklaşan randevu bulunmuyor.
-                          </div>
-                        ) : (
-                          <div className="grid gap-4">
-                            {upcomingAppointments.map((apt: any) => (
-                              <div key={apt.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                                        apt.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
-                                      }`}>
-                                        {apt.status === 'approved' ? 'Onaylandı' : 'Beklemede'}
-                                      </span>
-                                      <span className="text-xs text-gray-500">{apt.doctorType || 'Branş belirtilmedi'}</span>
-                                    </div>
-                                    <p className="text-sm text-gray-700"><span className="font-medium">Tarih:</span> {apt.date || '—'} {apt.time || ''}</p>
-                                    <p className="text-sm text-gray-700"><span className="font-medium">Neden:</span> {apt.reason || 'Neden belirtilmemiş'}</p>
-                                    <p className="text-sm text-gray-700">
-                                      <span className="font-medium">Doktor:</span>{' '}
-                                      {apt.doctor ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : 'Henüz atanmadı'}
-                                    </p>
-                                    {apt.status === 'approved' &&
-                                    user &&
-                                    apt.userId === user.uid &&
-                                    apt.date &&
-                                    apt.time &&
-                                    isAppointmentJoinCancelActionsWindow({
-                                      date: String(apt.date),
-                                      time: String(apt.time),
-                                    }) ? (
-                                      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/90 p-4 space-y-3">
-                                        <p className="text-sm font-semibold text-gray-900">Randevu yaklaşıyor</p>
-                                        <p className="text-xs text-gray-600">
-                                          Görüşmeye katılabilir veya randevuyu iptal edebilirsiniz · {apt.date} ·{' '}
-                                          {apt.time}
-                                        </p>
-                                        {showCancelInputForAppointment[apt.id] ? (
-                                          <div className="space-y-2">
-                                            <label className="text-xs font-medium text-gray-700">İptal notu</label>
-                                            <textarea
-                                              value={cancelReasonByAppointment[apt.id] || ''}
-                                              onChange={(e) =>
-                                                setCancelReasonByAppointment((prev) => ({
-                                                  ...prev,
-                                                  [apt.id]: e.target.value,
-                                                }))
-                                              }
-                                              rows={3}
-                                              placeholder="İptal nedeninizi yazın..."
-                                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                            />
-                                            <div className="flex flex-col sm:flex-row gap-2">
-                                              <button
-                                                type="button"
-                                                onClick={() => cancelApprovedAppointmentWithReason(apt)}
-                                                disabled={Boolean(cancelSubmittingForAppointment[apt.id])}
-                                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60"
-                                              >
-                                                {cancelSubmittingForAppointment[apt.id]
-                                                  ? 'Gönderiliyor...'
-                                                  : 'İptali onayla'}
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  setShowCancelInputForAppointment((prev) => ({
-                                                    ...prev,
-                                                    [apt.id]: false,
-                                                  }))
-                                                }
-                                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
-                                              >
-                                                Vazgeç
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-col sm:flex-row gap-2">
-                                            <button
-                                              type="button"
-                                              onClick={() => joinAppointmentFromPopup(apt)}
-                                              className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
-                                            >
-                                              <Video className="w-4 h-4 shrink-0" />
-                                              Katıl
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                setShowCancelInputForAppointment((prev) => ({
-                                                  ...prev,
-                                                  [apt.id]: true,
-                                                }))
-                                              }
-                                              className="flex-1 px-4 py-2.5 border-2 border-red-300 text-red-700 rounded-xl text-sm font-semibold hover:bg-red-50"
-                                            >
-                                              İptal et
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-xl font-bold text-gray-900">Tamamlanan Randevular</h3>
-                          <span className="text-sm text-gray-500">{completedAppointments.length} kayıt</span>
-                        </div>
-                        {completedAppointments.length === 0 ? (
-                          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-gray-600">
-                            Tamamlanan randevu bulunmuyor.
-                          </div>
-                        ) : (
-                          <div className="grid gap-4">
-                            {completedAppointments.map((apt: any) => (
-                              <div key={apt.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                                <div className="space-y-2">
-                                  <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    Tamamlandı
-                                  </span>
-                                  <p className="text-sm text-gray-700"><span className="font-medium">Tarih:</span> {apt.date || '—'} {apt.time || ''}</p>
-                                  <p className="text-sm text-gray-700"><span className="font-medium">Neden:</span> {apt.reason || 'Neden belirtilmemiş'}</p>
-                                  <p className="text-sm text-gray-700">
-                                    <span className="font-medium">Doktor:</span>{' '}
-                                    {apt.doctor ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : 'Doktor bilgisi yok'}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })()
-              )}
-            </div>
+            <PatientAppointmentsSection
+              loadingAppointments={loadingAppointments}
+              patientAppointmentHistory={patientAppointmentHistory}
+              user={user}
+              showCancelInputForAppointment={showCancelInputForAppointment}
+              cancelReasonByAppointment={cancelReasonByAppointment}
+              cancelSubmittingForAppointment={cancelSubmittingForAppointment}
+              setCancelReasonByAppointment={setCancelReasonByAppointment}
+              setShowCancelInputForAppointment={setShowCancelInputForAppointment}
+              cancelApprovedAppointmentWithReason={cancelApprovedAppointmentWithReason}
+              joinAppointmentFromPopup={joinAppointmentFromPopup}
+              isAppointmentJoinCancelActionsWindow={isAppointmentJoinCancelActionsWindow}
+            />
           )}
 
           {currentSection === 'patient-appointment-history' && !isDoctor && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              <div className="flex items-center gap-3">
-                <History className="w-8 h-8 text-blue-600" />
-                <div>
-                  <h2 className="text-3xl font-bold text-gray-900">Randevu Geçmişi</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Tüm randevu talepleriniz ve durumları (en yeniden eskiye).
-                  </p>
-                </div>
-              </div>
-
-              {loadingAppointments ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Randevular yükleniyor...</p>
-                </div>
-              ) : patientAppointmentHistory.length === 0 ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center border border-gray-100">
-                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Henüz randevu yok</h3>
-                  <p className="text-gray-600 mb-6">Randevu talebi oluşturduğunuzda burada listelenir.</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCurrentSection('appointment')
-                      window.location.hash = 'appointment'
-                    }}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                  >
-                    Randevu talep et
-                  </button>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {patientAppointmentHistory.map((apt: any) => {
-                    const st = apt.status as string
-                    const statusLabel =
-                      st === 'pending'
-                        ? 'Beklemede'
-                        : st === 'approved'
-                          ? 'Onaylandı'
-                          : st === 'rejected'
-                            ? 'Reddedildi'
-                            : st === 'completed'
-                              ? 'Tamamlandı'
-                              : st === 'cancelled_by_patient'
-                                ? 'Hasta İptal Etti'
-                                : st === 'cancelled_by_doctor'
-                                  ? 'Doktor İptal Etti'
-                              : st || 'Bilinmiyor'
-                    const statusClass =
-                      st === 'pending'
-                        ? 'bg-amber-100 text-amber-800'
-                        : st === 'approved'
-                          ? 'bg-green-100 text-green-800'
-                          : st === 'rejected'
-                            ? 'bg-red-100 text-red-800'
-                            : st === 'completed'
-                              ? 'bg-blue-100 text-blue-800'
-                              : st === 'cancelled_by_patient'
-                                ? 'bg-orange-100 text-orange-800'
-                                : st === 'cancelled_by_doctor'
-                                  ? 'bg-rose-100 text-rose-800'
-                              : 'bg-gray-100 text-gray-800'
-                    const doctorName = apt.doctor
-                      ? `Dr. ${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim()
-                      : null
-                    const preferredName = apt.preferredDoctor
-                      ? `Dr. ${(apt.preferredDoctor as { firstName?: string }).firstName || ''} ${(apt.preferredDoctor as { lastName?: string }).lastName || ''}`.trim()
-                      : null
-                    return (
-                      <div
-                        key={apt.id}
-                        className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                          <div className="flex-1 space-y-3">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}`}>
-                                {statusLabel}
-                              </span>
-                              {apt.doctorType ? (
-                                <span className="text-xs text-gray-500">Branş: {apt.doctorType}</span>
-                              ) : null}
-                            </div>
-                            {preferredName && st === 'pending' ? (
-                              <p className="text-sm text-teal-800 font-medium">Tercih edilen uzman: {preferredName}</p>
-                            ) : null}
-                            <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                              <div className="flex items-center gap-2 text-gray-700">
-                                <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                                <span>{apt.date || '—'}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-gray-700">
-                                <Clock className="w-4 h-4 text-gray-400 shrink-0" />
-                                <span>{apt.time || '—'}</span>
-                              </div>
-                              <div className="sm:col-span-2 flex items-start gap-2 text-gray-700">
-                                <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-                                <span>{apt.reason || 'Neden belirtilmemiş'}</span>
-                              </div>
-                              <div className="sm:col-span-2 flex items-center gap-2 text-gray-700">
-                                <User className="w-4 h-4 text-gray-400 shrink-0" />
-                                <span>
-                                  {doctorName || (st === 'pending' ? 'Henüz doktor atanmadı' : 'Doktor bilgisi yok')}
-                                </span>
-                              </div>
-                              {(st === 'cancelled_by_patient' || st === 'cancelled_by_doctor') && apt.cancelReason ? (
-                                <div className="sm:col-span-2 rounded-lg border border-red-100 bg-red-50 p-3">
-                                  <p className="text-xs font-semibold text-red-700 mb-1">İptal Nedeni</p>
-                                  <p className="text-sm text-red-900">{String(apt.cancelReason)}</p>
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                          {apt.analysisImageUrl ? (
-                            <div className="shrink-0 text-center sm:text-left">
-                              <p className="text-xs text-gray-500 mb-1">Analiz görüntüsü</p>
-                              <img
-                                src={String(apt.analysisImageUrl)}
-                                alt=""
-                                className="w-28 h-28 rounded-lg object-cover border border-gray-200 mx-auto sm:mx-0"
-                              />
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+            <PatientAppointmentHistorySection
+              loadingAppointments={loadingAppointments}
+              patientAppointmentHistory={patientAppointmentHistory}
+            />
           )}
 
           {/* Doctor Sections */}
           {currentSection === 'doctor-peer-meetings' && isDoctor && (
-            <div className="max-w-6xl mx-auto space-y-8">
-              <div>
-                <h2 className="text-3xl font-bold text-gray-900">Doktor görüşmeleri</h2>
-                <p className="mt-2 text-gray-600 max-w-2xl">
-                  Meslektaşınızla ortak tarih ve saatte görüntülü görüşme planlayın. Davet gönderildiğinde karşı
-                  taraf onayladığında görüşme &quot;Randevularım&quot; bölümüne düşer; randevu saatinde bildirimlerle
-                  lobiye katılabilirsiniz.
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-violet-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-violet-600" />
-                  Yeni görüşme daveti
-                </h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Meslektaş(lar)</label>
-                    <select
-                      multiple
-                      value={peerMeetingForm.peerDoctorUserIds}
-                      onChange={(e) => {
-                        const selectedDoctorIds = Array.from(e.target.selectedOptions, (option) => option.value)
-                        setPeerMeetingForm((f) => ({ ...f, peerDoctorUserIds: selectedDoctorIds }))
-                      }}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
-                    >
-                      {peerDoctorsList.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          Dr. {d.firstName || ''} {d.lastName || ''}
-                          {d.specialty ? ` · ${SPECIALTY_LABELS[d.specialty] || d.specialty}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">Birden fazla seçim için Ctrl (Mac'te Cmd) tuşunu basılı tutun.</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tarih</label>
-                    <input
-                      type="date"
-                      value={peerMeetingForm.date}
-                      onChange={(e) => setPeerMeetingForm((f) => ({ ...f, date: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Saat</label>
-                    <input
-                      type="time"
-                      value={peerMeetingForm.time}
-                      onChange={(e) => setPeerMeetingForm((f) => ({ ...f, time: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Konu / not (isteğe bağlı)</label>
-                    <textarea
-                      value={peerMeetingForm.reason}
-                      onChange={(e) => setPeerMeetingForm((f) => ({ ...f, reason: e.target.value }))}
-                      rows={2}
-                      placeholder="Örn. vaka konsültasyonu, görüntü incelemesi…"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={createDoctorPeerInvite}
-                  disabled={peerInviteSubmitting}
-                  className="mt-4 px-6 py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 disabled:opacity-60 flex items-center gap-2"
-                >
-                  {peerInviteSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Video className="w-5 h-5" />}
-                  Davet gönder
-                </button>
-              </div>
-
-              {peerMeetingsLoading ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-violet-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Yükleniyor…</p>
-                </div>
-              ) : (
-                <div className="grid lg:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <Mail className="w-5 h-5 text-amber-500" />
-                      Gelen davetler
-                      {incomingPeerInvites.length > 0 ? (
-                        <span className="text-sm font-normal text-gray-500">
-                          ({incomingPeerInvites.length})
-                        </span>
-                      ) : null}
-                    </h3>
-                    {incomingPeerInvites.length === 0 ? (
-                      <p className="text-sm text-gray-500 bg-white rounded-xl border border-gray-100 p-6">
-                        Bekleyen meslektaş daveti yok.
-                      </p>
-                    ) : (
-                      <ul className="space-y-3">
-                        {incomingPeerInvites.map((inv) => (
-                          <li
-                            key={inv.id}
-                            className="bg-white rounded-xl p-4 shadow-sm border border-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900">{inv.counterpartyLabel}</p>
-                              <p className="text-sm text-gray-600 mt-1">
-                                {inv.date} · {inv.time}
-                              </p>
-                              {inv.reason ? <p className="text-sm text-gray-500 mt-2">{String(inv.reason)}</p> : null}
-                            </div>
-                            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => acceptAppointment(inv.id)}
-                                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700"
-                              >
-                                Kabul et
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => rejectAppointment(inv.id)}
-                                className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-200"
-                              >
-                                Reddet
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Gönderilen davetler</h3>
-                    {outgoingPeerInvites.length === 0 ? (
-                      <p className="text-sm text-gray-500 bg-white rounded-xl border border-gray-100 p-6">
-                        Bekleyen gönderilmiş davet yok.
-                      </p>
-                    ) : (
-                      <ul className="space-y-3">
-                        {outgoingPeerInvites.map((inv) => (
-                          <li
-                            key={inv.id}
-                            className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900">{inv.counterpartyLabel}</p>
-                              <p className="text-sm text-gray-600 mt-1">
-                                {inv.date} · {inv.time}
-                              </p>
-                              <span className="inline-flex mt-2 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
-                                Onay bekliyor
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => withdrawPeerInvite(inv.id)}
-                              className="px-4 py-2 border border-red-200 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 shrink-0"
-                            >
-                              İptal et
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <DoctorPeerMeetingsSection
+              peerMeetingForm={peerMeetingForm}
+              setPeerMeetingForm={setPeerMeetingForm}
+              peerDoctorsList={peerDoctorsList}
+              specialtyLabels={SPECIALTY_LABELS}
+              createDoctorPeerInvite={createDoctorPeerInvite}
+              peerInviteSubmitting={peerInviteSubmitting}
+              peerMeetingsLoading={peerMeetingsLoading}
+              incomingPeerInvites={incomingPeerInvites}
+              outgoingPeerInvites={outgoingPeerInvites}
+              acceptAppointment={acceptAppointment}
+              rejectAppointment={rejectAppointment}
+              withdrawPeerInvite={withdrawPeerInvite}
+            />
           )}
 
-          {currentSection === 'pending-appointments' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-bold text-gray-900">Bekleyen Randevularım</h2>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <AlertCircle className="w-5 h-5 text-yellow-500" />
-                  <span>{pendingAppointments.length} bekleyen randevu</span>
-                </div>
-              </div>
-
-              {loadingAppointments ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Randevular yükleniyor...</p>
-                </div>
-              ) : pendingAppointments.length === 0 ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Bekleyen Randevu Yok</h3>
-                  <p className="text-gray-600">Şu anda onay bekleyen randevu bulunmuyor.</p>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {pendingAppointments.map((appointment) => (
-                    <div key={appointment.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-3">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                              <User className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900">
-                                {appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
-                              </h3>
-                              <p className="text-sm text-gray-600">{appointment.userEmail}</p>
-                            </div>
-                          </div>
-                          <div className="grid md:grid-cols-2 gap-4 mt-4">
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <Calendar className="w-4 h-4" />
-                              <span>{appointment.date}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <Clock className="w-4 h-4" />
-                              <span>{appointment.time}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <FileText className="w-4 h-4" />
-                              <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                                {appointment.doctorType || 'Uzmanlık belirtilmemiş'}
-                              </span>
-                            </div>
-                            {appointment.preferredDoctor ? (
-                              <p className="text-sm text-teal-800 mt-2">
-                                Hasta tercihi: Dr.{' '}
-                                {(appointment.preferredDoctor as { firstName?: string }).firstName || ''}{' '}
-                                {(appointment.preferredDoctor as { lastName?: string }).lastName || ''}
-                              </p>
-                            ) : null}
-                            {appointment.analysisImageUrl ? (
-                              <div className="mt-3">
-                                <p className="text-xs text-gray-500 mb-1">Gönderilen analiz görüntüsü</p>
-                                <img
-                                  src={String(appointment.analysisImageUrl)}
-                                  alt=""
-                                  className="max-h-40 rounded-lg border border-gray-200 object-contain bg-gray-50"
-                                />
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <button
-                            onClick={() => acceptAppointment(appointment.id)}
-                            className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
-                          >
-                            <CheckCircle2 className="w-5 h-5" />
-                            <span>Onayla</span>
-                          </button>
-                          <button
-                            onClick={() => rejectAppointment(appointment.id)}
-                            className="px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
-                          >
-                            <X className="w-5 h-5" />
-                            <span>Reddet</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {currentSection === 'pending-appointments' && isDoctor && (
+            <PendingAppointmentsSection
+              loadingAppointments={loadingAppointments}
+              pendingAppointments={pendingAppointments}
+              acceptAppointment={acceptAppointment}
+              rejectAppointment={rejectAppointment}
+            />
           )}
 
-          {currentSection === 'my-appointments' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              <h2 className="text-3xl font-bold text-gray-900">Randevularım</h2>
-
-              {loadingAppointments ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Randevular yükleniyor...</p>
-                </div>
-              ) : myAppointments.length === 0 ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Yaklaşan Randevu Yok</h3>
-                  <p className="text-gray-600">Şu anda onaylanmış yaklaşan randevunuz bulunmuyor.</p>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {myAppointments.map((appointment) => (
-                    <div key={appointment.id} className="bg-white rounded-xl p-6 shadow-sm border border-green-200 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-3">
-                            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-500 rounded-lg flex items-center justify-center">
-                              {appointment.appointmentKind === 'doctor_peer' ? (
-                                <Users className="w-6 h-6 text-white" />
-                              ) : (
-                                <User className="w-6 h-6 text-white" />
-                              )}
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900">
-                                {appointment.appointmentKind === 'doctor_peer'
-                                  ? appointment.peerDoctorLabel || 'Meslektaş görüşmesi'
-                                  : appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                {appointment.appointmentKind === 'doctor_peer'
-                                  ? 'Doktorlar arası görüntülü görüşme'
-                                  : appointment.userEmail}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="grid md:grid-cols-2 gap-4 mt-4">
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <Calendar className="w-4 h-4" />
-                              <span>{appointment.date}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <Clock className="w-4 h-4" />
-                              <span>{appointment.time}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <FileText className="w-4 h-4" />
-                              <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                Onaylandı
-                              </span>
-                            </div>
-                          </div>
-                          {(() => {
-                            const eligible =
-                              !!user &&
-                              (appointment.doctorId === user.uid ||
-                                (appointment.appointmentKind === 'doctor_peer' &&
-                                  appointment.userId === user.uid))
-                            const hasDt = Boolean(appointment.date && appointment.time)
-                            const inJoinCancelWindow =
-                              hasDt &&
-                              isAppointmentJoinCancelActionsWindow({
-                                date: appointment.date,
-                                time: appointment.time,
-                              })
-                            const inTimeWindow =
-                              hasDt &&
-                              isAppointmentTime({
-                                date: appointment.date,
-                                time: appointment.time,
-                              })
-
-                            return (
-                              <div className="mt-4 space-y-4">
-                                {eligible && inJoinCancelWindow ? (
-                                  <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-4 space-y-3">
-                                    <p className="text-sm font-semibold text-gray-900">Randevu yaklaşıyor</p>
-                                    <p className="text-xs text-gray-600">
-                                      Görüşmeye katılabilir veya randevuyu iptal edebilirsiniz · {appointment.date}{' '}
-                                      · {appointment.time}
-                                    </p>
-                                    {showCancelInputForAppointment[appointment.id] ? (
-                                      <div className="space-y-2">
-                                        <label className="text-xs font-medium text-gray-700">İptal notu</label>
-                                        <textarea
-                                          value={cancelReasonByAppointment[appointment.id] || ''}
-                                          onChange={(e) =>
-                                            setCancelReasonByAppointment((prev) => ({
-                                              ...prev,
-                                              [appointment.id]: e.target.value,
-                                            }))
-                                          }
-                                          rows={3}
-                                          placeholder="İptal nedeninizi yazın..."
-                                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                        />
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => cancelApprovedAppointmentWithReason(appointment)}
-                                            disabled={Boolean(cancelSubmittingForAppointment[appointment.id])}
-                                            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60"
-                                          >
-                                            {cancelSubmittingForAppointment[appointment.id]
-                                              ? 'Gönderiliyor...'
-                                              : 'İptali onayla'}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setShowCancelInputForAppointment((prev) => ({
-                                                ...prev,
-                                                [appointment.id]: false,
-                                              }))
-                                            }
-                                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
-                                          >
-                                            Vazgeç
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-col sm:flex-row gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => joinAppointmentFromPopup(appointment)}
-                                          className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
-                                        >
-                                          <Video className="w-4 h-4 shrink-0" />
-                                          Katıl
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setShowCancelInputForAppointment((prev) => ({
-                                              ...prev,
-                                              [appointment.id]: true,
-                                            }))
-                                          }
-                                          className="flex-1 px-4 py-2.5 border-2 border-red-300 text-red-700 rounded-xl text-sm font-semibold hover:bg-red-50"
-                                        >
-                                          İptal et
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : null}
-
-                                {eligible ? (
-                                  inTimeWindow ? (
-                                    <div className="flex flex-col sm:flex-row gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => completeAppointment(appointment.id)}
-                                        className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
-                                      >
-                                        <CheckCircle className="w-5 h-5" />
-                                        <span>Tamamlandı Olarak İşaretle</span>
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex">
-                                      Randevu saati gelmeden tamamlandı olarak işaretlenemez. Katıl / İptal için
-                                      randevudan en fazla 15 dakika önce bu sekmeye dönün.
-                                    </p>
-                                  )
-                                ) : null}
-                              </div>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {currentSection === 'my-appointments' && isDoctor && (
+            <MyAppointmentsSection
+              loadingAppointments={loadingAppointments}
+              myAppointments={myAppointments}
+              user={user}
+              showCancelInputForAppointment={showCancelInputForAppointment}
+              cancelReasonByAppointment={cancelReasonByAppointment}
+              cancelSubmittingForAppointment={cancelSubmittingForAppointment}
+              setCancelReasonByAppointment={setCancelReasonByAppointment}
+              setShowCancelInputForAppointment={setShowCancelInputForAppointment}
+              cancelApprovedAppointmentWithReason={cancelApprovedAppointmentWithReason}
+              joinAppointmentFromPopup={joinAppointmentFromPopup}
+              completeAppointment={completeAppointment}
+              isAppointmentJoinCancelActionsWindow={isAppointmentJoinCancelActionsWindow}
+              isAppointmentTime={isAppointmentTime}
+            />
           )}
 
-          {currentSection === 'appointment-history' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              <h2 className="text-3xl font-bold text-gray-900">Randevu Geçmişi</h2>
-
-              {loadingAppointments ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Randevu geçmişi yükleniyor...</p>
-                </div>
-              ) : appointmentHistory.length === 0 ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <History className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Randevu Geçmişi Yok</h3>
-                  <p className="text-gray-600">Henüz tamamlanmış randevunuz bulunmuyor.</p>
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {appointmentHistory.map((appointment) => (
-                    <div key={appointment.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-3 mb-3">
-                            <div className="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
-                              {appointment.appointmentKind === 'doctor_peer' ? (
-                                <Users className="w-6 h-6 text-white" />
-                              ) : (
-                                <User className="w-6 h-6 text-white" />
-                              )}
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900">
-                                {appointment.appointmentKind === 'doctor_peer'
-                                  ? appointment.peerDoctorLabel || 'Meslektaş görüşmesi'
-                                  : appointment.patient?.displayName || appointment.userEmail || 'Bilinmeyen Hasta'}
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                {appointment.appointmentKind === 'doctor_peer'
-                                  ? 'Doktorlar arası görüşme'
-                                  : appointment.userEmail}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="grid md:grid-cols-2 gap-4 mt-4">
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <Calendar className="w-4 h-4" />
-                              <span>{appointment.date}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <Clock className="w-4 h-4" />
-                              <span>{appointment.time}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-gray-600">
-                              <FileText className="w-4 h-4" />
-                              <span className="text-sm">{appointment.reason || 'Neden belirtilmemiş'}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                appointment.status === 'completed' 
-                                  ? 'bg-blue-100 text-blue-700' 
-                                  : appointment.status === 'cancelled_by_patient'
-                                    ? 'bg-orange-100 text-orange-700'
-                                    : appointment.status === 'cancelled_by_doctor'
-                                      ? 'bg-rose-100 text-rose-700'
-                                      : appointment.status === 'cancelled_peer'
-                                        ? 'bg-slate-100 text-slate-700'
-                                        : 'bg-red-100 text-red-700'
-                              }`}>
-                                {appointment.status === 'completed'
-                                  ? 'Tamamlandı'
-                                  : appointment.status === 'cancelled_by_patient'
-                                    ? appointment.appointmentKind === 'doctor_peer'
-                                      ? 'Düzenleyen iptal etti'
-                                      : 'Hasta İptal Etti'
-                                    : appointment.status === 'cancelled_by_doctor'
-                                      ? appointment.appointmentKind === 'doctor_peer'
-                                        ? 'Meslektaş iptal etti'
-                                        : 'Doktor İptal Etti'
-                                      : appointment.status === 'cancelled_peer'
-                                        ? 'Davet iptal'
-                                        : 'Reddedildi'}
-                              </span>
-                            </div>
-                          </div>
-                          {(appointment.status === 'cancelled_by_patient' ||
-                            appointment.status === 'cancelled_by_doctor' ||
-                            appointment.status === 'cancelled_peer') &&
-                          appointment.cancelReason ? (
-                            <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
-                              <p className="text-xs font-semibold text-red-700 mb-1">İptal Nedeni</p>
-                              <p className="text-sm text-red-900">{String(appointment.cancelReason)}</p>
-                            </div>
-                          ) : null}
-                        </div>
-
-                        {appointment.analysisImageUrl ? (
-                          <div className="shrink-0 text-center md:text-left">
-                            <p className="text-xs text-gray-500 mb-1">Randevu görüntüsü</p>
-                            <img
-                              src={String(appointment.analysisImageUrl)}
-                              alt=""
-                              className="w-28 h-28 rounded-lg object-cover border border-gray-200 mx-auto md:mx-0"
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {currentSection === 'appointment-history' && isDoctor && (
+            <AppointmentHistorySection loadingAppointments={loadingAppointments} appointmentHistory={appointmentHistory} />
           )}
 
-          {currentSection === 'my-patients' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              <h2 className="text-3xl font-bold text-gray-900">Hastalarım</h2>
-
-              {loadingAppointments ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Hastalar yükleniyor...</p>
-                </div>
-              ) : myPatients.length === 0 ? (
-                <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Hasta Yok</h3>
-                  <p className="text-gray-600">Henüz onaylanmış randevusu olan hasta bulunmuyor.</p>
-                </div>
-              ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {myPatients.map((patient: any) => (
-                    <div key={patient.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                          <User className="w-6 h-6 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">
-                            {patient.displayName ||
-                              `${patient.firstName || ''} ${patient.lastName || ''}`.trim() ||
-                              patient.email?.split('@')[0] ||
-                              'Bilinmeyen Hasta'}
-                          </h3>
-                          <p className="text-sm text-gray-600">{patient.email || '-'}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-2 pt-4 border-t border-gray-100">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Toplam Randevu:</span>
-                          <span className="text-sm font-semibold text-gray-900">{patient.totalAppointments || 0}</span>
-                        </div>
-                        {patient.lastAppointment && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Son Randevu:</span>
-                            <span className="text-sm font-medium text-gray-700">
-                              {new Date(patient.lastAppointment).toLocaleDateString('tr-TR')}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {currentSection === 'my-patients' && isDoctor && (
+            <MyPatientsSection loadingAppointments={loadingAppointments} myPatients={myPatients} />
           )}
 
           {currentSection === 'messages' && user && (
@@ -5019,131 +3477,19 @@ export default function DashboardPage() {
           )}
 
           {currentSection === 'profile' && (
-            <div className="max-w-2xl mx-auto space-y-6">
-              <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <User className="w-8 h-8 text-blue-600" />
-                Profil Ayarları
-              </h2>
-              <div className="bg-white rounded-xl p-6 md:p-8 shadow-sm border border-gray-100">
-                <div className="space-y-8">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-4">
-                      Profil fotoğrafı
-                    </label>
-                    <div className="flex items-center gap-6">
-                      <div className="relative shrink-0">
-                        {profilePhotoURL ? (
-                          <img
-                            src={profilePhotoURL}
-                            alt=""
-                            className="w-24 h-24 rounded-full object-cover border-4 border-blue-100"
-                          />
-                        ) : (
-                          <div className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center border-4 border-blue-200">
-                            <User className="w-12 h-12 text-blue-600" />
-                          </div>
-                        )}
-                        <label className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer hover:bg-blue-700 transition-colors">
-                          <Camera className="w-4 h-4" />
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleProfilePhotoUpload}
-                            disabled={profileUploading}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        {profileUploading ? 'Yükleniyor...' : 'Fotoğrafınızı güncellemek için kamera simgesine tıklayın.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ad soyad
-                    </label>
-                    <input
-                      type="text"
-                      value={profileDisplayName}
-                      onChange={(e) => setProfileDisplayName(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-                      placeholder="Adınız ve soyadınız"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      E-posta
-                    </label>
-                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
-                      <Mail className="w-5 h-5 text-gray-400 shrink-0" />
-                      <span className="text-gray-700">{user?.email}</span>
-                    </div>
-                    <p className="text-sm text-gray-500 mt-2">E-posta adresi burada değiştirilemez.</p>
-                  </div>
-
-                  {isDoctor && doctorData && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Uzmanlık alanı
-                        </label>
-                        <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
-                          <Stethoscope className="w-5 h-5 text-teal-600 shrink-0" />
-                          <span className="text-gray-700">
-                            {SPECIALTY_LABELS[String(doctorData.specialty ?? '')] ||
-                              (doctorData.specialty ? String(doctorData.specialty) : '—')}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-500 mt-2">
-                          Hesap kaydındaki uzmanlık bilgisidir.
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Kurum / hastane
-                        </label>
-                        <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
-                          <Building className="w-5 h-5 text-gray-400 shrink-0" />
-                          <span className="text-gray-700">
-                            {doctorData.institution ? String(doctorData.institution) : '—'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-500 mt-2">
-                          Kayıt sırasında girdiğiniz çalışılan kurum adıdır.
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Üyelik tarihi
-                    </label>
-                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
-                      <Calendar className="w-5 h-5 text-gray-400 shrink-0" />
-                      <span className="text-gray-700">
-                        {user?.metadata?.creationTime
-                          ? new Date(user.metadata.creationTime).toLocaleDateString('tr-TR')
-                          : 'Bilinmiyor'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleProfileSave}
-                    disabled={profileSaving}
-                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center disabled:opacity-60"
-                  >
-                    <Save className="w-5 h-5 mr-2" />
-                    {profileSaving ? 'Kaydediliyor...' : 'Değişiklikleri kaydet'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <ProfileSection
+              user={user}
+              profilePhotoURL={profilePhotoURL}
+              profileUploading={profileUploading}
+              handleProfilePhotoUpload={handleProfilePhotoUpload}
+              profileDisplayName={profileDisplayName}
+              setProfileDisplayName={setProfileDisplayName}
+              isDoctor={isDoctor}
+              doctorData={doctorData}
+              specialtyLabels={SPECIALTY_LABELS}
+              handleProfileSave={handleProfileSave}
+              profileSaving={profileSaving}
+            />
           )}
       </main>
       </div>
