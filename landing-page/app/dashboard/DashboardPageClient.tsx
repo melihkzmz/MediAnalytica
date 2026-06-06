@@ -1716,7 +1716,7 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(0, 0, 0)
       const confidence = (analysisResult.confidence * 100).toFixed(2)
-      doc.text('Güven Orani:', margin + 5, yPos)
+      doc.text('Tahmin olasiligi (top-1):', margin + 5, yPos)
       
       // Progress bar background (reduced width to make room for percentage)
       const progressBarWidth = 100
@@ -1754,7 +1754,7 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
         doc.setFont('helvetica', 'bold')
         doc.text('Sira', margin + 5, yPos + 5.5)
         doc.text('Hastalik', margin + 25, yPos + 5.5)
-        doc.text('Güven Orani', margin + 140, yPos + 5.5)
+        doc.text('Sinif olasiligi', margin + 140, yPos + 5.5)
         
         yPos += 10
         
@@ -1801,7 +1801,7 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
       const predictionTr = fixTurkishChars(
         formatDiseaseClassName(analysisResult.prediction, selectedDisease)
       )
-      const description = `Bu analiz, yapay zeka destekli derin ögrenme modelleri kullanilarak gerçeklestirilmistir. Tespit edilen hastalik "${predictionTr}" olarak belirlenmistir. Güven orani %${confidence} olarak hesaplanmistir. Bu sonuçlar, yüksek dogruluk oranina sahip AI modelleri tarafindan üretilmistir.`
+      const description = `Bu analiz, yapay zeka destekli derin ogrenme modelleri kullanilarak gerceklestirilmistir. Model, goruntu icin "${predictionTr}" sinifini en yuksek olasilikla secmistir (top-1 tahmin olasiligi: %${confidence}). Bu deger softmax ciktisindan elde edilen siniflandirma olasiligidir; istatistiksel guven araligi degildir ve klinik teshis yerine gecmez.`
       
       const splitDescription = doc.splitTextToSize(description, contentWidth - 10)
       doc.text(splitDescription, margin + 5, yPos)
@@ -3107,25 +3107,31 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
                         <CheckCircle2 className="w-8 h-8 text-white" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">Tahmin Edilen Hastalık</p>
+                        <p className="text-sm font-medium text-gray-600 mb-1">Model tahmini (top-1 sınıf)</p>
                         <h4 className="text-2xl font-bold text-gray-900">{formatDiseaseClassName(analysisResult.prediction, selectedDisease)}</h4>
                       </div>
                     </div>
-                    <div className="bg-white rounded-xl p-6 shadow-sm">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-semibold text-gray-700">Güven Oranı</p>
-                        <span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
+                    <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">Tahmin olasılığı (top-1)</p>
+                          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                            Modelin seçtiği sınıfa ait softmax sonrası sınıflandırma olasılığıdır; güven aralığı değildir.
+                          </p>
+                        </div>
+                        <span className="text-2xl font-bold tabular-nums text-slate-800 shrink-0">
                           %{(analysisResult.confidence * 100).toFixed(2)}
                         </span>
                       </div>
-                      <div className="relative w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-                        <div 
-                          className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 rounded-full transition-all duration-1000 ease-out shadow-lg"
+                      <div className="relative w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="absolute top-0 left-0 h-full bg-slate-700 rounded-full transition-all duration-1000 ease-out"
                           style={{ width: `${(analysisResult.confidence * 100)}%` }}
-                        >
-                          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-                        </div>
+                        />
                       </div>
+                      <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
+                        Yüksek olasılık, klinik kesinlik anlamına gelmez; sonuç karar destek amaçlıdır.
+                      </p>
                     </div>
                   </div>
 
@@ -3180,10 +3186,15 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
                   {/* Top 3 Results */}
                   {analysisResult.top_3 && analysisResult.top_3.length > 0 && (
                     <div className="space-y-4">
-                      <h4 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
-                        <BarChart3 className="w-6 h-6 text-blue-600" />
-                        <span>En Olası 3 Sonuç</span>
-                      </h4>
+                      <div>
+                        <h4 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
+                          <BarChart3 className="w-6 h-6 text-blue-600" />
+                          <span>Top-3 sınıf olasılıkları</span>
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1 ml-8">
+                          Modelin en yüksek üç sınıf tahmini ve her sınıf için tahmin olasılığı.
+                        </p>
+                      </div>
                       <div className="grid gap-4">
                         {analysisResult.top_3.map((item: any, index: number) => (
                           <div 
@@ -3224,7 +3235,10 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className={`text-2xl font-bold ${
+                              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">
+                                Sınıf olasılığı
+                              </p>
+                              <p className={`text-2xl font-bold tabular-nums ${
                                 index === 0 ? 'text-green-600' :
                                 index === 1 ? 'text-blue-600' :
                                 'text-gray-600'

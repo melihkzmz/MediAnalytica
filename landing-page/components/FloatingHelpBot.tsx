@@ -50,10 +50,10 @@ const CATEGORIES: BotCategory[] = [
       },
       {
         id: 'analyze-confidence',
-        label: 'Güven oranı ne demek?',
-        userText: 'Analiz sonucundaki güven oranı ne anlama geliyor?',
+        label: 'Tahmin olasılığı ne demek?',
+        userText: 'Analiz sonucundaki tahmin olasılığı ne anlama geliyor?',
         botReply:
-          'Güven oranı modelin tahmine olan istatistiksel güvenini gösterir; tıbbi kesin teşhis anlamına gelmez. Klinik değerlendirme için doktora başvurun.',
+          'Tahmin olasılığı, modelin görüntüyü seçtiği sınıfa atama olasılığıdır (top-1 sınıflandırma olasılığı). Güven aralığı değildir ve klinik teşhis yerine geçmez; karar destek amaçlıdır.',
       },
       {
         id: 'analyze-pdf',

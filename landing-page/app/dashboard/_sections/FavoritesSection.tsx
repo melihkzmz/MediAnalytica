@@ -141,7 +141,7 @@ export default function FavoritesSection({
 
                 {favorite.analysis?.results && favorite.analysis.results.length > 0 && (
                   <div className="pt-3 border-t border-gray-100">
-                    <p className="text-xs font-medium text-gray-500 mb-2">Güven Oranları</p>
+                    <p className="text-xs font-medium text-gray-500 mb-2">Sınıf olasılıkları</p>
                     <div className="space-y-2">
                       {favorite.analysis.results.slice(0, 2).map((result: any, idx: number) => (
                         <div key={idx} className="flex items-center justify-between">
