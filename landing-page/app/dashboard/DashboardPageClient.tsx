@@ -1429,33 +1429,6 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
     }
   }
 
-  const joinAppointment = async (appointmentId: string) => {
-    if (!user) return
-    try {
-      const { doc, getDoc } = await import('firebase/firestore')
-      const { db } = await import('@/lib/firebase')
-      
-      const appointmentRef = doc(db, 'appointments', appointmentId)
-      const appointmentDoc = await getDoc(appointmentRef)
-      
-      if (!appointmentDoc.exists()) {
-        showToast('Randevu bulunamadı.', 'error')
-        return
-      }
-      
-      const appointmentData = appointmentDoc.data()
-      const jitsiRoom = appointmentData.jitsiRoom || `medianalytica-${appointmentId}`
-      const jitsiUrl = `https://meet.jit.si/${jitsiRoom}`
-      
-      // Open Jitsi Meet in a new window
-      window.open(jitsiUrl, '_blank', 'width=1280,height=720')
-      showToast('Görüntülü görüşme açılıyor...', 'success')
-    } catch (error) {
-      console.error('Error joining appointment:', error)
-      showToast('Görüntülü görüşmeye katılırken hata oluştu.', 'error')
-    }
-  }
-
   const joinAppointmentFromPopup = (appointment: any) => {
     const roomName = appointment.jitsiRoom || `medi-analytica-${appointment.id}`
     const videoUrl = buildVideoMeetingHref({
