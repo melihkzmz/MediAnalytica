@@ -50,7 +50,8 @@ training_logs/
 eval_bone_load.log
 training_*.log
 
-# Model files (büyük dosyalar - isteğe bağlı olarak commit edilebilir)
+# Model files (HF Space loads from Hub at runtime)
+huggingface-space/models/
 # *.keras
 # *.h5
 # *.pb
