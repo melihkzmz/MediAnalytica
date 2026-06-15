@@ -1,5 +1,6 @@
 import { Brain, Heart, History, Loader2 } from 'lucide-react'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
+import { ProbabilityLabelTag } from '@/components/ProbabilityLabelTag'
 import { DashboardSectionLink } from '../_components/DashboardSectionLink'
 
 type HistorySectionProps = {
@@ -7,6 +8,7 @@ type HistorySectionProps = {
   analyses: any[]
   isAnalysisFavorite: (analysisId: string) => { isFavorite: boolean; favoriteId: string | null }
   toggleFavorite: (analysisId: string) => void
+  useProbabilityTags?: boolean
 }
 
 export default function HistorySection({
@@ -14,6 +16,7 @@ export default function HistorySection({
   analyses,
   isAnalysisFavorite,
   toggleFavorite,
+  useProbabilityTags = false,
 }: HistorySectionProps) {
   return (
     <div className="max-w-6xl mx-auto">
@@ -149,24 +152,30 @@ export default function HistorySection({
 
                 {analysis.results && analysis.results.length > 0 && (
                   <div className="pt-3 border-t border-gray-100">
-                    <p className="text-xs font-medium text-gray-500 mb-2">Sınıf olasılıkları</p>
+                    <p className="text-xs font-medium text-gray-500 mb-2">
+                      {useProbabilityTags ? 'Olasılık düzeyleri' : 'Sınıf olasılıkları'}
+                    </p>
                     <div className="space-y-2">
                       {analysis.results.slice(0, 2).map((result: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between">
+                        <div key={idx} className="flex items-center justify-between gap-2">
                           <span className="text-xs text-gray-600 truncate flex-1 mr-2">
                             {formatDiseaseClassName(result.class, analysis.diseaseType)}
                           </span>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                              <div
-                                className="bg-gradient-to-r from-blue-500 to-purple-500 h-1.5 rounded-full"
-                                style={{ width: `${(result.confidence || 0) * 100}%` }}
-                              ></div>
+                          {useProbabilityTags ? (
+                            <ProbabilityLabelTag confidence={result.confidence || 0} size="sm" />
+                          ) : (
+                            <div className="flex items-center space-x-2">
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                <div
+                                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-1.5 rounded-full"
+                                  style={{ width: `${(result.confidence || 0) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs font-bold text-gray-700 w-12 text-right">
+                                %{((result.confidence || 0) * 100).toFixed(0)}
+                              </span>
                             </div>
-                            <span className="text-xs font-bold text-gray-700 w-12 text-right">
-                              %{((result.confidence || 0) * 100).toFixed(0)}
-                            </span>
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -27,6 +27,8 @@ import MessagesSection from '@/components/MessagesSection'
 import { isAppointmentTime, isAppointmentJoinCancelActionsWindow } from '@/lib/appointmentUtils'
 import { getSymptomHintsWithFallback } from '@/lib/analysisSymptomHints'
 import { formatDiseaseClassName } from '@/lib/diseaseDisplayNames'
+import { getProbabilityLabel } from '@/lib/probabilityLabels'
+import { ProbabilityLabelTag } from '@/components/ProbabilityLabelTag'
 import { clearEmailVerificationDeferred, shouldRequireEmailVerification } from '@/lib/emailVerificationPrefs'
 import { buildVideoMeetingHref } from '@/lib/videoMeetingUrl'
 import { Section, isDoctorOnlySection, isPatientOnlySection } from './sections'
@@ -1689,22 +1691,27 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(0, 0, 0)
       const confidence = (analysisResult.confidence * 100).toFixed(2)
-      doc.text('Tahmin olasiligi (top-1):', margin + 5, yPos)
-      
-      // Progress bar background (reduced width to make room for percentage)
-      const progressBarWidth = 100
-      doc.setFillColor(230, 230, 230)
-      doc.roundedRect(margin + 40, yPos - 4, progressBarWidth, 6, 1, 1, 'F')
-      
-      // Progress bar fill
-      const progressWidth = (parseFloat(confidence) / 100) * progressBarWidth
-      doc.setFillColor(...successColor)
-      doc.roundedRect(margin + 40, yPos - 4, progressWidth, 6, 1, 1, 'F')
-      
-      // Percentage text (positioned right after progress bar)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...successColor)
-      doc.text(`%${confidence}`, margin + 40 + progressBarWidth + 5, yPos)
+      const top1Label = getProbabilityLabel(analysisResult.confidence)
+      if (isDoctor) {
+        doc.text('Tahmin olasiligi (top-1):', margin + 5, yPos)
+
+        const progressBarWidth = 100
+        doc.setFillColor(230, 230, 230)
+        doc.roundedRect(margin + 40, yPos - 4, progressBarWidth, 6, 1, 1, 'F')
+
+        const progressWidth = (parseFloat(confidence) / 100) * progressBarWidth
+        doc.setFillColor(...successColor)
+        doc.roundedRect(margin + 40, yPos - 4, progressWidth, 6, 1, 1, 'F')
+
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(...successColor)
+        doc.text(`%${confidence}`, margin + 40 + progressBarWidth + 5, yPos)
+      } else {
+        doc.text('Olasilik duzeyi:', margin + 5, yPos)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(...successColor)
+        doc.text(fixTurkishChars(top1Label.label), margin + 40, yPos)
+      }
 
       yPos += 20
 
@@ -1727,7 +1734,7 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
         doc.setFont('helvetica', 'bold')
         doc.text('Sira', margin + 5, yPos + 5.5)
         doc.text('Hastalik', margin + 25, yPos + 5.5)
-        doc.text('Sinif olasiligi', margin + 140, yPos + 5.5)
+        doc.text(isDoctor ? 'Sinif olasiligi' : 'Olasilik duzeyi', margin + 140, yPos + 5.5)
         
         yPos += 10
         
@@ -1749,10 +1756,14 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
           ).substring(0, 45)
           doc.text(className, margin + 25, yPos + 6.5)
           
-          const itemConfidence = ((item.confidence || item.probability) * 100).toFixed(2)
+          const itemConfidence = (item.confidence || item.probability) ?? 0
           doc.setFont('helvetica', 'bold')
           doc.setTextColor(...successColor)
-          doc.text(`%${itemConfidence}`, margin + 140, yPos + 6.5)
+          if (isDoctor) {
+            doc.text(`%${(itemConfidence * 100).toFixed(2)}`, margin + 140, yPos + 6.5)
+          } else {
+            doc.text(fixTurkishChars(getProbabilityLabel(itemConfidence).label), margin + 120, yPos + 6.5)
+          }
           
           yPos += 12
         })
@@ -1774,7 +1785,9 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
       const predictionTr = fixTurkishChars(
         formatDiseaseClassName(analysisResult.prediction, selectedDisease)
       )
-      const description = `Bu analiz, yapay zeka destekli derin ogrenme modelleri kullanilarak gerceklestirilmistir. Model, goruntu icin "${predictionTr}" sinifini en yuksek olasilikla secmistir (top-1 tahmin olasiligi: %${confidence}). Bu deger softmax ciktisindan elde edilen siniflandirma olasiligidir; istatistiksel guven araligi degildir ve klinik teshis yerine gecmez.`
+      const description = isDoctor
+        ? `Bu analiz, yapay zeka destekli derin ogrenme modelleri kullanilarak gerceklestirilmistir. Model, goruntu icin "${predictionTr}" sinifini en yuksek olasilikla secmistir (top-1 tahmin olasiligi: %${confidence}). Bu deger softmax ciktisindan elde edilen siniflandirma olasiligidir; istatistiksel guven araligi degildir ve klinik teshis yerine gecmez.`
+        : `Bu analiz, yapay zeka destekli derin ogrenme modelleri kullanilarak gerceklestirilmistir. Model, goruntu icin "${predictionTr}" sinifini ${fixTurkishChars(top1Label.label.toLowerCase())} ile degerlendirmistir. Bu deger siniflandirma olasiligi duzeyidir; istatistiksel guven araligi degildir ve klinik teshis yerine gecmez.`
       
       const splitDescription = doc.splitTextToSize(description, contentWidth - 10)
       doc.text(splitDescription, margin + 5, yPos)
@@ -3085,26 +3098,38 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
                       </div>
                     </div>
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-                      <div className="flex items-start justify-between gap-4 mb-3">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">Tahmin olasılığı (top-1)</p>
-                          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                            Modelin seçtiği sınıfa ait softmax sonrası sınıflandırma olasılığıdır; güven aralığı değildir.
+                      {isDoctor ? (
+                        <>
+                          <div className="flex items-start justify-between gap-4 mb-3">
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">Tahmin olasılığı (top-1)</p>
+                              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                                Modelin seçtiği sınıfa ait softmax sonrası sınıflandırma olasılığıdır; güven aralığı değildir.
+                              </p>
+                            </div>
+                            <span className="text-2xl font-bold tabular-nums text-slate-800 shrink-0">
+                              %{(analysisResult.confidence * 100).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="relative w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="absolute top-0 left-0 h-full bg-slate-700 rounded-full transition-all duration-1000 ease-out"
+                              style={{ width: `${(analysisResult.confidence * 100)}%` }}
+                            />
+                          </div>
+                          <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
+                            Yüksek olasılık, klinik kesinlik anlamına gelmez; sonuç karar destek amaçlıdır.
                           </p>
-                        </div>
-                        <span className="text-2xl font-bold tabular-nums text-slate-800 shrink-0">
-                          %{(analysisResult.confidence * 100).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="relative w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-                        <div
-                          className="absolute top-0 left-0 h-full bg-slate-700 rounded-full transition-all duration-1000 ease-out"
-                          style={{ width: `${(analysisResult.confidence * 100)}%` }}
-                        />
-                      </div>
-                      <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
-                        Yüksek olasılık, klinik kesinlik anlamına gelmez; sonuç karar destek amaçlıdır.
-                      </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-semibold text-gray-900 mb-2">Olasılık düzeyi</p>
+                          <ProbabilityLabelTag confidence={analysisResult.confidence} />
+                          <p className="mt-3 text-xs text-gray-500 leading-relaxed">
+                            Bu etiket, modelin seçtiği sınıf için tahmin olasılığının genel düzeyini gösterir; kesin tanı yerine geçmez.
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -3162,10 +3187,12 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
                       <div>
                         <h4 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
                           <BarChart3 className="w-6 h-6 text-blue-600" />
-                          <span>Top-3 sınıf olasılıkları</span>
+                          <span>{isDoctor ? 'Top-3 sınıf olasılıkları' : 'Diğer olası sınıflar'}</span>
                         </h4>
                         <p className="text-xs text-gray-500 mt-1 ml-8">
-                          Modelin en yüksek üç sınıf tahmini ve her sınıf için tahmin olasılığı.
+                          {isDoctor
+                            ? 'Modelin en yüksek üç sınıf tahmini ve her sınıf için tahmin olasılığı.'
+                            : 'Modelin değerlendirdiği diğer sınıflar ve her biri için olasılık düzeyi.'}
                         </p>
                       </div>
                       <div className="grid gap-4">
@@ -3180,44 +3207,55 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
                                 : 'bg-gray-50 border-gray-200'
                             }`}
                           >
-                            <div className="flex items-center space-x-4">
-                              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-lg shadow-md ${
+                            <div className="flex items-center space-x-4 min-w-0">
+                              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-lg shadow-md shrink-0 ${
                                 index === 0 ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white' :
                                 index === 1 ? 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white' :
                                 'bg-gray-300 text-gray-700'
                               }`}>
                                 {index + 1}
                               </div>
-                              <div>
+                              <div className="min-w-0">
                                 <p className="font-bold text-lg text-gray-900 mb-1">{formatDiseaseClassName(item.class || item.className, selectedDisease)}</p>
                                 {item.description && (
                                   <p className="text-sm text-gray-600">{item.description}</p>
                                 )}
                               </div>
-                              <div className="ml-4">
-                                <div className="w-24 bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className={`h-2 rounded-full ${
-                                      index === 0 ? 'bg-gradient-to-r from-green-500 to-emerald-500' :
-                                      index === 1 ? 'bg-gradient-to-r from-blue-500 to-cyan-500' :
-                                      'bg-gray-400'
-                                    }`}
-                                    style={{ width: `${((item.confidence || item.probability) * 100)}%` }}
-                                  ></div>
+                              {isDoctor && (
+                                <div className="ml-4 hidden sm:block">
+                                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className={`h-2 rounded-full ${
+                                        index === 0 ? 'bg-gradient-to-r from-green-500 to-emerald-500' :
+                                        index === 1 ? 'bg-gradient-to-r from-blue-500 to-cyan-500' :
+                                        'bg-gray-400'
+                                      }`}
+                                      style={{ width: `${((item.confidence || item.probability) * 100)}%` }}
+                                    ></div>
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
-                            <div className="text-right">
-                              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">
-                                Sınıf olasılığı
-                              </p>
-                              <p className={`text-2xl font-bold tabular-nums ${
-                                index === 0 ? 'text-green-600' :
-                                index === 1 ? 'text-blue-600' :
-                                'text-gray-600'
-                              }`}>
-                                %{((item.confidence || item.probability) * 100).toFixed(2)}
-                              </p>
+                            <div className="text-right shrink-0 ml-4">
+                              {isDoctor ? (
+                                <>
+                                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">
+                                    Sınıf olasılığı
+                                  </p>
+                                  <p className={`text-2xl font-bold tabular-nums ${
+                                    index === 0 ? 'text-green-600' :
+                                    index === 1 ? 'text-blue-600' :
+                                    'text-gray-600'
+                                  }`}>
+                                    %{((item.confidence || item.probability) * 100).toFixed(2)}
+                                  </p>
+                                </>
+                              ) : (
+                                <ProbabilityLabelTag
+                                  confidence={(item.confidence || item.probability) ?? 0}
+                                  size="sm"
+                                />
+                              )}
                             </div>
                           </div>
                         ))}
@@ -3365,6 +3403,7 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
               analyses={analyses}
               isAnalysisFavorite={isAnalysisFavorite}
               toggleFavorite={toggleFavorite}
+              useProbabilityTags={!isDoctor}
             />
           )}
 
@@ -3373,6 +3412,7 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
               loadingFavorites={loadingFavorites}
               favorites={favorites}
               removeFromFavorites={removeFromFavorites}
+              useProbabilityTags={!isDoctor}
             />
           )}
 
