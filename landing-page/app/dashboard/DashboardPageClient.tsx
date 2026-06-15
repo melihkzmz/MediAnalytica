@@ -3123,9 +3123,9 @@ export function DashboardPageClient({ initialSection = 'dashboard' }: { initialS
                         </>
                       ) : (
                         <>
-                          <p className="text-sm font-semibold text-gray-900 mb-2">Olasılık düzeyi</p>
-                          <ProbabilityLabelTag confidence={analysisResult.confidence} />
-                          <p className="mt-3 text-xs text-gray-500 leading-relaxed">
+                          <p className="text-base font-semibold text-gray-900 mb-3">Olasılık düzeyi</p>
+                          <ProbabilityLabelTag confidence={analysisResult.confidence} size="md" />
+                          <p className="mt-3 text-sm text-gray-500 leading-relaxed">
                             Bu etiket, modelin seçtiği sınıf için tahmin olasılığının genel düzeyini gösterir; kesin tanı yerine geçmez.
                           </p>
                         </>

@@ -34,10 +34,24 @@ export function getProbabilityLabel(confidence: number): ProbabilityLabelInfo {
   return { tier: 'very_low', label: 'Çok düşük olasılık', percent }
 }
 
-export const PROBABILITY_TIER_STYLES: Record<ProbabilityTier, string> = {
-  very_high: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  high: 'bg-blue-100 text-blue-800 border-blue-300',
-  medium: 'bg-amber-100 text-amber-900 border-amber-300',
-  low: 'bg-orange-100 text-orange-800 border-orange-300',
-  very_low: 'bg-slate-100 text-slate-600 border-slate-300',
+/** Bar fill within the track (12–78%) — proportional but not full-width at 100%. */
+export function getProbabilityBarFillPercent(confidence: number): number {
+  const percent = confidenceToPercent(confidence)
+  return Math.max(12, Math.min(78, 12 + percent * 0.66))
+}
+
+export const PROBABILITY_TIER_TEXT: Record<ProbabilityTier, string> = {
+  very_high: 'text-emerald-700',
+  high: 'text-blue-700',
+  medium: 'text-amber-800',
+  low: 'text-orange-700',
+  very_low: 'text-slate-600',
+}
+
+export const PROBABILITY_TIER_BAR: Record<ProbabilityTier, string> = {
+  very_high: 'bg-emerald-500',
+  high: 'bg-blue-500',
+  medium: 'bg-amber-500',
+  low: 'bg-orange-500',
+  very_low: 'bg-slate-400',
 }
