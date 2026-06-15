@@ -1,8 +1,7 @@
 import {
   getProbabilityBarFillPercent,
   getProbabilityLabel,
-  PROBABILITY_TIER_BAR,
-  PROBABILITY_TIER_TEXT,
+  type ProbabilityTier,
 } from '@/lib/probabilityLabels'
 
 type ProbabilityLabelTagProps = {
@@ -11,24 +10,47 @@ type ProbabilityLabelTagProps = {
   size?: 'sm' | 'md'
 }
 
+/** Inline colors so bar fill is always visible (not dependent on Tailwind purge). */
+const TIER_BAR_COLOR: Record<ProbabilityTier, string> = {
+  very_high: '#10b981',
+  high: '#3b82f6',
+  medium: '#f59e0b',
+  low: '#f97316',
+  very_low: '#94a3b8',
+}
+
+const TIER_TEXT_CLASS: Record<ProbabilityTier, string> = {
+  very_high: 'text-emerald-700',
+  high: 'text-blue-700',
+  medium: 'text-amber-800',
+  low: 'text-orange-700',
+  very_low: 'text-slate-600',
+}
+
 export function ProbabilityLabelTag({ confidence, className = '', size = 'md' }: ProbabilityLabelTagProps) {
   const { tier, label } = getProbabilityLabel(confidence)
   const barFill = getProbabilityBarFillPercent(confidence)
   const textClass = size === 'sm' ? 'text-sm font-semibold' : 'text-base font-semibold'
-  const trackClass = size === 'sm' ? 'w-10 h-1.5' : 'w-12 h-2'
+  const trackPx = size === 'sm' ? 44 : 52
+  const trackH = size === 'sm' ? 6 : 8
 
   return (
-    <div className={`inline-flex items-center gap-2.5 min-w-0 ${className}`}>
+    <div className={`inline-flex items-center gap-3 min-w-0 ${className}`}>
       <div
-        className={`${trackClass} shrink-0 rounded-full bg-gray-200 overflow-hidden`}
+        className="shrink-0 rounded-full bg-gray-200 overflow-hidden"
+        style={{ width: trackPx, height: trackH }}
         aria-hidden
       >
         <div
-          className={`h-full rounded-full transition-all duration-700 ease-out ${PROBABILITY_TIER_BAR[tier]}`}
-          style={{ width: `${barFill}%` }}
+          className="h-full rounded-full transition-all duration-700 ease-out"
+          style={{
+            width: `${barFill}%`,
+            backgroundColor: TIER_BAR_COLOR[tier],
+            minWidth: barFill > 0 ? 3 : 0,
+          }}
         />
       </div>
-      <span className={`${textClass} leading-snug ${PROBABILITY_TIER_TEXT[tier]}`}>{label}</span>
+      <span className={`${textClass} leading-snug ${TIER_TEXT_CLASS[tier]}`}>{label}</span>
     </div>
   )
 }

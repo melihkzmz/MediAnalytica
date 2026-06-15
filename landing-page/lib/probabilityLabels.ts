@@ -39,19 +39,3 @@ export function getProbabilityBarFillPercent(confidence: number): number {
   const percent = confidenceToPercent(confidence)
   return Math.max(12, Math.min(78, 12 + percent * 0.66))
 }
-
-export const PROBABILITY_TIER_TEXT: Record<ProbabilityTier, string> = {
-  very_high: 'text-emerald-700',
-  high: 'text-blue-700',
-  medium: 'text-amber-800',
-  low: 'text-orange-700',
-  very_low: 'text-slate-600',
-}
-
-export const PROBABILITY_TIER_BAR: Record<ProbabilityTier, string> = {
-  very_high: 'bg-emerald-500',
-  high: 'bg-blue-500',
-  medium: 'bg-amber-500',
-  low: 'bg-orange-500',
-  very_low: 'bg-slate-400',
-}
