@@ -34,8 +34,10 @@ export function getProbabilityLabel(confidence: number): ProbabilityLabelInfo {
   return { tier: 'very_low', label: 'Çok düşük olasılık', percent }
 }
 
-/** Bar fill within the track (12–78%) — proportional but not full-width at 100%. */
+/** Bar fill within the track — scales with actual %; very high (≥85) can fill further. */
 export function getProbabilityBarFillPercent(confidence: number): number {
   const percent = confidenceToPercent(confidence)
-  return Math.max(12, Math.min(78, 12 + percent * 0.66))
+  const fill = 10 + percent * 0.82
+  const cap = percent >= 85 ? 92 : 88
+  return Math.max(14, Math.min(cap, fill))
 }

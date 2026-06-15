@@ -31,7 +31,7 @@ export function ProbabilityLabelTag({ confidence, className = '', size = 'md' }:
   const { tier, label } = getProbabilityLabel(confidence)
   const barFill = getProbabilityBarFillPercent(confidence)
   const textClass = size === 'sm' ? 'text-sm font-semibold' : 'text-base font-semibold'
-  const trackPx = size === 'sm' ? 44 : 52
+  const trackPx = size === 'sm' ? 52 : 64
   const trackH = size === 'sm' ? 6 : 8
 
   return (
