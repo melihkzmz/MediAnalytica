@@ -7,7 +7,7 @@ import {
 type ProbabilityLabelTagProps = {
   confidence: number
   className?: string
-  size?: 'sm' | 'md'
+  size?: 'sm' | 'md' | 'lg'
 }
 
 /** Inline colors so bar fill is always visible (not dependent on Tailwind purge). */
@@ -30,9 +30,14 @@ const TIER_TEXT_CLASS: Record<ProbabilityTier, string> = {
 export function ProbabilityLabelTag({ confidence, className = '', size = 'md' }: ProbabilityLabelTagProps) {
   const { tier, label } = getProbabilityLabel(confidence)
   const barFill = getProbabilityBarFillPercent(confidence)
-  const textClass = size === 'sm' ? 'text-sm font-semibold' : 'text-base font-semibold'
-  const trackPx = size === 'sm' ? 52 : 64
-  const trackH = size === 'sm' ? 6 : 8
+  const textClass =
+    size === 'sm'
+      ? 'text-base font-semibold'
+      : size === 'lg'
+        ? 'text-xl font-semibold'
+        : 'text-lg font-semibold'
+  const trackPx = size === 'sm' ? 52 : size === 'lg' ? 72 : 64
+  const trackH = size === 'sm' ? 6 : size === 'lg' ? 9 : 8
 
   return (
     <div className={`inline-flex items-center gap-3 min-w-0 ${className}`}>
