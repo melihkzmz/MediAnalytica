@@ -32,12 +32,12 @@ export function ProbabilityLabelTag({ confidence, className = '', size = 'md' }:
   const barFill = getProbabilityBarFillPercent(confidence)
   const textClass =
     size === 'sm'
-      ? 'text-base font-semibold'
+      ? 'text-lg font-bold'
       : size === 'lg'
-        ? 'text-xl font-semibold'
-        : 'text-lg font-semibold'
-  const trackPx = size === 'sm' ? 52 : size === 'lg' ? 72 : 64
-  const trackH = size === 'sm' ? 6 : size === 'lg' ? 9 : 8
+        ? 'text-2xl font-bold'
+        : 'text-xl font-bold'
+  const trackPx = size === 'sm' ? 56 : size === 'lg' ? 80 : 68
+  const trackH = size === 'sm' ? 7 : size === 'lg' ? 10 : 9
 
   return (
     <div className={`inline-flex items-center gap-3 min-w-0 ${className}`}>
